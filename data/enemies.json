@@ -1,0 +1,59 @@
+{
+  "rat": {
+    "name": "쥐",
+    "hp": 6, "attack": 2, "defense": 0, "xp": 5, "gold_drop": 2,
+    "color": [160, 110, 60],
+    "move_ms": 550, "attack_ms": 1100
+  },
+  "goblin": {
+    "name": "고블린",
+    "hp": 14, "attack": 4, "defense": 1, "xp": 15, "gold_drop": 6,
+    "color": [80, 160, 70],
+    "move_ms": 820, "attack_ms": 1400
+  },
+  "skeleton": {
+    "name": "스켈레톤",
+    "hp": 20, "attack": 7, "defense": 2, "xp": 28, "gold_drop": 10,
+    "color": [200, 200, 175],
+    "move_ms": 980, "attack_ms": 1300
+  },
+  "orc": {
+    "name": "오크",
+    "hp": 32, "attack": 9, "defense": 3, "xp": 45, "gold_drop": 18,
+    "color": [100, 145, 80],
+    "move_ms": 1100, "attack_ms": 1700
+  },
+  "troll": {
+    "name": "트롤",
+    "hp": 50, "attack": 13, "defense": 5, "xp": 85, "gold_drop": 30,
+    "color": [70, 120, 70],
+    "move_ms": 1400, "attack_ms": 2100
+  },
+  "wizard": {
+    "name": "마법사",
+    "hp": 18, "attack": 12, "defense": 0, "xp": 40, "gold_drop": 15,
+    "color": [130, 70, 210],
+    "move_ms": 1200, "attack_ms": 1600,
+    "attack_range": 4
+  },
+  "dragon": {
+    "name": "드래곤",
+    "hp": 90, "attack": 16, "defense": 6, "xp": 140, "gold_drop": 70,
+    "color": [180, 60, 20],
+    "move_ms": 1100, "attack_ms": 1900
+  },
+  "dark_knight": {
+    "name": "어둠의 기사",
+    "hp": 130, "attack": 18, "defense": 8, "xp": 220, "gold_drop": 150,
+    "color": [80, 60, 120],
+    "move_ms": 900, "attack_ms": 1400,
+    "is_boss": true
+  },
+  "lich": {
+    "name": "리치",
+    "hp": 110, "attack": 24, "defense": 5, "xp": 280, "gold_drop": 200,
+    "color": [120, 200, 160],
+    "move_ms": 1000, "attack_ms": 1100,
+    "is_boss": true
+  }
+}

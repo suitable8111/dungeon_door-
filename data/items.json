@@ -1,0 +1,72 @@
+{
+  "health_potion": {
+    "name": "체력 물약",
+    "color": [210, 60, 60],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 20
+  },
+  "large_health_potion": {
+    "name": "대형 체력 물약",
+    "color": [230, 80, 80],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 45
+  },
+  "dagger": {
+    "name": "단검",
+    "color": [180, 185, 205],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 2
+  },
+  "sword": {
+    "name": "장검",
+    "color": [205, 210, 230],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 4
+  },
+  "leather_armor": {
+    "name": "가죽 갑옷",
+    "color": [160, 120, 70],
+    "type": "armor",
+    "effect": "defense_up",
+    "value": 1
+  },
+  "chain_mail": {
+    "name": "사슬 갑옷",
+    "color": [160, 165, 185],
+    "type": "armor",
+    "effect": "defense_up",
+    "value": 2
+  },
+  "plate_armor": {
+    "name": "플레이트 갑옷",
+    "color": [200, 205, 215],
+    "type": "armor",
+    "effect": "defense_up",
+    "value": 3
+  },
+  "teleport_scroll": {
+    "name": "텔레포트 두루마리",
+    "color": [180, 100, 220],
+    "type": "consumable",
+    "effect": "teleport",
+    "value": 0
+  },
+  "amulet": {
+    "name": "부적",
+    "color": [220, 180, 50],
+    "type": "consumable",
+    "effect": "stat_up_all",
+    "value": 1
+  },
+  "whirlwind_potion": {
+    "name": "회오리 물약",
+    "color": [255, 200, 50],
+    "type": "consumable",
+    "effect": "whirlwind",
+    "value": 0
+  }
+}
