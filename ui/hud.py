@@ -70,11 +70,34 @@ class HUD:
         self.font_lg = _load_ko_font(30)
         self.font_xl = _load_ko_font(46)
 
+        # PressStart2P 픽셀 폰트 (ASCII 전용)
+        _base = os.path.join(os.path.dirname(__file__), '..', 'assets')
+        _pf   = os.path.join(_base, 'fonts', 'PressStart2P-Regular.ttf')
+        if os.path.exists(_pf):
+            self.font_pixel_title = pygame.font.Font(_pf, 22)
+            self.font_pixel_go    = pygame.font.Font(_pf, 18)
+        else:
+            self.font_pixel_title = None
+            self.font_pixel_go    = None
+
+        # 타이틀 배경 이미지
+        _bg = os.path.join(_base, 'ui', 'title_background.png')
+        if os.path.exists(_bg):
+            try:
+                surf = pygame.image.load(_bg).convert()
+                self._title_bg = pygame.transform.scale(surf, (WINDOW_WIDTH, WINDOW_HEIGHT))
+            except Exception:
+                self._title_bg = None
+        else:
+            self._title_bg = None
+
     # ------------------------------------------------------------------ #
     def render(self, screen, player, messages, floor_num,
-               dungeon=None, skill_mgr=None):
+               dungeon=None, skill_mgr=None,
+               unlocked_combos=None, skill_books=None):
         self._top_bar(screen, player, floor_num)
-        self._right_panel(screen, player, dungeon, skill_mgr)
+        self._right_panel(screen, player, dungeon, skill_mgr,
+                          unlocked_combos or set(), skill_books or set())
         self._bottom_bar(screen, messages)
 
     # ------------------------------------------------------------------ #
@@ -83,7 +106,8 @@ class HUD:
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
 
-        title = self.font_xl.render(t('gameover'), True, MSG_BAD)
+        go_font = self.font_pixel_go or self.font_xl
+        title = go_font.render(t('gameover'), True, MSG_BAD)
         screen.blit(title, (_cx(title, WINDOW_WIDTH), WINDOW_HEIGHT // 2 - 80))
 
         sub = self.font_md.render(t('survived', floor_num), True, LIGHT_GRAY)
@@ -111,19 +135,26 @@ class HUD:
         settings = settings or {}
 
         # ── 공통 배경 ────────────────────────────────────────────────
-        screen.fill((5, 5, 12))
-        rng = random.Random(77)
-        for _ in range(110):
-            sx = rng.randint(0, W); sy = rng.randint(0, H * 3 // 5)
-            br = rng.randint(45, 165)
-            pygame.draw.rect(screen, (br, br, min(255, br + 22)), (sx, sy, 1, 1))
-        floor_y = H * 3 // 5
-        for row in range(floor_y, H, 26):
-            for col_x in range(0, W, 34):
-                sh = 9 + ((row // 26 + col_x // 34) % 5) * 2
-                pygame.draw.rect(screen, (sh, sh, sh + 3), (col_x, row, 33, 25))
-                pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x + 33, row))
-                pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x, row + 25))
+        if self._title_bg:
+            screen.blit(self._title_bg, (0, 0))
+            # 패널 가독성을 위한 반투명 어둠 오버레이
+            ov = pygame.Surface((W, H), pygame.SRCALPHA)
+            ov.fill((0, 0, 0, 120))
+            screen.blit(ov, (0, 0))
+        else:
+            screen.fill((5, 5, 12))
+            rng = random.Random(77)
+            for _ in range(110):
+                sx = rng.randint(0, W); sy = rng.randint(0, H * 3 // 5)
+                br = rng.randint(45, 165)
+                pygame.draw.rect(screen, (br, br, min(255, br + 22)), (sx, sy, 1, 1))
+            floor_y = H * 3 // 5
+            for row in range(floor_y, H, 26):
+                for col_x in range(0, W, 34):
+                    sh = 9 + ((row // 26 + col_x // 34) % 5) * 2
+                    pygame.draw.rect(screen, (sh, sh, sh + 3), (col_x, row, 33, 25))
+                    pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x + 33, row))
+                    pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x, row + 25))
 
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
@@ -157,12 +188,14 @@ class HUD:
             pygame.draw.rect(screen, (12, 10, 28), (p_x, p_y, p_w, 74))
             pygame.draw.line(screen, (70, 65, 100),
                              (p_x+20, p_y+74), (p_x+p_w-20, p_y+74))
-            t1 = self.font_xl.render("DUNGEON", True, GOLD_COLOR)
-            t2 = self.font_xl.render("DOOR",    True, (255, 235, 120))
-            tw = t1.get_width() + 14 + t2.get_width()
+            title_font = self.font_pixel_title or self.font_xl
+            t1 = title_font.render("DUNGEON", True, GOLD_COLOR)
+            t2 = title_font.render("DOOR",    True, (255, 235, 120))
+            tw = t1.get_width() + 12 + t2.get_width()
             tx = cx - tw // 2
-            screen.blit(t1, (tx, p_y + 14))
-            screen.blit(t2, (tx + t1.get_width() + 14, p_y + 14))
+            ty = p_y + (74 - t1.get_height()) // 2
+            screen.blit(t1, (tx, ty))
+            screen.blit(t2, (tx + t1.get_width() + 12, ty))
 
             # ── 메인 버튼 (새 게임 / 이어하기) ─────────────────────
             bw = 320; bh = 52
@@ -467,7 +500,8 @@ class HUD:
         lv = self.font_md.render(f"Lv.{player.level}", True, XP_COLOR)
         screen.blit(lv, (GAME_W + (RIGHT_PANEL_W - lv.get_width()) // 2, _midy(lv, TOP_BAR_H)))
 
-    def _right_panel(self, screen, player, dungeon, skill_mgr):
+    def _right_panel(self, screen, player, dungeon, skill_mgr,
+                     unlocked_combos=None, skill_books=None):
         rx = GAME_W
         pw = RIGHT_PANEL_W
         bw = pw - 16
@@ -526,12 +560,13 @@ class HUD:
             screen.blit(txt, (rx+8, y)); y += 19
         y += 4
 
-        # ── 스킬 ────────────────────────────────────────────────────
+        # ── 단일 스킬 (W/A/S/D) ─────────────────────────────────────
         sec_header('sec_skills', LIGHT_GRAY)
         _SKILL_TRANS = {
-            'Q': ('skill_q_name', 'skill_q_desc'),
-            'E': ('skill_e_name', 'skill_e_desc'),
-            'F': ('skill_f_name', 'skill_f_desc'),
+            'W': ('skill_w_name', 'skill_w_desc'),
+            'A': ('skill_a_name', 'skill_a_desc'),
+            'S': ('skill_s_name', 'skill_s_desc'),
+            'D': ('skill_d_name', 'skill_d_desc'),
         }
         for sdef in SKILL_DEFS:
             sk    = sdef['key']
@@ -555,12 +590,50 @@ class HUD:
             y += 10
         y += 4
 
+        # ── 조합 스킬 ────────────────────────────────────────────────
+        from core.skills import COMBO_SKILL_DEFS
+        sec_header('sec_combo', (130, 110, 200))
+        uc = unlocked_combos or set()
+        sb = skill_books or set()
+        for cid, cdef in COMBO_SKILL_DEFS.items():
+            unlocked = cid in uc
+            has_book = cid in sb
+            ready    = skill_mgr.ready(cid) if (skill_mgr and unlocked) else False
+            rem      = skill_mgr.remaining_sec(cid) if (skill_mgr and unlocked) else 0.0
+
+            key_lbl = f"[{cdef['keys']}]"
+            if unlocked:
+                col = cdef['color'] if ready else (70, 70, 100)
+                pygame.draw.rect(screen, (18, 20, 38), (rx+6, y-1, pw-12, 14))
+                ks = self.font_sm.render(key_lbl, True, col)
+                ns = self.font_sm.render(cdef['name'], True, col)
+                screen.blit(ks, (rx+8, y))
+                screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
+                if not ready:
+                    rs = self.font_sm.render(f"{rem:.1f}s", True, (80, 80, 105))
+                    screen.blit(rs, (rx + pw - rs.get_width() - 8, y))
+            elif has_book:
+                col = (70, 70, 90)
+                ks  = self.font_sm.render(key_lbl, True, col)
+                ns  = self.font_sm.render(f"{cdef['name']} Lv.{cdef['level_req']}", True, col)
+                screen.blit(ks, (rx+8, y))
+                screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
+            else:
+                col = (45, 45, 65)
+                ks  = self.font_sm.render(key_lbl, True, col)
+                ns  = self.font_sm.render(f"??? Lv.{cdef['level_req']}", True, col)
+                screen.blit(ks, (rx+8, y))
+                screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
+            y += 14
+        y += 4
+
         # ── 조작법 ──────────────────────────────────────────────────
         sec_header('sec_controls', (70, 70, 100))
         hints = [
             (t('ctrl_move'),  t('ctrl_move_d')),
             (t('ctrl_atk'),   t('ctrl_atk_d')),
             (t('ctrl_skill'), t('ctrl_skill_d')),
+            (t('ctrl_combo'), t('ctrl_combo_d')),
             (t('ctrl_item'),  t('ctrl_item_d')),
             (t('ctrl_esc'),   t('ctrl_esc_d')),
         ]

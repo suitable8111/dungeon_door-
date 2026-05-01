@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>BitCrawler — UI Kit</title>
+<link rel="stylesheet" href="../../colors_and_type.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #000; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: 'Noto Sans KR', sans-serif; overflow: hidden; }
+#root { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+.game-window { width: 1024px; height: 768px; position: relative; overflow: hidden; transform-origin: center center; }
+canvas { image-rendering: pixelated; display: block; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+// ─── CONSTANTS ───────────────────────────────────────────────────────────────
+const C = {
+  BLACK: '#000000', WHITE: '#ffffff',
+  DARK_GRAY: '#1E1E28', GRAY: '#505064', LIGHT_GRAY: '#A0A0B4',
+  UI_BG: '#0E0E18', UI_BG_DARK: '#0A0A14',
+  UI_BORDER: '#41415F', UI_BORDER_INNER: '#1A1A30', UI_SECTION: '#16162A',
+  GOLD: '#EBB93C', GOLD_L: '#FFD764', GOLD_D: '#A07319',
+  HP: '#D73A3A', HP_BG: '#481414',
+  XP: '#3CA5E1', XP_BG: '#123452',
+  SKILL_READY: '#64B4FF', SKILL_CD: '#3C3C5A',
+  SHOP: '#3CD278', BOSS: '#C850DC',
+  MSG_INFO: '#C8C8B4', MSG_WARN: '#EBA532', MSG_GOOD: '#5FD75F', MSG_BAD: '#D74E4E',
+  WALL_LIT: '#46465C', WALL_DIM: '#232332', WALL_TOP: '#64647D', WALL_BOT: '#2A2A3A',
+  FLOOR_LIT: '#2D2D3E', FLOOR_DIM: '#191923', FLOOR_EDGE: '#3A3A4E',
+  STAIRS_LIT: '#D2AF55',
+};
+
+// ─── SCALE HELPER ────────────────────────────────────────────────────────────
+function ScaleWrapper({ children }) {
+  const [scale, setScale] = React.useState(1);
+  React.useEffect(() => {
+    function update() {
+      const sw = window.innerWidth / 1024;
+      const sh = window.innerHeight / 768;
+      setScale(Math.min(sw, sh, 1));
+    }
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+  return (
+    <div style={{ width: '100vw', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000' }}>
+      <div className="game-window" style={{ transform: `scale(${scale})` }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── DUNGEON CANVAS ──────────────────────────────────────────────────────────
+function DungeonCanvas({ floor }) {
+  const canvasRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = 800, H = 608, T = 32;
+    ctx.fillStyle = C.BLACK;
+    ctx.fillRect(0, 0, W, H);
+
+    // Procedural dungeon: simple room layout
+    const rooms = [
+      {x:2,y:1,w:8,h:7}, {x:12,y:2,w:10,h:6}, {x:5,y:10,w:7,h:6},
+      {x:14,y:9,w:8,h:5}, {x:3,y:14,w:6,h:4}, {x:16,y:14,w:9,h:5},
+      {x:7,y:2,w:4,h:4},  // small room
+    ];
+    const corridors = [
+      {x:10,y:3,w:2,h:2}, {x:12,y:6,w:2,h:4}, {x:7,y:9,w:6,h:2},
+      {x:12,y:12,w:2,h:2}, {x:10,y:13,w:4,h:2}, {x:22,y:7,w:2,h:3},
+    ];
+
+    const TILES_X = 25, TILES_Y = 19;
+    const grid = Array.from({length: TILES_Y}, () => Array(TILES_X).fill('wall'));
+
+    for (const {x,y,w,h} of [...rooms, ...corridors]) {
+      for (let ty = y; ty < y+h && ty < TILES_Y; ty++)
+        for (let tx = x; tx < x+w && tx < TILES_X; tx++)
+          grid[ty][tx] = 'floor';
+    }
+
+    // stairs in last room
+    grid[17][23] = 'stairs';
+    // shop
+    grid[11][15] = 'shop';
+
+    // player position
+    const px = 5, py = 4;
+    // FOV: lit within radius 7
+    function lit(tx, ty) {
+      return Math.abs(tx-px) <= 7 && Math.abs(ty-py) <= 7;
+    }
+    function explored(tx, ty) {
+      return Math.abs(tx-px) <= 12 && Math.abs(ty-py) <= 10;
+    }
+
+    for (let ty = 0; ty < TILES_Y; ty++) {
+      for (let tx = 0; tx < TILES_X; tx++) {
+        const sx = tx * T, sy = ty * T;
+        const tile = grid[ty][tx];
+        const isLit = lit(tx, ty);
+        const isExp = explored(tx, ty);
+
+        if (!isExp) continue;
+
+        if (tile === 'wall') {
+          ctx.fillStyle = isLit ? C.WALL_LIT : C.WALL_DIM;
+          ctx.fillRect(sx, sy, T, T);
+          if (isLit) {
+            ctx.fillStyle = C.WALL_TOP;
+            ctx.fillRect(sx, sy, T, 1);
+            ctx.fillRect(sx, sy, 1, T);
+            ctx.fillStyle = C.WALL_BOT;
+            ctx.fillRect(sx, sy+T-1, T, 1);
+          }
+        } else if (tile === 'floor' || tile === 'stairs' || tile === 'shop') {
+          if (tile === 'shop' && isLit) {
+            ctx.fillStyle = '#193B1E';
+            ctx.fillRect(sx, sy, T, T);
+            ctx.strokeStyle = C.SHOP;
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sx, sy, T, T);
+            ctx.strokeStyle = C.SHOP;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(sx+T/2, sy+T/2, 6, 0, Math.PI*2); ctx.stroke();
+          } else {
+            ctx.fillStyle = isLit ? C.FLOOR_LIT : C.FLOOR_DIM;
+            ctx.fillRect(sx, sy, T, T);
+            if (isLit) {
+              ctx.strokeStyle = C.FLOOR_EDGE;
+              ctx.lineWidth = 1;
+              ctx.strokeRect(sx+0.5, sy+0.5, T-1, T-1);
+            }
+            if (tile === 'stairs' && isLit) {
+              const cx2 = sx + T/2, cy2 = sy + T/2;
+              ctx.fillStyle = C.STAIRS_LIT;
+              ctx.beginPath(); ctx.moveTo(cx2, cy2+7); ctx.lineTo(cx2-6, cy2-3); ctx.lineTo(cx2+6, cy2-3); ctx.fill();
+              ctx.strokeStyle = C.STAIRS_LIT; ctx.lineWidth = 2;
+              ctx.beginPath(); ctx.moveTo(cx2-4, cy2-3); ctx.lineTo(cx2+4, cy2-3); ctx.stroke();
+            }
+          }
+        }
+      }
+    }
+
+    // ── Items ──────────────────────────────────────────────────────────────
+    const items = [
+      {x:3, y:3, col:'#D23C3C', type:'consumable'},
+      {x:16, y:10, col:'#B4B9CD', type:'weapon'},
+      {x:7, y:15, col:'#A07846', type:'armor'},
+    ];
+    for (const {x,y,col,type} of items) {
+      if (!lit(x,y)) continue;
+      const sx = x*T, sy = y*T, cx2 = sx+T/2, cy2 = sy+T/2;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(cx2,cy2-7); ctx.lineTo(cx2+6,cy2); ctx.lineTo(cx2,cy2+7); ctx.lineTo(cx2-6,cy2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx2,cy2-7); ctx.lineTo(cx2+6,cy2); ctx.lineTo(cx2,cy2+7); ctx.lineTo(cx2-6,cy2); ctx.closePath(); ctx.stroke();
+      if (type === 'consumable') { ctx.fillStyle='#FF6464'; ctx.fillRect(cx2-1,cy2-3,2,6); ctx.fillRect(cx2-3,cy2-1,6,2); }
+      else if (type === 'weapon') { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(cx2-3,cy2+3); ctx.lineTo(cx2+3,cy2-3); ctx.stroke(); }
+      else { ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.strokeRect(cx2-2,cy2-2,4,4); }
+    }
+
+    // ── Enemies ──────────────────────────────────────────────────────────
+    function drawEnemy(ex, ey, col, isLit2) {
+      if (!isLit2) return;
+      const sx2 = ex*T, sy2 = ey*T;
+      ctx.fillStyle = col;
+      ctx.fillRect(sx2+6, sy2+8, 20, 18);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(sx2+6, sy2+20, 20, 6);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(sx2+T/2, sy2+10, 7, 6, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = '#000'; ctx.fillRect(sx2+10, sy2+8, 3, 3); ctx.fillRect(sx2+18, sy2+8, 3, 3);
+      // HP bar
+      ctx.fillStyle = '#461414'; ctx.fillRect(sx2+2, sy2+2, T-4, 4);
+      ctx.fillStyle = '#D04040'; ctx.fillRect(sx2+2, sy2+2, Math.max(1, (T-4)*0.65), 4);
+    }
+    const enemies = [
+      {x:14, y:3, col:'#50A046'}, // goblin
+      {x:18, y:4, col:'#C8C8AF'}, // skeleton
+      {x:8, y:11, col:'#649150'}, // orc
+      {x:20, y:16, col:'#467846'}, // troll
+    ];
+    for (const {x,y,col} of enemies) drawEnemy(x, y, col, lit(x,y));
+
+    // ── Player ──────────────────────────────────────────────────────────
+    function drawPlayer(px2, py2) {
+      const sx2 = px2*T, sy2 = py2*T;
+      const G=C.GOLD, GL=C.GOLD_L, GD=C.GOLD_D;
+      const S='#B2B7CA', BL='#3E67A2', BLD='#263E73';
+      const BK='#000', RED='#C83030', BT='#5F3C14';
+      const f = (col,x,y,w,h) => { ctx.fillStyle=col; ctx.fillRect(sx2+x,sy2+y,w,h); };
+      // shield
+      f(BLD,5,13,4,10); f(S,5,13,1,10);
+      // body
+      f(G,5,11,8,5); f(GL,5,11,8,1);
+      f(G,19,11,8,5); f(GL,19,11,8,1);
+      f(BL,9,11,14,14); f(BLD,10,12,12,12);
+      f(S,14,13,4,9);
+      f(BT,9,25,14,3); f(G,14,25,4,3);
+      // sword
+      f(S,24,10,3,14); f(GD,21,18,8,2);
+      // legs
+      f(BL,10,28,5,3); f(BT,9,30,6,2); f(BK,9,31,6,1);
+      f(BL,17,28,5,3); f(BT,17,30,6,2); f(BK,17,31,6,1);
+      // helmet
+      f(G,10,2,12,10); f(GL,10,2,12,2); f(GD,10,4,12,8);
+      f(GD,8,5,2,6); f(GD,22,5,2,6);
+      f(BK,11,6,10,3); f(GD,11,6,10,1);
+      f(RED,15,0,2,3); f('#E65050',14,1,4,2);
+    }
+    drawPlayer(px, py);
+
+  }, [floor]);
+
+  return <canvas ref={canvasRef} width={800} height={608} />;
+}
+
+// ─── TOP BAR ─────────────────────────────────────────────────────────────────
+function TopBar({ floor, gold, hp, maxHp, level }) {
+  const ratio = Math.max(0, hp / maxHp);
+  const barW = 120;
+  const fillW = Math.max(1, Math.round(barW * ratio));
+  const barCol = ratio > 0.5 ? '#D73A3A' : ratio > 0.25 ? '#D47830' : '#C82020';
+  return (
+    <div style={{
+      height: 32, background: '#0A0A14',
+      borderBottom: '1px solid #323250',
+      display: 'flex', alignItems: 'center',
+      padding: '0 12px', gap: 0, position: 'relative',
+    }}>
+      {/* Floor */}
+      <span style={{ fontSize: 13, color: '#B4B4DC', fontFamily: "'Noto Sans KR'" }}>B{floor}F</span>
+      <div style={{ width: 1, height: 18, background: '#323250', margin: '0 10px' }} />
+      {/* Gold */}
+      <span style={{ fontSize: 11, color: C.GOLD, marginRight: 2 }}>G</span>
+      <span style={{ fontSize: 13, color: C.GOLD, marginRight: 20 }}>{gold}</span>
+      {/* Mini HP bar */}
+      <div style={{ width: barW, height: 8, background: C.HP_BG, border: `1px solid #501818`, position: 'relative', marginRight: 6 }}>
+        <div style={{ width: fillW, height: '100%', background: barCol }} />
+      </div>
+      <span style={{ fontSize: 11, color: C.LIGHT_GRAY }}>{hp}/{maxHp}</span>
+      {/* Level — right-aligned in right panel area */}
+      <div style={{ position: 'absolute', right: 0, width: 224, textAlign: 'center' }}>
+        <span style={{ fontSize: 13, color: C.XP }}>Lv.{level}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── RIGHT PANEL ─────────────────────────────────────────────────────────────
+function RightPanel({ player, skills, onSkillToggle }) {
+  const { hp, maxHp, xp, xpNext, atk, def, gold, level, inventory, floor } = player;
+  const SectionHeader = ({ label, col }) => (
+    <div style={{ background: C.UI_SECTION, borderBottom: `1px solid #37375A`, padding: '3px 8px', fontSize: 11, color: col || C.LIGHT_GRAY, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+      {label}
+    </div>
+  );
+  const Bar = ({ cur, max, fgCol, bgCol, h }) => {
+    const ratio = Math.max(0, cur/max);
+    return (
+      <div style={{ height: h||13, background: bgCol, border: `1px solid ${C.UI_BORDER}`, margin: '0 8px', position:'relative', overflow:'hidden' }}>
+        <div style={{ width: `${ratio*100}%`, height: '100%', background: fgCol }} />
+      </div>
+    );
+  };
+
+  return (
+    <div style={{ width: 224, height: 736, background: C.UI_BG_DARK, borderLeft: `2px solid ${C.UI_BORDER}`, display: 'flex', flexDirection: 'column', fontSize: 13, overflow: 'hidden' }}>
+      {/* HP */}
+      <SectionHeader label="HP" col={C.HP} />
+      <div style={{ height: 4 }} />
+      <div style={{ position: 'relative' }}>
+        <Bar cur={hp} max={maxHp} fgCol={C.HP} bgCol={C.HP_BG} h={13} />
+        <span style={{ position: 'absolute', right: 12, top: 0, fontSize: 11, color: '#C8C8C8', lineHeight: '13px' }}>{hp} / {maxHp}</span>
+      </div>
+      <div style={{ height: 4 }} />
+      <Bar cur={xp} max={xpNext} fgCol={C.XP} bgCol={C.XP_BG} h={6} />
+      <div style={{ padding: '1px 8px', fontSize: 10, color: '#5082C8' }}>XP {xp}/{xpNext}</div>
+
+      {/* Stats */}
+      <SectionHeader label="스탯" />
+      {[['ATK', atk, '#ffffff'], ['DEF', def, '#82B4FF'], ['GOLD', `${gold} G`, C.GOLD]].map(([k,v,col]) => (
+        <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'2px 8px' }}>
+          <span style={{ color: '#646478' }}>{k}</span>
+          <span style={{ color: col }}>{v}</span>
+        </div>
+      ))}
+
+      {/* Inventory */}
+      <SectionHeader label="인벤토리  [1-5]" />
+      {[0,1,2,3,4].map(i => {
+        const item = inventory[i];
+        return item
+          ? <div key={i} style={{ background: '#14162A', margin: '1px 8px 0', padding: '1px 0 1px 0', fontSize: 13 }}>
+              <span style={{ color: item.color, paddingLeft: 4 }}>[{i+1}] {item.name}</span>
+            </div>
+          : <div key={i} style={{ padding: '1px 8px', color: '#2E2E4A' }}>[{i+1}] ---</div>;
+      })}
+
+      {/* Skills */}
+      <SectionHeader label="스킬  [Q/E/F]" />
+      {skills.map(sk => (
+        <div key={sk.key} style={{ padding: '2px 8px 4px', background: sk.ready ? '#141C32' : 'transparent' }}>
+          <div style={{ display:'flex', justifyContent:'space-between' }}>
+            <span style={{ fontSize: 12, color: sk.ready ? sk.col : '#646480' }}>[{sk.key}] {sk.name}</span>
+            {!sk.ready && <span style={{ fontSize: 11, color: '#646490' }}>{sk.cd}s</span>}
+          </div>
+          <div style={{ height: 6, background: '#12122A', border: `1px solid ${C.UI_BORDER}`, margin: '2px 0 0', overflow: 'hidden' }}>
+            <div style={{ width: `${sk.ready ? 100 : (sk.cdFrac*100)}%`, height: '100%', background: sk.ready ? sk.col : C.SKILL_CD }} />
+          </div>
+        </div>
+      ))}
+
+      {/* Controls */}
+      <SectionHeader label="조작법" col="#505078" />
+      {[['WASD/↑↓←→','이동'],['Space','공격'],['Q/E/F','스킬'],['1-5','아이템'],['ESC','저장/메뉴']].map(([k,d]) => (
+        <div key={k} style={{ display:'flex', justifyContent:'space-between', padding:'1px 8px' }}>
+          <span style={{ fontSize: 12, color: '#7890B4' }}>{k}</span>
+          <span style={{ fontSize: 11, color: '#404058' }}>{d}</span>
+        </div>
+      ))}
+
+      {/* Minimap */}
+      <SectionHeader label="미니맵" />
+      <MinimapCanvas />
+    </div>
+  );
+}
+
+function MinimapCanvas() {
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const canvas = ref.current; if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const W = 160, H = 60; const S = 2;
+    ctx.fillStyle = '#08081A'; ctx.fillRect(0, 0, W, H);
+    const rooms = [{x:2,y:1,w:8,h:7},{x:12,y:2,w:10,h:6},{x:5,y:10,w:7,h:6},{x:14,y:9,w:8,h:5},{x:3,y:14,w:6,h:4},{x:16,y:14,w:9,h:5}];
+    const corridors = [{x:10,y:3,w:2,h:2},{x:12,y:6,w:2,h:4},{x:7,y:9,w:6,h:2},{x:12,y:12,w:2,h:2},{x:10,y:13,w:4,h:2}];
+    ctx.fillStyle = '#4A4A60';
+    for (const {x,y,w,h} of [...rooms,...corridors]) ctx.fillRect(x*S,y*S,w*S,h*S);
+    // player
+    ctx.fillStyle = '#fff'; ctx.fillRect(5*S-1, 4*S-1, S+1, S+1);
+    // enemies
+    ctx.fillStyle = '#D73A3A';
+    [[14,3],[18,4],[8,11]].forEach(([ex,ey]) => ctx.fillRect(ex*S, ey*S, S, S));
+    // stairs
+    ctx.fillStyle = C.STAIRS_LIT; ctx.fillRect(23*S, 17*S, S, S);
+    // border
+    ctx.strokeStyle = C.UI_BORDER; ctx.lineWidth = 1; ctx.strokeRect(0, 0, W, H);
+  }, []);
+  return <canvas ref={ref} width={160} height={60} style={{ margin: '4px 8px', display: 'block' }} />;
+}
+
+// ─── BOTTOM MESSAGE LOG ───────────────────────────────────────────────────────
+function MessageLog({ messages }) {
+  const max = 7;
+  const recent = messages.slice(-max);
+  return (
+    <div style={{ height: 128, background: C.UI_BG, borderTop: `1px solid ${C.UI_BORDER}`, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden' }}>
+      {recent.map((m, i) => {
+        const alpha = 0.28 + 0.72 * ((i + 1) / recent.length);
+        const col = { info: C.MSG_INFO, warn: C.MSG_WARN, good: C.MSG_GOOD, bad: C.MSG_BAD }[m.kind] || C.MSG_INFO;
+        return <div key={i} style={{ fontSize: 12, color: col, opacity: alpha, lineHeight: 1.5 }}>{m.text}</div>;
+      })}
+    </div>
+  );
+}
+
+// ─── MAIN MENU ───────────────────────────────────────────────────────────────
+function MainMenu({ hasSave, onNew, onContinue }) {
+  const [sel, setSel] = React.useState(0);
+  const [hover, setHover] = React.useState(-1);
+  const btns = hasSave
+    ? [{ label: '새  게  임', action: onNew }, { label: '이어하기   B7F', action: onContinue }]
+    : [{ label: '새  게  임', action: onNew }];
+
+  return (
+    <div style={{ width: 1024, height: 768, background: '#05050C', position: 'relative', overflow: 'hidden' }}>
+      {/* Starfield */}
+      <svg style={{ position: 'absolute', inset: 0 }} width="1024" height="460">
+        {[[23,12],[87,34],[156,8],[210,45],[310,18],[390,7],[445,52],[512,21],[580,38],[634,9],[668,44],[48,62],[130,71],[270,55],[470,78],[600,65],[350,85],[190,93],[560,88],[720,30],[150,120],[380,105],[600,140],[820,90],[100,150],[450,160],[700,110],[900,75],[250,180],[550,200]].map(([x,y],i) => (
+          <rect key={i} x={x} y={y} width={1} height={1} fill={`rgba(${160+Math.random()*80},${160+Math.random()*80},${180+Math.random()*60},${0.5+Math.random()*0.5})`} />
+        ))}
+      </svg>
+      {/* Floor tiles */}
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 308, background: 'repeating-linear-gradient(0deg, transparent, transparent 25px, rgba(4,4,8,0.9) 25px, rgba(4,4,8,0.9) 26px), repeating-linear-gradient(90deg, transparent, transparent 33px, rgba(4,4,8,0.9) 33px, rgba(4,4,8,0.9) 34px)', backgroundColor: '#0D0D0D' }} />
+
+      {/* Panel */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        transform: 'translate(-50%, -52%)',
+        width: 400,
+        background: 'rgba(8,8,22,0.94)',
+        border: `2px solid ${C.UI_BORDER}`,
+        outline: `1px solid ${C.UI_BORDER_INNER}`,
+        outlineOffset: '-5px',
+      }}>
+        {/* Title */}
+        <div style={{ background: '#0C0A1C', borderBottom: `1px solid ${C.UI_BORDER}`, padding: '14px 20px', textAlign: 'center' }}>
+          <span style={{ fontFamily: "'Press Start 2P'", fontSize: 26, color: C.GOLD, letterSpacing: '0.12em' }}>DUNGEON</span>
+          <span style={{ fontFamily: "'Press Start 2P'", fontSize: 26, color: C.GOLD_L, marginLeft: 10, letterSpacing: '0.12em' }}>DOOR</span>
+        </div>
+        {/* Buttons */}
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {btns.map((b, i) => {
+            const isActive = sel === i;
+            const isHover = hover === i;
+            return (
+              <div key={i}
+                onClick={b.action}
+                onMouseEnter={() => { setHover(i); setSel(i); }}
+                onMouseLeave={() => setHover(-1)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  padding: '11px 20px', borderRadius: 4, cursor: 'pointer', fontSize: 16,
+                  background: isActive ? '#2A240A' : (isHover ? '#16162A' : '#0E0E1A'),
+                  border: `${isActive ? 2 : 1}px solid ${isActive ? C.GOLD : (isHover ? '#696494' : '#2E2C46')}`,
+                  color: isActive ? C.GOLD : (isHover ? '#fff' : C.LIGHT_GRAY),
+                  transition: 'all 0.1s',
+                  fontFamily: "'Noto Sans KR'",
+                }}>
+                {isActive && <span style={{ marginRight: 8 }}>▶</span>}
+                {b.label}
+              </div>
+            );
+          })}
+          {/* Settings + Quit row */}
+          <div style={{ display: 'flex', gap: 10, marginTop: 2 }}>
+            {[
+              { label: '⚙ 설정', bg: '#0E0E1A', bd: '#2E2C46', col: C.LIGHT_GRAY },
+              { label: '✕ 종료', bg: '#120A0A', bd: '#501E1E', col: '#823C3C' },
+            ].map((b, i) => (
+              <div key={i} style={{ flex: 1, display:'flex', alignItems:'center', justifyContent:'center', padding: '8px 12px', borderRadius: 4, background: b.bg, border: `1px solid ${b.bd}`, color: b.col, fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans KR'" }}>
+                {b.label}
+              </div>
+            ))}
+          </div>
+          {/* Hint */}
+          <div style={{ textAlign: 'center', fontSize: 10, color: '#3A3858', borderTop: `1px solid #1E1E38`, paddingTop: 8 }}>
+            ↑↓ 선택 &nbsp; Enter 확인 &nbsp; ESC 종료
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── GAME OVER ────────────────────────────────────────────────────────────────
+function GameOverScreen({ floor, onRestart }) {
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.85)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: 16 }}>
+      <div style={{ fontFamily: "'Press Start 2P'", fontSize: 40, color: C.MSG_BAD, letterSpacing: '0.1em' }}>GAME OVER</div>
+      <div style={{ fontSize: 16, color: C.LIGHT_GRAY, fontFamily: "'Noto Sans KR'" }}>Floor {floor} 까지 생존했습니다.</div>
+      <div style={{ fontSize: 13, color: C.GOLD }}>최고 기록  Floor 12  킬 47  G 820</div>
+      <div style={{ fontSize: 13, color: '#646478' }}>총 5회 플레이</div>
+      <div style={{ marginTop: 12, display:'flex', gap: 12 }}>
+        <div onClick={onRestart} style={{ padding: '10px 28px', background: '#2A240A', border: `2px solid ${C.GOLD}`, borderRadius: 4, color: C.GOLD, fontSize: 14, cursor: 'pointer', fontFamily: "'Noto Sans KR'" }}>▶ [R] 재시작</div>
+        <div style={{ padding: '10px 28px', background: '#120A0A', border: `1px solid #501E1E`, borderRadius: 4, color: '#823C3C', fontSize: 14, cursor: 'pointer', fontFamily: "'Noto Sans KR'" }}>[ESC] 종료</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SHOP MODAL ───────────────────────────────────────────────────────────────
+function ShopModal({ gold, onClose }) {
+  const shopItems = [
+    { name: '체력 물약', price: 30, color: '#D23C3C', canBuy: gold >= 30 },
+    { name: '단검', price: 50, color: '#B4B9CD', canBuy: gold >= 50 },
+    { name: '플레이트 갑옷', price: 120, color: '#505064', canBuy: gold >= 120 },
+    { name: '대형 체력 물약', price: 60, color: '#E65050', canBuy: gold >= 60 },
+  ];
+  return (
+    <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ width: 280, background: '#12121E', border: `2px solid ${C.GOLD}`, outline: `1px solid #2A1A00`, outlineOffset: '-4px' }}>
+        <div style={{ background: '#0C0A18', borderBottom: `1px solid ${C.GOLD}`, padding: '10px', textAlign: 'center' }}>
+          <span style={{ fontSize: 20, color: C.GOLD, fontWeight: 700, letterSpacing: '0.1em', fontFamily: "'Noto Sans KR'" }}>상  점</span>
+        </div>
+        <div style={{ padding: '6px', textAlign: 'center', fontSize: 13, color: C.GOLD, borderBottom: `1px solid ${C.UI_BORDER}` }}>
+          보유 골드: {gold} G
+        </div>
+        {shopItems.map((item, i) => (
+          <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 14px', fontSize: 13, cursor: item.canBuy ? 'pointer' : 'default' }}>
+            <span style={{ color: item.canBuy ? item.color : C.GRAY }}>[{i+1}]  {item.name}</span>
+            <span style={{ color: item.canBuy ? C.GOLD : C.GRAY }}>{item.price} G</span>
+          </div>
+        ))}
+        <div onClick={onClose} style={{ padding: '8px', textAlign: 'center', fontSize: 11, color: C.LIGHT_GRAY, borderTop: `1px solid ${C.UI_BORDER}`, cursor: 'pointer' }}>
+          [1-5] 구매 &nbsp; [ESC] 나가기
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PAUSE MENU ───────────────────────────────────────────────────────────────
+function PauseMenu({ onResume }) {
+  const [sel, setSel] = React.useState(0);
+  const items = [
+    { label: '계속하기', col: '#ffffff' },
+    { label: '저장하기', col: '#64C882' },
+    { label: 'BGM 볼륨    70%', col: C.LIGHT_GRAY },
+    { label: 'SFX 볼륨    80%', col: C.LIGHT_GRAY },
+    { label: '전체화면    OFF', col: C.LIGHT_GRAY },
+    { label: '언어    한국어', col: '#78C8FF' },
+    { label: '타이틀로', col: C.LIGHT_GRAY },
+    { label: '종료', col: '#C85050' },
+  ];
+  return (
+    <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center' }}>
+      <div style={{ width: 300, background: '#0C0C1A', border: `2px solid #5A5A82` }}>
+        <div style={{ background: '#1E1C38', borderBottom: `1px solid #41415F`, padding: '8px', textAlign: 'center' }}>
+          <span style={{ fontSize: 14, color: '#fff', letterSpacing: '0.06em', fontFamily: "'Noto Sans KR'" }}>─ 일시 정지 ─</span>
+        </div>
+        <div style={{ padding: '4px 0' }}>
+          {items.map((item, i) => {
+            const isSel = sel === i;
+            return (
+              <div key={i}
+                onMouseEnter={() => setSel(i)}
+                onClick={() => { if (i===0) onResume(); }}
+                style={{ display:'flex', alignItems:'center', padding: '6px 10px', background: isSel ? '#1E1E3A' : 'transparent', border: isSel ? `1px solid #41415F` : '1px solid transparent', cursor:'pointer', gap: 6 }}>
+                <span style={{ color: isSel ? C.GOLD : 'transparent', width: 12, fontSize: 13 }}>▶</span>
+                <span style={{ color: isSel ? C.GOLD : item.col, fontSize: 13, fontFamily: "'Noto Sans KR'" }}>{item.label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ borderTop: `1px solid #41415F`, padding: '5px', textAlign:'center', fontSize: 9, color: '#505064', fontFamily: "'Noto Sans KR'" }}>
+          ESC 닫기 · Space/Enter 선택
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── GAMEPLAY SCREEN ─────────────────────────────────────────────────────────
+function GameScreen({ player, messages, skills, floor, screen, onScreenChange }) {
+  return (
+    <div style={{ width: 1024, height: 768, background: C.BLACK, position: 'relative' }}>
+      {/* Top bar */}
+      <TopBar floor={floor} gold={player.gold} hp={player.hp} maxHp={player.maxHp} level={player.level} />
+      {/* Game area */}
+      <div style={{ display: 'flex' }}>
+        <div style={{ position: 'relative', width: 800 }}>
+          <DungeonCanvas floor={floor} />
+          <MessageLog messages={messages} />
+          {screen === 'shop' && <ShopModal gold={player.gold} onClose={() => onScreenChange('game')} />}
+          {screen === 'pause' && <PauseMenu onResume={() => onScreenChange('game')} />}
+          {screen === 'dead' && <GameOverScreen floor={floor} onRestart={() => onScreenChange('menu')} />}
+        </div>
+        <RightPanel player={player} skills={skills} />
+      </div>
+      {/* Boss HP bar overlay */}
+      {floor % 5 === 0 && (
+        <div style={{ position:'absolute', top:40, left:8, right:232, height:14, background:'#320A0A', border:`1px solid ${C.BOSS}`, overflow:'hidden', display:'flex', alignItems:'center' }}>
+          <div style={{ width:'62%', height:'100%', background:'#C850DC' }} />
+          <span style={{ position:'absolute', left:0, right:0, textAlign:'center', fontSize:10, color:'#FFC8FF', lineHeight:'14px', fontFamily:"'Noto Sans KR'" }}>★ BOSS  어둠의 기사  81 / 130</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── SCREEN NAV TABS ─────────────────────────────────────────────────────────
+function NavBar({ current, onChange }) {
+  const tabs = [
+    { id: 'menu', label: '메인 메뉴' },
+    { id: 'game', label: '게임플레이' },
+    { id: 'shop', label: '상점' },
+    { id: 'pause', label: '일시정지' },
+    { id: 'dead', label: '게임오버' },
+    { id: 'boss', label: '보스 층' },
+  ];
+  return (
+    <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'rgba(8,8,20,0.95)', borderTop:`1px solid #2A2A50`, display:'flex', zIndex:100, flexWrap:'wrap' }}>
+      {tabs.map(t => (
+        <div key={t.id} onClick={() => onChange(t.id)}
+          style={{ padding:'6px 14px', fontSize:11, color: current===t.id ? C.GOLD : '#505064', background: current===t.id ? '#1A1428' : 'transparent', cursor:'pointer', borderRight:`1px solid #1A1A38`, fontFamily:"'Noto Sans KR'" }}>
+          {t.label}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── APP ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [screen, setScreen] = React.useState('menu');
+
+  const player = {
+    hp: 22, maxHp: 30, xp: 40, xpNext: 100,
+    atk: 7, def: 3, gold: 85, level: 4,
+    floor: 7,
+    inventory: [
+      { name: '체력 물약', color: '#D23C3C' },
+      { name: '단검', color: '#B4B9CD' },
+    ],
+  };
+
+  const skills = [
+    { key: 'Q', name: '돌진', ready: true, col: '#5A8FD2', cd: 0, cdFrac: 1.0 },
+    { key: 'E', name: '회오리', ready: false, col: '#8246D2', cd: 2.8, cdFrac: 0.44 },
+    { key: 'F', name: '치유', ready: true, col: '#3CA060', cd: 0, cdFrac: 1.0 },
+  ];
+
+  const messages = [
+    { text: 'Dungeon Door에 오신 걸 환영합니다!', kind: 'info' },
+    { text: '✓ 자동 저장됨', kind: 'good' },
+    { text: '▶ 고블린에게 7 피해', kind: 'warn' },
+    { text: '고블린 처치! +15 XP  +6 G', kind: 'good' },
+    { text: '★ 치명타! 스켈레톤에게 16 피해!', kind: 'warn' },
+    { text: '스켈레톤 처치! +28 XP  +10 G', kind: 'good' },
+    { text: '레벨업! Lv.4  HP 회복!', kind: 'good' },
+  ];
+
+  const floor = screen === 'boss' ? 5 : 7;
+  const gameScreen = screen === 'shop' ? 'shop' : screen === 'pause' ? 'pause' : screen === 'dead' ? 'dead' : 'game';
+
+  const handleNavChange = (s) => {
+    setScreen(s);
+  };
+
+  return (
+    <ScaleWrapper>
+      <div style={{ paddingBottom: 28 }}>
+        {screen === 'menu'
+          ? <MainMenu hasSave={true} onNew={() => setScreen('game')} onContinue={() => setScreen('game')} />
+          : <GameScreen player={player} messages={messages} skills={skills} floor={floor} screen={gameScreen} onScreenChange={(s) => setScreen(s === 'menu' ? 'menu' : s)} />
+        }
+      </div>
+      <NavBar current={screen} onChange={handleNavChange} />
+    </ScaleWrapper>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

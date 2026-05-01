@@ -191,9 +191,17 @@ def _enemy_pool(floor_level):
 def _item_pool(floor_level):
     if floor_level <= 2:
         return ['health_potion'] * 4 + ['dagger'] + ['leather_armor']
-    elif floor_level <= 5:
+    elif floor_level <= 3:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
                 ['sword'] + ['chain_mail'] + ['teleport_scroll'])
+    elif floor_level <= 5:
+        return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
+                ['sword'] + ['chain_mail'] + ['teleport_scroll'] + ['skillbook_wind'])
+    elif floor_level <= 7:
+        return (['large_health_potion'] * 2 + ['sword'] * 2 +
+                ['plate_armor'] + ['teleport_scroll'] + ['amulet'] +
+                ['whirlwind_potion'] + ['skillbook_wind'] + ['skillbook_fireball'] + ['skillbook_frost'])
     else:
         return (['large_health_potion'] * 2 + ['sword'] * 2 +
-                ['plate_armor'] + ['teleport_scroll'] + ['amulet'] + ['whirlwind_potion'])
+                ['plate_armor'] + ['teleport_scroll'] + ['amulet'] +
+                ['whirlwind_potion'] + ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'])

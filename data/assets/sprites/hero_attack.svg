@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <defs>
+    <radialGradient id="aArmorGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#F5D060"></stop>
+      <stop offset="60%" stop-color="#C8920A"></stop>
+      <stop offset="100%" stop-color="#7A5500"></stop>
+    </radialGradient>
+    <radialGradient id="aShieldGrad" cx="40%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#4A7FC4"></stop>
+      <stop offset="100%" stop-color="#1A3A6A"></stop>
+    </radialGradient>
+    <radialGradient id="slashGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.9"></stop>
+      <stop offset="50%" stop-color="#FFD040" stop-opacity="0.7"></stop>
+      <stop offset="100%" stop-color="#FF6020" stop-opacity="0"></stop>
+    </radialGradient>
+    <filter id="aShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.6"></feDropShadow>
+    </filter>
+    <filter id="slashGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+  </defs>
+
+  
+  <path d="M58 10 Q90 20 88 50 Q86 70 70 80" stroke="url(#slashGrad)" stroke-width="8" fill="none" stroke-linecap="round" filter="url(#slashGlow)" opacity="0.8"></path>
+  <path d="M60 8 Q94 18 92 52 Q90 72 72 82" stroke="#FFFFFF" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.5"></path>
+  
+  <circle cx="72" cy="80" r="5" fill="#FFD040" filter="url(#slashGlow)" opacity="0.9"></circle>
+  <line x1="72" y1="80" x2="80" y2="88" stroke="#FFD040" stroke-width="2" opacity="0.7"></line>
+  <line x1="72" y1="80" x2="82" y2="76" stroke="#FFD040" stroke-width="2" opacity="0.7"></line>
+  <line x1="72" y1="80" x2="76" y2="70" stroke="#FFD040" stroke-width="2" opacity="0.6"></line>
+
+  
+  <ellipse cx="44" cy="90" rx="22" ry="5" fill="#000" opacity="0.4"></ellipse>
+
+  
+  <path d="M30 38 Q12 48 10 72 Q20 68 34 68 L36 38Z" fill="#8B0000" opacity="0.85"></path>
+
+  
+  <rect x="30" y="44" width="28" height="28" rx="3" fill="url(#aArmorGrad)" filter="url(#aShadow)" transform="rotate(-8 44 58)"></rect>
+  <path d="M44 46 L44 70" stroke="#A07010" stroke-width="1.5" opacity="0.7" transform="rotate(-8 44 58)"></path>
+  <rect x="29" y="68" width="30" height="5" rx="1" fill="#5A3800" transform="rotate(-8 44 71)"></rect>
+  <rect x="40" y="67" width="8" height="7" rx="1" fill="#D4A020" transform="rotate(-8 44 71)"></rect>
+
+  
+  <ellipse cx="27" cy="46" rx="8" ry="6" fill="url(#aArmorGrad)"></ellipse>
+  <ellipse cx="61" cy="44" rx="8" ry="6" fill="url(#aArmorGrad)"></ellipse>
+
+  
+  <path d="M8 38 L18 34 L20 62 Q14 68 8 62 Q4 55 6 45Z" fill="url(#aShieldGrad)" filter="url(#aShadow)"></path>
+  <path d="M14 42 L17 36 L19 60 Q14 64 10 60 Q7 54 8 46Z" stroke="#6090D8" stroke-width="1" fill="none" opacity="0.5"></path>
+  <path d="M14 44 L14 56 M9 50 L19 50" stroke="#D4A020" stroke-width="2" opacity="0.8"></path>
+
+  
+  <rect x="60" y="40" width="10" height="18" rx="3" fill="#B08010" transform="rotate(35 65 49)"></rect>
+  
+  <line x1="54" y1="8" x2="86" y2="78" stroke="#D8DCF0" stroke-width="5" stroke-linecap="round" filter="url(#aShadow)"></line>
+  <line x1="54" y1="8" x2="86" y2="78" stroke="#F0F2FF" stroke-width="2" stroke-linecap="round" opacity="0.6"></line>
+  
+  <rect x="60" y="46" width="18" height="5" rx="2" fill="#D4A020" transform="rotate(30 69 48)" filter="url(#aShadow)"></rect>
+  
+  <rect x="72" y="56" width="5" height="14" rx="2" fill="#5A3000" transform="rotate(30 74 63)"></rect>
+  <circle cx="80" cy="72" r="4" fill="#D4A020"></circle>
+
+  
+  <rect x="28" y="71" width="11" height="16" rx="2" fill="#8A7000" transform="rotate(-6 34 79)"></rect>
+  <rect x="46" y="71" width="11" height="16" rx="2" fill="#8A7000" transform="rotate(10 52 79)"></rect>
+  <rect x="27" y="80" width="13" height="8" rx="2" fill="#B09010" transform="rotate(-6 34 84)"></rect>
+  <rect x="45" y="80" width="13" height="8" rx="2" fill="#B09010" transform="rotate(10 52 84)"></rect>
+  <path d="M26 86 Q24 92 26 94 L39 94 L40 86Z" fill="#3A2800"></path>
+  <path d="M45 86 Q43 92 45 94 L58 94 L60 86Z" fill="#3A2800"></path>
+
+  
+  <rect x="38" y="32" width="12" height="12" rx="2" fill="#D4A020"></rect>
+
+  
+  <path d="M24 26 Q26 6 44 5 Q64 6 66 26 L64 34 Q54 38 44 38 Q36 38 26 34Z" fill="url(#aArmorGrad)" filter="url(#aShadow)" transform="rotate(-5 45 22)"></path>
+  <path d="M28 24 L62 24 L60 32 Q54 36 44 36 Q36 36 30 32Z" fill="#1A1A2E" transform="rotate(-5 45 22)"></path>
+  <rect x="30" y="26" width="28" height="3" rx="1" fill="#0A0A1A" transform="rotate(-5 44 27)"></rect>
+  
+  <rect x="32" y="25" width="8" height="5" rx="1" fill="#FF2000" opacity="0.8" filter="url(#slashGlow)"></rect>
+  <rect x="48" y="25" width="8" height="5" rx="1" fill="#FF2000" opacity="0.8" filter="url(#slashGlow)"></rect>
+  <path d="M44 5 L44 18" stroke="#F0C030" stroke-width="3" stroke-linecap="round" transform="rotate(-5 44 11)"></path>
+  <path d="M38 5 Q32 0 28 4 Q32 8 36 10" fill="#CC2020"></path>
+  <path d="M50 5 Q56 0 60 4 Q56 8 52 10" fill="#AA1010"></path>
+  <path d="M26 26 Q28 8 44 6 Q62 8 64 26" stroke="#F0C030" stroke-width="1.5" fill="none" opacity="0.7" transform="rotate(-5 45 16)"></path>
+</svg>

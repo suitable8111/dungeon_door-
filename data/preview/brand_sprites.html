@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background:#0A0A14; font-family: var(--font-body); padding: 12px 16px; }
+  .group-title { font-size:11px; color:var(--gold-color); font-weight:700; text-transform:uppercase; letter-spacing:0.1em; margin-bottom:10px; }
+  .sprite-row { display:flex; gap:6px; flex-wrap:wrap; }
+  .sprite-cell { display:flex; flex-direction:column; align-items:center; gap:4px; }
+  .sprite-box { width:64px; height:64px; background:#1A1A2A; border:1px solid #2A2A40; image-rendering:pixelated; position:relative; display:flex; align-items:center; justify-content:center; }
+  .sprite-name { font-size:9px; color:var(--color-gray); text-align:center; width:66px; }
+  .boss-badge { position:absolute; top:2px; right:2px; width:8px; height:8px; background:#C850DC; border-radius:50%; }
+  canvas { image-rendering: pixelated; }
+</style>
+</head><body>
+<div class="group-title">Entity Sprites (32×32 procedural pixel art)</div>
+<div class="sprite-row">
+  <!-- Player -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_player" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Player 플레이어</div>
+  </div>
+  <!-- Rat -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_rat" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Rat 쥐</div>
+  </div>
+  <!-- Goblin -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_goblin" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Goblin 고블린</div>
+  </div>
+  <!-- Skeleton -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_skeleton" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Skeleton 스켈레톤</div>
+  </div>
+  <!-- Orc -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_orc" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Orc 오크</div>
+  </div>
+  <!-- Troll -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_troll" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Troll 트롤</div>
+  </div>
+  <!-- Wizard -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_wizard" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Wizard 마법사</div>
+  </div>
+  <!-- Dragon -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_dragon" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Dragon 드래곤</div>
+  </div>
+  <!-- Dark Knight BOSS -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_dk" width="32" height="32"></canvas><div class="boss-badge"></div></div>
+    <div class="sprite-name">Dark Knight ★</div>
+  </div>
+  <!-- Lich BOSS -->
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_lich" width="32" height="32"></canvas><div class="boss-badge"></div></div>
+    <div class="sprite-name">Lich 리치 ★</div>
+  </div>
+</div>
+
+<div class="group-title" style="margin-top:14px;">Item Sprites (diamond icons)</div>
+<div class="sprite-row">
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_potion" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Potion 체력물약</div>
+  </div>
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_sword_item" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Sword 장검</div>
+  </div>
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_armor" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Armor 갑옷</div>
+  </div>
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_scroll" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Scroll 두루마리</div>
+  </div>
+  <div class="sprite-cell">
+    <div class="sprite-box"><canvas id="c_amulet" width="32" height="32"></canvas></div>
+    <div class="sprite-name">Amulet 부적</div>
+  </div>
+</div>
+
+<script>
+// Color helpers
+function rgb(r,g,b){return `rgb(${r},${g},${b})`;}
+function r(ctx,col,x,y,w,h){ctx.fillStyle=col;ctx.fillRect(x,y,w,h);}
+
+// --- PLAYER (simplified down-facing) ---
+function drawPlayer(ctx) {
+  // Gold armor colors
+  const G='#EBB93C', GL='#FFD764', GD='#A07319';
+  const S='#B2B7CA', SD='#767B94';
+  const BL='#3E67A2', BLD='#263E73';
+  const BK='#000', RED='#C83030', PLM='#E65050';
+  const BT='#5F3C14';
+
+  // Shield (left arm)
+  r(ctx,BLD,5,13,9,5); r(ctx,S,5,13,1,10);
+  // Body
+  r(ctx,G,5,11,8,5); r(ctx,GL,5,11,8,1);
+  r(ctx,G,19,11,8,5); r(ctx,GL,19,11,8,1);
+  r(ctx,BL,9,11,14,14); r(ctx,BLD,10,12,12,12);
+  r(ctx,S,14,13,4,9); r(ctx,SD,15,13,2,9);
+  r(ctx,BT,9,25,14,3); r(ctx,G,14,25,4,3);
+  // Sword (right arm)
+  r(ctx,S,24,10,3,14); r(ctx,GD,21,18,8,2);
+  // Legs
+  r(ctx,BL,10,28,5,3); r(ctx,BT,9,29,6,2); r(ctx,BK,9,31,6,1);
+  r(ctx,BL,17,28,5,3); r(ctx,BT,17,30,6,2); r(ctx,BK,17,32,6,1);
+  // Helmet
+  r(ctx,G,10,2,12,10); r(ctx,GL,10,2,12,2); r(ctx,GD,10,4,12,8);
+  r(ctx,GD,8,5,2,6); r(ctx,GD,22,5,2,6);
+  r(ctx,BK,11,6,10,3); r(ctx,GD,11,6,10,1);
+  r(ctx,RED,15,0,2,3); r(ctx,PLM,14,1,4,2);
+}
+
+// --- RAT ---
+function drawRat(ctx) {
+  const c=[160,110,60]; const [R,Gr,B]=c;
+  const D=rgb(R-55,Gr-55,B-40);
+  const col=rgb(R,Gr,B);
+  const PINK='rgb(220,150,145)',BLK='#000',RED='rgb(210,50,50)';
+  // tail arc (simplified)
+  ctx.strokeStyle=D; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(7,24,6,0.3,2.8); ctx.stroke();
+  // body
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(16,21,11,6.5,0,0,Math.PI*2); ctx.fill();
+  // head
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(24,16,6.5,6,0,0,Math.PI*2); ctx.fill();
+  // nose
+  ctx.fillStyle=PINK; ctx.beginPath(); ctx.arc(30,18,2,0,Math.PI*2); ctx.fill();
+  // ears
+  ctx.fillStyle=D; ctx.beginPath(); ctx.ellipse(17,9,3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=PINK; ctx.beginPath(); ctx.ellipse(17,9,2,3,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=D; ctx.beginPath(); ctx.ellipse(22,8,3,4,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=PINK; ctx.beginPath(); ctx.ellipse(22,8,2,3,0,0,Math.PI*2); ctx.fill();
+  // eye
+  ctx.fillStyle=BLK; ctx.beginPath(); ctx.arc(26,14,2,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=RED; ctx.beginPath(); ctx.arc(26,14,1,0,Math.PI*2); ctx.fill();
+  // legs
+  r(ctx,D,7,25,4,4); r(ctx,D,13,25,4,4);
+}
+
+// --- GOBLIN ---
+function drawGoblin(ctx) {
+  const [R,G,B]=[80,160,70];
+  const D=rgb(R-50,G-60,B-35), L=rgb(R+45,G+45,B+20);
+  const col=rgb(R,G,B);
+  const YEL='rgb(230,210,30)',BLK='#000',TOOTH='rgb(225,215,200)';
+  // body
+  r(ctx,col,10,19,12,10); r(ctx,col,6,19,5,9); r(ctx,col,21,19,5,9);
+  ctx.fillStyle=D; ctx.beginPath(); ctx.ellipse(8,29,3,2.5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=D; ctx.beginPath(); ctx.ellipse(24,29,3,2.5,0,0,Math.PI*2); ctx.fill();
+  r(ctx,D,11,29,4,3); r(ctx,D,17,29,4,3);
+  // head
+  r(ctx,col,7,5,18,15); r(ctx,L,7,5,18,3);
+  // ears
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(5,7); ctx.lineTo(5,16); ctx.lineTo(9,12); ctx.fill();
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(27,7); ctx.lineTo(27,16); ctx.lineTo(23,12); ctx.fill();
+  // eyes
+  r(ctx,YEL,10,11,4,4); r(ctx,YEL,18,11,4,4);
+  r(ctx,BLK,11,12,2,2); r(ctx,BLK,19,12,2,2);
+  // mouth
+  r(ctx,BLK,11,17,10,2); r(ctx,TOOTH,12,17,2,1); r(ctx,TOOTH,18,17,2,1);
+}
+
+// --- SKELETON ---
+function drawSkeleton(ctx) {
+  const col='rgb(200,200,175)', D='rgb(120,120,105)', BLK='#000', DK='rgb(30,30,30)';
+  // ribs
+  for(let i=0;i<3;i++){r(ctx,col,10,18+i*4,12,2);}
+  r(ctx,col,10,15,12,2);
+  // arms
+  r(ctx,col,6,16,4,10); r(ctx,col,22,16,4,10);
+  // hands
+  r(ctx,col,5,26,5,3); r(ctx,col,22,26,5,3);
+  // legs
+  r(ctx,D,11,29,4,3); r(ctx,D,17,29,4,3); r(ctx,D,10,30,5,2); r(ctx,D,17,30,5,2);
+  // skull
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(16,10,8,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=D; ctx.beginPath(); ctx.ellipse(16,14,8,3.5,0,0,Math.PI*2); ctx.fill();
+  r(ctx,BLK,10,7,4,4); r(ctx,BLK,18,7,4,4);
+  r(ctx,DK,11,8,2,2); r(ctx,DK,19,8,2,2);
+  r(ctx,BLK,15,12,2,2);
+  // teeth
+  for(let i=0;i<4;i++){r(ctx,col,10+i*3,15,2,3);}
+}
+
+// --- ORC (simplified) ---
+function drawOrc(ctx) {
+  const [R,G,B]=[100,145,80];
+  const D=rgb(R-50,G-55,B-35), L=rgb(R+35,G+35,B+15);
+  const col=rgb(R,G,B);
+  const RED='rgb(215,55,55)',BLK='#000',TSK='rgb(235,220,180)';
+  // body
+  r(ctx,col,8,14,16,14); r(ctx,L,8,14,16,2); r(ctx,D,8,22,16,6);
+  r(ctx,col,4,17,5,10); r(ctx,col,23,17,5,10);
+  r(ctx,D,10,28,6,4); r(ctx,D,16,28,6,4);
+  // head
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(16,10,9,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.ellipse(16,7,9,2,0,0,Math.PI*2); ctx.fill();
+  r(ctx,RED,10,8,4,4); r(ctx,RED,18,8,4,4);
+  r(ctx,BLK,11,9,2,2); r(ctx,BLK,19,9,2,2);
+  // tusks
+  ctx.fillStyle=TSK; ctx.beginPath(); ctx.moveTo(12,15); ctx.lineTo(14,8); ctx.lineTo(15,15); ctx.fill();
+  ctx.fillStyle=TSK; ctx.beginPath(); ctx.moveTo(18,15); ctx.lineTo(19,8); ctx.lineTo(21,15); ctx.fill();
+  // weapon
+  r(ctx,`rgb(135,135,155)`,26,14,3,14);
+}
+
+// --- TROLL (simplified) ---
+function drawTroll(ctx) {
+  const [R,G,B]=[70,120,70];
+  const D=rgb(R-45,G-50,B-35), L=rgb(R+30,G+30,B+15);
+  const col=rgb(R,G,B);
+  const BLK='#000',YEL='rgb(215,195,30)';
+  // club
+  r(ctx,`rgb(110,75,30)`,24,8,4,16);
+  ctx.fillStyle=`rgb(110,75,30)`; ctx.beginPath(); ctx.ellipse(26,8,4,4,0,0,Math.PI*2); ctx.fill();
+  // body
+  r(ctx,col,5,14,20,16); r(ctx,L,5,14,20,3); r(ctx,D,5,24,20,6);
+  r(ctx,col,2,12,10,6); r(ctx,col,20,12,10,6);
+  r(ctx,col,2,17,6,11); r(ctx,col,24,17,6,11);
+  r(ctx,D,8,29,6,3); r(ctx,D,18,29,6,3);
+  // head
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(16,9,11,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.ellipse(16,5,11,2,0,0,Math.PI*2); ctx.fill();
+  r(ctx,YEL,8,6,5,5); r(ctx,YEL,19,6,5,5);
+  r(ctx,BLK,9,7,3,3); r(ctx,BLK,20,7,3,3);
+  // tusks
+  ctx.fillStyle='rgb(230,215,175)'; ctx.beginPath(); ctx.moveTo(11,14); ctx.lineTo(12,19); ctx.lineTo(14,14); ctx.fill();
+  ctx.fillStyle='rgb(230,215,175)'; ctx.beginPath(); ctx.moveTo(18,14); ctx.lineTo(19,19); ctx.lineTo(21,14); ctx.fill();
+}
+
+// --- WIZARD ---
+function drawWizard(ctx) {
+  const [R,G,B]=[130,70,210];
+  const D=rgb(R-50,G-50,B-60), L=rgb(R+40,G+40,B+50);
+  const col=rgb(R,G,B);
+  const ORB='rgb(100,200,255)',BLK='#000',SKIN='rgb(220,185,150)',BEARD='rgb(200,195,175)';
+  // staff
+  r(ctx,`rgb(80,60,35)`,3,7,3,23);
+  ctx.fillStyle=ORB; ctx.beginPath(); ctx.arc(4,7,4,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgb(200,230,255)'; ctx.beginPath(); ctx.arc(4,7,2,0,Math.PI*2); ctx.fill();
+  // robe
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(8,16); ctx.lineTo(24,16); ctx.lineTo(26,32); ctx.lineTo(6,32); ctx.fill();
+  ctx.fillStyle=L; ctx.fillRect(8,16,16,2);
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(8,26); ctx.lineTo(24,26); ctx.lineTo(26,32); ctx.lineTo(6,32); ctx.fill();
+  r(ctx,col,5,17,4,8); r(ctx,col,23,17,4,8);
+  ctx.fillStyle=ORB; ctx.beginPath(); ctx.arc(7,25,3,0,Math.PI*2); ctx.fill();
+  // face
+  ctx.fillStyle=SKIN; ctx.beginPath(); ctx.ellipse(16,13,6,4.5,0,0,Math.PI*2); ctx.fill();
+  r(ctx,BEARD,10,14,12,4);
+  r(ctx,BLK,12,11,2,2); r(ctx,BLK,18,11,2,2);
+  r(ctx,ORB,12,11,1,1); r(ctx,ORB,18,11,1,1);
+  // hat
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(8,10); ctx.lineTo(24,10); ctx.fill();
+  ctx.fillStyle=col; ctx.beginPath(); ctx.moveTo(16,0); ctx.lineTo(9,10); ctx.lineTo(23,10); ctx.fill();
+  r(ctx,D,7,9,18,4); r(ctx,L,7,9,18,1);
+  ctx.fillStyle='rgb(255,255,150)'; ctx.beginPath(); ctx.arc(16,4,2,0,Math.PI*2); ctx.fill();
+}
+
+// --- DRAGON ---
+function drawDragon(ctx) {
+  const [R,G,B]=[180,60,20];
+  const D=rgb(R-50,G-40,B-20), L=rgb(R+40,G+30,B+20);
+  const col=rgb(R,G,B);
+  const BLK='#000',FIRE='rgb(255,165,0)';
+  // tail
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(2,28); ctx.lineTo(7,22); ctx.lineTo(9,28); ctx.fill();
+  // wings
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(10,16); ctx.lineTo(2,8); ctx.lineTo(8,19); ctx.fill();
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(22,16); ctx.lineTo(30,8); ctx.lineTo(24,19); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.moveTo(10,16); ctx.lineTo(3,10); ctx.lineTo(8,19); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.moveTo(22,16); ctx.lineTo(29,10); ctx.lineTo(24,19); ctx.fill();
+  // body
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(17,23,9,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.ellipse(17,19,8,2.5,0,0,Math.PI*2); ctx.fill();
+  // head+neck
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(16,12,6,5.5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=L; ctx.beginPath(); ctx.ellipse(16,9,5,2,0,0,Math.PI*2); ctx.fill();
+  // horns
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(11,7); ctx.lineTo(9,2); ctx.lineTo(13,7); ctx.fill();
+  ctx.fillStyle=D; ctx.beginPath(); ctx.moveTo(19,7); ctx.lineTo(22,2); ctx.lineTo(23,7); ctx.fill();
+  // eyes
+  r(ctx,FIRE,13,10,3,2); r(ctx,FIRE,18,10,3,2);
+  r(ctx,BLK,14,10,1,2); r(ctx,BLK,19,10,1,2);
+  // teeth
+  r(ctx,D,12,14,8,2);
+  r(ctx,'rgb(240,220,200)',13,14,2,2); r(ctx,'rgb(240,220,200)',17,14,2,2);
+  // legs
+  r(ctx,D,10,29,4,3); r(ctx,D,18,29,4,3);
+  r(ctx,BLK,9,31,6,1); r(ctx,BLK,17,31,6,1);
+}
+
+// --- DARK KNIGHT (orc base + dark helm) ---
+function drawDarkKnight(ctx) {
+  drawOrc(ctx);
+  const DARK='rgb(15,8,25)', DH='rgb(50,35,85)', CROWN='rgb(200,155,20)';
+  ctx.fillStyle=DARK; ctx.beginPath(); ctx.ellipse(16,9,9,7,0,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=DH; ctx.beginPath(); ctx.ellipse(16,6,8,2.5,0,0,Math.PI*2); ctx.fill();
+  r(ctx,'rgb(255,30,30)',10,7,4,3); r(ctx,'rgb(255,30,30)',18,7,4,3);
+  r(ctx,'rgb(255,160,0)',11,8,2,2); r(ctx,'rgb(255,160,0)',19,8,2,2);
+  r(ctx,CROWN,9,1,14,3);
+  ctx.fillStyle=CROWN; ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(12,-3); ctx.lineTo(11,1); ctx.fill();
+  ctx.fillStyle=CROWN; ctx.beginPath(); ctx.moveTo(14,-3); ctx.lineTo(16,-3); ctx.lineTo(15,1); ctx.fill();
+  ctx.fillStyle=CROWN; ctx.beginPath(); ctx.moveTo(19,-3); ctx.lineTo(21,-3); ctx.lineTo(20,1); ctx.fill();
+}
+
+// --- LICH (skeleton base + robe + staff) ---
+function drawLich(ctx) {
+  drawSkeleton(ctx);
+  r(ctx,'rgb(18,18,55)',8,14,16,16);
+  r(ctx,'rgb(50,50,110)',9,15,3,8); r(ctx,'rgb(50,50,110)',20,15,3,8);
+  r(ctx,'rgb(70,55,35)',2,8,3,23);
+  ctx.fillStyle='rgb(80,180,255)'; ctx.beginPath(); ctx.arc(3,7,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='rgb(180,220,255)'; ctx.beginPath(); ctx.arc(3,7,3,0,Math.PI*2); ctx.fill();
+  r(ctx,'rgb(0,200,255)',10,7,4,4); r(ctx,'rgb(0,200,255)',18,7,4,4);
+  r(ctx,'rgb(150,230,255)',11,8,2,2); r(ctx,'rgb(150,230,255)',19,8,2,2);
+}
+
+// --- ITEMS ---
+function drawItem(ctx, col, type) {
+  const [R,G,B] = col;
+  const c = rgb(R,G,B);
+  // Diamond shape
+  ctx.fillStyle=c;
+  ctx.beginPath(); ctx.moveTo(16,9); ctx.lineTo(22,16); ctx.lineTo(16,23); ctx.lineTo(10,16); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(16,9); ctx.lineTo(22,16); ctx.lineTo(16,23); ctx.lineTo(10,16); ctx.closePath(); ctx.stroke();
+  // Type indicator
+  if(type==='consumable') { r(ctx,'rgb(255,100,100)',15,13,2,6); r(ctx,'rgb(255,100,100)',13,15,6,2); }
+  else if(type==='weapon') { ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(13,19); ctx.lineTo(19,13); ctx.stroke(); }
+  else if(type==='armor') { ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.strokeRect(14,14,4,4); }
+  else { r(ctx,'rgb(255,240,100)',14,14,4,4); }
+}
+
+// Render all canvases
+window.onload = function() {
+  const canvases = {
+    c_player: drawPlayer,
+    c_rat: drawRat,
+    c_goblin: drawGoblin,
+    c_skeleton: drawSkeleton,
+    c_orc: drawOrc,
+    c_troll: drawTroll,
+    c_wizard: drawWizard,
+    c_dragon: drawDragon,
+    c_dk: drawDarkKnight,
+    c_lich: drawLich,
+  };
+  for(const [id, fn] of Object.entries(canvases)) {
+    const canvas = document.getElementById(id);
+    if(canvas) { const ctx = canvas.getContext('2d'); fn(ctx); }
+  }
+
+  // Items
+  const items = [
+    ['c_potion', [210,60,60], 'consumable'],
+    ['c_sword_item', [205,210,230], 'weapon'],
+    ['c_armor', [160,165,185], 'armor'],
+    ['c_scroll', [180,100,220], 'special'],
+    ['c_amulet', [220,180,50], 'special'],
+  ];
+  for(const [id, col, type] of items) {
+    const canvas = document.getElementById(id);
+    if(canvas) { const ctx = canvas.getContext('2d'); drawItem(ctx, col, type); }
+  }
+};
+</script>
+</body></html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background:#05050C; font-family: var(--font-body); overflow:hidden; }
+  .menu-bg {
+    width: 700px; height: 380px; position: relative;
+    background: #05050C;
+    overflow: hidden;
+  }
+  /* Starfield */
+  .stars { position:absolute; inset:0; }
+  /* Floor tiles */
+  .floor-grid {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 152px;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 25px, rgba(4,4,8,0.9) 25px, rgba(4,4,8,0.9) 26px),
+      repeating-linear-gradient(90deg, transparent, transparent 33px, rgba(4,4,8,0.9) 33px, rgba(4,4,8,0.9) 34px);
+    background-color: #0D0D0D;
+  }
+  /* Panel */
+  .menu-panel {
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -52%);
+    width: 360px;
+    background: rgba(8,8,22,0.92);
+    border: 2px solid #41415F;
+  }
+  .menu-panel::after {
+    content:''; position:absolute; inset:3px;
+    border:1px solid #1A1A30; pointer-events:none;
+  }
+  .panel-title {
+    background: #0C0A1C;
+    border-bottom: 1px solid #41415F;
+    padding: 14px 20px;
+    text-align: center;
+  }
+  .panel-body { padding: 18px 20px; display:flex; flex-direction:column; gap:10px; }
+  .btn {
+    display:flex; align-items:center; justify-content:center;
+    padding: 11px 20px; border-radius: 4px;
+    font-family: var(--font-body); font-size: 16px; cursor:pointer;
+  }
+  .btn-new { background:#2A240A; border:2px solid #EBB93C; color:#EBB93C; }
+  .btn-cont { background:#0E0E1A; border:1px solid #2E2C46; color:#A0A0B4; }
+  .btn-row { display:flex; gap:10px; }
+  .btn-sm { flex:1; padding:8px 12px; font-size:13px; }
+  .btn-settings { background:#0E0E1A; border:1px solid #2E2C46; color:#A0A0B4; }
+  .btn-quit { background:#120A0A; border:1px solid #501E1E; color:#823C3C; }
+  .hint { text-align:center; font-size:10px; color:#3A3858; border-top:1px solid #1E1E38; padding-top:8px; margin-top:2px; }
+</style>
+</head><body>
+<div class="menu-bg">
+  <!-- Stars procedural SVG -->
+  <svg class="stars" width="700" height="230" viewBox="0 0 700 230">
+    <rect width="700" height="230" fill="#05050C"/>
+    <!-- random 1px star dots -->
+    <rect x="23" y="12" width="1" height="1" fill="#A0A0A8"/>
+    <rect x="87" y="34" width="1" height="1" fill="#C0C0C8"/>
+    <rect x="156" y="8" width="1" height="1" fill="#8080A0"/>
+    <rect x="210" y="45" width="1" height="1" fill="#B0B0C0"/>
+    <rect x="310" y="18" width="1" height="1" fill="#D0D0E0"/>
+    <rect x="390" y="7" width="1" height="1" fill="#9090A8"/>
+    <rect x="445" y="52" width="1" height="1" fill="#A8A8B8"/>
+    <rect x="512" y="21" width="1" height="1" fill="#C8C8D8"/>
+    <rect x="580" y="38" width="1" height="1" fill="#8888A0"/>
+    <rect x="634" y="9" width="1" height="1" fill="#B8B8C8"/>
+    <rect x="668" y="44" width="1" height="1" fill="#9898B0"/>
+    <rect x="48" y="62" width="1" height="1" fill="#7878A0"/>
+    <rect x="130" y="71" width="1" height="1" fill="#A0A0B8"/>
+    <rect x="270" y="55" width="1" height="1" fill="#C0C0D0"/>
+    <rect x="470" y="78" width="1" height="1" fill="#8888A8"/>
+    <rect x="600" y="65" width="1" height="1" fill="#B0B0C8"/>
+    <rect x="720" y="30" width="1" height="1" fill="#9898B0"/>
+    <rect x="350" y="85" width="1" height="1" fill="#A8A8C0"/>
+    <rect x="190" y="93" width="1" height="1" fill="#C8C8D8"/>
+    <rect x="560" y="88" width="1" height="1" fill="#7878A0"/>
+  </svg>
+
+  <div class="floor-grid"></div>
+
+  <div class="menu-panel">
+    <div class="panel-title">
+      <span style="font-family:var(--font-display);font-size:26px;color:#EBB93C;letter-spacing:0.12em;">DUNGEON</span>
+      <span style="font-family:var(--font-display);font-size:26px;color:#FFD769;margin-left:10px;letter-spacing:0.12em;">DOOR</span>
+    </div>
+    <div class="panel-body">
+      <div class="btn btn-new">▶ 새  게  임</div>
+      <div class="btn btn-cont">이어하기 &nbsp; B7F</div>
+      <div class="btn-row">
+        <div class="btn btn-sm btn-settings">⚙ 설정</div>
+        <div class="btn btn-sm btn-quit">✕ 종료</div>
+      </div>
+      <div class="hint">↑↓ 선택 &nbsp; Enter 확인 &nbsp; ESC 종료</div>
+    </div>
+  </div>
+</div>
+</body></html>

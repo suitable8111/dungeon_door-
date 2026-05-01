@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; margin-top: 4px; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+
+  /* Base button */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 10px 24px; border-radius: 4px; font-family: var(--font-body);
+    font-size: 15px; cursor: pointer; border: 1px solid; min-width: 140px;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+  .btn-default { background: #0E0E1A; border-color: #2E2C46; color: #A0A0B4; }
+  .btn-hover   { background: #16162A; border-color: #696494; color: #ffffff; }
+  .btn-active  { background: #2A240A; border-color: #EBB93C; color: #EBB93C; padding-left: 18px; }
+  .btn-danger  { background: #120A0A; border-color: #501E1E; color: #823C3C; }
+  .btn-danger-hover { background: #200C0C; border-color: #9B3232; color: #C85050; }
+
+  /* Small secondary buttons (settings/quit side by side) */
+  .btn-sm { padding: 8px 14px; font-size: 13px; min-width: 0; }
+
+  .state-label { font-size: 9px; color: var(--color-gray); text-align: center; margin-top: 4px; font-family: monospace; }
+  .col { display: flex; flex-direction: column; align-items: center; }
+  .divider { border:none; border-top: 1px solid var(--ui-border); margin: 8px 0 12px; }
+</style>
+</head><body>
+
+<div class="group-title">Primary Button States</div>
+<div class="btn-row">
+  <div class="col">
+    <div class="btn btn-default">이어하기</div>
+    <div class="state-label">default</div>
+  </div>
+  <div class="col">
+    <div class="btn btn-hover">이어하기</div>
+    <div class="state-label">hover</div>
+  </div>
+  <div class="col">
+    <div class="btn btn-active">▶ 이어하기</div>
+    <div class="state-label">active / selected</div>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="group-title">Danger Button States</div>
+<div class="btn-row">
+  <div class="col">
+    <div class="btn btn-danger btn-sm">✕  종료</div>
+    <div class="state-label">default</div>
+  </div>
+  <div class="col">
+    <div class="btn btn-danger-hover btn-sm">✕  종료</div>
+    <div class="state-label">hover</div>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="group-title">Button Pair (Settings + Quit)</div>
+<div class="btn-row">
+  <div class="btn btn-default btn-sm" style="gap:8px;">⚙ 설정</div>
+  <div class="btn btn-danger btn-sm" style="gap:8px;">✕ 종료</div>
+</div>
+
+<hr class="divider">
+<div class="group-title">Continue Button (with floor info)</div>
+<div class="btn-row">
+  <div class="btn btn-active" style="min-width:220px; gap:8px; font-size:14px;">▶ 이어하기 &nbsp; B7F</div>
+</div>
+</body></html>

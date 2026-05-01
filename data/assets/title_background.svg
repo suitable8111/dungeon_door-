@@ -1,0 +1,194 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 576" width="1024" height="576">
+  <defs>
+    <radialGradient id="skyGrad" cx="50%" cy="60%" r="80%">
+      <stop offset="0%" stop-color="#0A0818"></stop>
+      <stop offset="60%" stop-color="#050410"></stop>
+      <stop offset="100%" stop-color="#000008"></stop>
+    </radialGradient>
+    <radialGradient id="moonGrad" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#F8F0D8"></stop>
+      <stop offset="70%" stop-color="#D8C890"></stop>
+      <stop offset="100%" stop-color="#A09050"></stop>
+    </radialGradient>
+    <radialGradient id="moonGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F8E8A0" stop-opacity="0.3"></stop>
+      <stop offset="100%" stop-color="#806000" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="torchGlow" cx="50%" cy="20%" r="80%">
+      <stop offset="0%" stop-color="#FFD060" stop-opacity="0.6"></stop>
+      <stop offset="60%" stop-color="#FF6020" stop-opacity="0.2"></stop>
+      <stop offset="100%" stop-color="#FF4000" stop-opacity="0"></stop>
+    </radialGradient>
+    <radialGradient id="portalGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#9040E0" stop-opacity="0.8"></stop>
+      <stop offset="100%" stop-color="#3010A0" stop-opacity="0"></stop>
+    </radialGradient>
+    <filter id="bgShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.7"></feDropShadow>
+    </filter>
+    <filter id="starBlur">
+      <feGaussianBlur stdDeviation="0.5"></feGaussianBlur>
+    </filter>
+    <filter id="torchFlame">
+      <feGaussianBlur stdDeviation="4" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+    <filter id="fogFilter">
+      <feGaussianBlur stdDeviation="8"></feGaussianBlur>
+    </filter>
+    <clipPath id="bgClip">
+      <rect width="1024" height="576"></rect>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#bgClip)">
+
+  
+  <rect width="1024" height="576" fill="url(#skyGrad)"></rect>
+
+  
+  
+  <circle cx="82" cy="34" r="1.5" fill="#FFFFF0" opacity="0.9"></circle>
+  <circle cx="234" cy="56" r="1.8" fill="#FFFFF0" opacity="0.95"></circle>
+  <circle cx="456" cy="22" r="1.2" fill="#F8F8E8" opacity="0.8"></circle>
+  <circle cx="678" cy="44" r="1.6" fill="#FFFFF0" opacity="0.9"></circle>
+  <circle cx="890" cy="18" r="1.4" fill="#F8F8E8" opacity="0.85"></circle>
+  <circle cx="134" cy="88" r="1.0" fill="#F8F0D8" opacity="0.75"></circle>
+  <circle cx="312" cy="104" r="1.3" fill="#FFFFF0" opacity="0.8"></circle>
+  <circle cx="567" cy="68" r="1.5" fill="#F8F8E8" opacity="0.85"></circle>
+  <circle cx="745" cy="88" r="1.1" fill="#FFFFF0" opacity="0.7"></circle>
+  <circle cx="934" cy="62" r="1.4" fill="#F8F0D8" opacity="0.8"></circle>
+  
+  <circle cx="45" cy="120" r="0.8" fill="#D0D8F8" opacity="0.6"></circle>
+  <circle cx="178" cy="140" r="0.9" fill="#D0D0F0" opacity="0.55"></circle>
+  <circle cx="390" cy="130" r="0.7" fill="#C8D0E8" opacity="0.5"></circle>
+  <circle cx="610" cy="110" r="0.8" fill="#D0D8F8" opacity="0.6"></circle>
+  <circle cx="820" cy="130" r="0.9" fill="#C8C8E8" opacity="0.55"></circle>
+  <circle cx="970" cy="100" r="0.7" fill="#D0D8F8" opacity="0.5"></circle>
+  
+  <circle cx="22" cy="60" r="0.5" fill="#A0A8C8" opacity="0.4"></circle>
+  <circle cx="99" cy="150" r="0.5" fill="#A0A8C8" opacity="0.35"></circle>
+  <circle cx="289" cy="76" r="0.6" fill="#B0B8D0" opacity="0.4"></circle>
+  <circle cx="445" cy="155" r="0.5" fill="#A0A8C8" opacity="0.35"></circle>
+  <circle cx="540" cy="38" r="0.6" fill="#B0B8D0" opacity="0.4"></circle>
+  <circle cx="700" cy="160" r="0.5" fill="#A0A8C8" opacity="0.35"></circle>
+  <circle cx="856" cy="52" r="0.6" fill="#B0B8D0" opacity="0.4"></circle>
+  <circle cx="1002" cy="140" r="0.5" fill="#A0A8C8" opacity="0.35"></circle>
+
+  
+  <circle cx="820" cy="80" r="70" fill="url(#moonGlow)"></circle>
+  <circle cx="820" cy="80" r="50" fill="url(#moonGrad)" filter="url(#bgShadow)"></circle>
+  
+  <circle cx="800" cy="60" r="8" fill="#C8B870" opacity="0.3"></circle>
+  <circle cx="836" cy="90" r="12" fill="#B8A860" opacity="0.25"></circle>
+  <circle cx="808" cy="94" r="5" fill="#C0B068" opacity="0.3"></circle>
+  <circle cx="845" cy="64" r="6" fill="#C8B870" opacity="0.25"></circle>
+  
+  <circle cx="836" cy="68" r="46" fill="#080612" opacity="0.15"></circle>
+
+  
+  <path d="M0 380 Q80 260 160 320 Q240 280 320 340 Q400 260 480 310 Q560 250 640 300 Q720 240 800 280 Q880 220 960 270 Q990 255 1024 260 L1024 576 L0 576Z" fill="#060410"></path>
+  <path d="M0 420 Q60 340 140 380 Q220 320 300 370 Q380 310 460 360 Q540 300 620 350 Q700 290 780 330 Q860 270 940 310 Q980 290 1024 300 L1024 576 L0 576Z" fill="#080514"></path>
+
+  
+  
+  <rect x="-10" y="300" width="140" height="280" fill="#0C0818" filter="url(#bgShadow)"></rect>
+  <path d="M-10 300 L20 260 L50 280 L80 240 L110 270 L130 300Z" fill="#0C0818"></path>
+  
+  <rect x="-10" y="240" width="20" height="25" fill="#0C0818"></rect>
+  <rect x="20" y="230" width="20" height="35" fill="#0C0818"></rect>
+  <rect x="50" y="235" width="20" height="30" fill="#0C0818"></rect>
+  <rect x="80" y="225" width="20" height="40" fill="#0C0818"></rect>
+  <rect x="110" y="235" width="20" height="30" fill="#0C0818"></rect>
+  
+  <rect x="30" y="330" width="30" height="40" rx="3" fill="#080410"></rect>
+  <ellipse cx="45" cy="340" rx="15" ry="20" fill="url(#torchGlow)" filter="url(#torchFlame)"></ellipse>
+  
+  <path d="M0 310 Q20 306 40 310 Q60 306 80 310 Q100 306 120 310" stroke="#14101E" stroke-width="2" fill="none" opacity="0.5"></path>
+  <path d="M0 340 Q20 336 40 340 Q60 336 80 340 Q100 336 120 340" stroke="#14101E" stroke-width="2" fill="none" opacity="0.4"></path>
+  <path d="M0 370 Q20 366 40 370 Q60 366 80 370 Q100 366 120 370" stroke="#14101E" stroke-width="2" fill="none" opacity="0.3"></path>
+
+  
+  <rect x="894" y="280" width="140" height="300" fill="#0C0818" filter="url(#bgShadow)"></rect>
+  <path d="M894 280 L910 240 L940 260 L970 230 L1000 250 L1024 280Z" fill="#0C0818"></path>
+  <rect x="894" y="230" width="20" height="25" fill="#0C0818"></rect>
+  <rect x="924" y="220" width="20" height="35" fill="#0C0818"></rect>
+  <rect x="954" y="228" width="20" height="27" fill="#0C0818"></rect>
+  <rect x="984" y="218" width="20" height="37" fill="#0C0818"></rect>
+  <rect x="74" y="320" width="30" height="40" rx="3" fill="#080410" transform="translate(890,0)"></rect>
+  <ellipse cx="989" cy="330" rx="15" ry="20" fill="url(#torchGlow)" filter="url(#torchFlame)"></ellipse>
+
+  
+  <rect x="0" y="480" width="1024" height="96" fill="#080614"></rect>
+  
+  <path d="M0 490 Q128 486 256 490 Q384 486 512 490 Q640 486 768 490 Q896 486 1024 490" stroke="#0E0C1C" stroke-width="1.5" fill="none" opacity="0.6"></path>
+  <path d="M0 510 Q128 506 256 510 Q384 506 512 510 Q640 506 768 510 Q896 506 1024 510" stroke="#0E0C1C" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  <line x1="128" y1="480" x2="128" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="256" y1="480" x2="256" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="384" y1="480" x2="384" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="512" y1="480" x2="512" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="640" y1="480" x2="640" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="768" y1="480" x2="768" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+  <line x1="896" y1="480" x2="896" y2="576" stroke="#0E0C1C" stroke-width="1" opacity="0.4"></line>
+
+  
+  <rect x="392" y="340" width="240" height="240" rx="4" fill="#060410" filter="url(#bgShadow)"></rect>
+  
+  <path d="M388 400 L388 340 Q512 290 636 340 L636 400Z" fill="#0A0818" filter="url(#bgShadow)"></path>
+  <path d="M392 398 L392 344 Q512 296 632 344 L632 398Z" fill="#080614"></path>
+  
+  <path d="M392 398 L392 344 Q512 296 632 344 L632 398" stroke="#1A1628" stroke-width="4" fill="none" opacity="0.8"></path>
+  <path d="M396 396 L396 346 Q512 300 628 346 L628 396" stroke="#141024" stroke-width="2" fill="none" opacity="0.5"></path>
+  
+  <rect x="402" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="426" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="450" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="474" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="498" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="522" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="546" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="570" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="594" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  <rect x="618" y="400" width="12" height="176" rx="3" fill="#141020" stroke="#241E38" stroke-width="1"></rect>
+  
+  <rect x="392" y="440" width="240" height="8" rx="2" fill="#1A1630" stroke="#28203A" stroke-width="1"></rect>
+  <rect x="392" y="490" width="240" height="8" rx="2" fill="#1A1630" stroke="#28203A" stroke-width="1"></rect>
+  <rect x="392" y="540" width="240" height="8" rx="2" fill="#1A1630" stroke="#28203A" stroke-width="1"></rect>
+  
+  <ellipse cx="512" cy="490" rx="80" ry="90" fill="url(#portalGlow)" filter="url(#torchFlame)"></ellipse>
+  <ellipse cx="512" cy="490" rx="40" ry="50" fill="#2010A0" opacity="0.3" filter="url(#torchFlame)"></ellipse>
+  
+  <circle cx="512" cy="454" r="16" fill="#0C0818" stroke="#3A2858" stroke-width="2" filter="url(#bgShadow)"></circle>
+  <circle cx="512" cy="454" r="10" fill="#1A1030" stroke="#504878" stroke-width="1"></circle>
+  <circle cx="512" cy="454" r="5" fill="#8040C0" filter="url(#torchFlame)" opacity="0.7"></circle>
+  
+  <ellipse cx="512" cy="376" rx="20" ry="18" fill="#C8C490" filter="url(#bgShadow)"></ellipse>
+  <ellipse cx="506" cy="372" rx="4" ry="3.5" fill="#080408"></ellipse>
+  <ellipse cx="518" cy="372" rx="4" ry="3.5" fill="#080408"></ellipse>
+  <path d="M504 380 L520 380 L518 386 Q512 390 506 386Z" fill="#B8B480"></path>
+  <rect x="506" y="380" width="4" height="6" rx="0.5" fill="#D8D4A0"></rect>
+  <rect x="512" y="381" width="4" height="5" rx="0.5" fill="#D8D4A0"></rect>
+
+  
+  
+  <rect x="360" y="394" width="8" height="24" rx="2" fill="#5A3C14"></rect>
+  <path d="M356 388 L364 388 L368 394 L352 394Z" fill="#3A2808"></path>
+  <ellipse cx="360" cy="384" rx="12" ry="16" fill="url(#torchGlow)" filter="url(#torchFlame)"></ellipse>
+  <path d="M356 390 Q360 378 364 390 Q360 382 356 390Z" fill="#FF8020" opacity="0.8"></path>
+  <path d="M358 388 Q360 376 362 388" fill="#FFD060" opacity="0.6"></path>
+  
+  <rect x="656" y="394" width="8" height="24" rx="2" fill="#5A3C14"></rect>
+  <path d="M652 388 L660 388 L664 394 L648 394Z" fill="#3A2808"></path>
+  <ellipse cx="660" cy="384" rx="12" ry="16" fill="url(#torchGlow)" filter="url(#torchFlame)"></ellipse>
+  <path d="M656 390 Q660 378 664 390 Q660 382 656 390Z" fill="#FF8020" opacity="0.8"></path>
+  <path d="M658 388 Q660 376 662 388" fill="#FFD060" opacity="0.6"></path>
+
+  
+  <ellipse cx="512" cy="520" rx="400" ry="40" fill="#0C0A20" opacity="0.5" filter="url(#fogFilter)"></ellipse>
+  <ellipse cx="200" cy="510" rx="200" ry="30" fill="#0A0818" opacity="0.4" filter="url(#fogFilter)"></ellipse>
+  <ellipse cx="800" cy="510" rx="200" ry="30" fill="#0A0818" opacity="0.4" filter="url(#fogFilter)"></ellipse>
+
+  
+  <ellipse cx="512" cy="440" rx="160" ry="100" fill="#3010A0" opacity="0.06" filter="url(#torchFlame)"></ellipse>
+
+  </g>
+</svg>

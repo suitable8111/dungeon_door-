@@ -15,27 +15,39 @@ def get_lang() -> str:
 # ── 번역 테이블 ────────────────────────────────────────────────────────────
 _T: dict[str, dict[str, str]] = {
     # ── HUD 섹션 헤더 ──────────────────────────────────────────────────────
-    'sec_hp':        {'ko': 'HP',              'en': 'HP'},
-    'sec_stats':     {'ko': '스탯',            'en': 'Stats'},
-    'sec_inv':       {'ko': '인벤토리  [1-5]', 'en': 'Inventory [1-5]'},
-    'sec_skills':    {'ko': '스킬  [Q/E/F]',   'en': 'Skills [Q/E/F]'},
-    'sec_controls':  {'ko': '조작법',           'en': 'Controls'},
-    'sec_minimap':   {'ko': '미니맵',           'en': 'Minimap'},
-    'inv_empty':     {'ko': '---',             'en': '---'},
+    'sec_hp':        {'ko': 'HP',               'en': 'HP'},
+    'sec_stats':     {'ko': '스탯',             'en': 'Stats'},
+    'sec_inv':       {'ko': '인벤토리  [1-5]',  'en': 'Inventory [1-5]'},
+    'sec_skills':    {'ko': '스킬  [W/A/S/D]',  'en': 'Skills [W/A/S/D]'},
+    'sec_combo':     {'ko': '조합 스킬',         'en': 'Combo Skills'},
+    'sec_controls':  {'ko': '조작법',            'en': 'Controls'},
+    'sec_minimap':   {'ko': '미니맵',            'en': 'Minimap'},
+    'inv_empty':     {'ko': '---',              'en': '---'},
 
     # ── 조작법 힌트 ────────────────────────────────────────────────────────
-    'ctrl_move':   {'ko': 'WASD / ↑↓←→', 'en': 'WASD / Arrows'},
+    'ctrl_move':   {'ko': '↑↓←→',        'en': 'Arrows'},
     'ctrl_move_d': {'ko': '이동',          'en': 'Move'},
     'ctrl_atk':    {'ko': 'Space',         'en': 'Space'},
     'ctrl_atk_d':  {'ko': '공격',          'en': 'Attack'},
-    'ctrl_skill':  {'ko': 'Q / E / F',    'en': 'Q / E / F'},
+    'ctrl_skill':  {'ko': 'W/A/S/D',      'en': 'W/A/S/D'},
     'ctrl_skill_d':{'ko': '스킬',          'en': 'Skills'},
+    'ctrl_combo':  {'ko': 'W+S / A+D …',  'en': 'W+S / A+D …'},
+    'ctrl_combo_d':{'ko': '조합 스킬',    'en': 'Combo'},
     'ctrl_item':   {'ko': '1-5',           'en': '1-5'},
     'ctrl_item_d': {'ko': '아이템',        'en': 'Items'},
     'ctrl_esc':    {'ko': 'ESC',           'en': 'ESC'},
     'ctrl_esc_d':  {'ko': '저장/메뉴',    'en': 'Save/Menu'},
 
-    # ── 스킬 이름 / 설명 ───────────────────────────────────────────────────
+    # ── 단일 스킬 이름 / 설명 ─────────────────────────────────────────────
+    'skill_w_name': {'ko': '돌진',      'en': 'Dash'},
+    'skill_w_desc': {'ko': '3칸 전진',  'en': '3-tile dash'},
+    'skill_a_name': {'ko': '회오리',    'en': 'Whirl'},
+    'skill_a_desc': {'ko': '8방향 공격','en': '8-dir atk'},
+    'skill_s_name': {'ko': '치유',      'en': 'Heal'},
+    'skill_s_desc': {'ko': 'HP 30%',    'en': '+30% HP'},
+    'skill_d_name': {'ko': '파워어택',  'en': 'Power Atk'},
+    'skill_d_desc': {'ko': '강타 2배',  'en': '200% ATK'},
+    # 이전 키 유지 (하위 호환)
     'skill_q_name': {'ko': '돌진',      'en': 'Dash'},
     'skill_q_desc': {'ko': '3칸 전진',  'en': '3-tile dash'},
     'skill_e_name': {'ko': '회오리',    'en': 'Whirl'},
@@ -98,8 +110,8 @@ _T: dict[str, dict[str, str]] = {
     # ── 인게임 메시지 ──────────────────────────────────────────────────────
     'welcome':      {'ko': 'Dungeon Door에 오신 걸 환영합니다!',
                      'en': 'Welcome to Dungeon Door!'},
-    'wasd_hint':    {'ko': 'WASD 이동 / Space 공격 / Q·E·F 스킬 / ESC 저장·메뉴',
-                     'en': 'WASD Move / Space Attack / Q·E·F Skills / ESC Save·Menu'},
+    'wasd_hint':    {'ko': '↑↓←→ 이동 / Space 공격 / W·A·S·D 스킬 / ESC 저장·메뉴',
+                     'en': 'Arrows Move / Space Attack / W·A·S·D Skills / ESC Save·Menu'},
     'floor_arrive': {'ko': 'Floor {}에 도착했습니다.',   'en': 'Arrived at Floor {}.'},
     'floor_cont':   {'ko': 'Floor {} 에서 계속합니다.', 'en': 'Continuing from Floor {}.'},
     'boss_incoming':{'ko': '★ 보스가 기다리고 있다!',   'en': '★ The boss awaits!'},
@@ -125,6 +137,25 @@ _T: dict[str, dict[str, str]] = {
     'skill_heal':   {'ko': '✨ 치유! HP +{}',            'en': '✨ Heal! HP +{}'},
     'boss_clear':   {'ko': '★ 보스를 처치했습니다! 계단이 나타났습니다!',
                      'en': '★ Boss defeated! Stairs appeared!'},
+
+    # ── 스킬 전투 메시지 추가 ──────────────────────────────────────────────
+    'skill_power':      {'ko': '💥 강타! {}에게 {} 피해',         'en': '💥 Power! Hit {} for {}'},
+    'skill_power_miss': {'ko': '💥 강타! 빗나감',                  'en': '💥 Power Strike! Miss'},
+    'skill_fireball':   {'ko': '🔥 파이어볼! {}에게 {} 피해',     'en': '🔥 Fireball! Hit {} for {}'},
+    'skill_fireball_m': {'ko': '🔥 파이어볼! 빗나감',              'en': '🔥 Fireball! Miss'},
+    'skill_thunder':    {'ko': '⚡ 천둥격! {}마리 타격',           'en': '⚡ Thunder! Hit {}'},
+    'skill_thunder_m':  {'ko': '⚡ 천둥격! 적 없음',               'en': '⚡ Thunder! No targets'},
+    'skill_frost':      {'ko': '❄ 냉기 폭발! {}마리 타격',        'en': '❄ Frost! Hit {}'},
+    'skill_frost_m':    {'ko': '❄ 냉기 폭발! 적 없음',             'en': '❄ Frost! No targets'},
+    'skill_wind':       {'ko': '💨 바람 칼날! {}마리 관통',        'en': '💨 Wind! Pierce {}'},
+    'skill_wind_m':     {'ko': '💨 바람 칼날! 빗나감',              'en': '💨 Wind Blade! Miss'},
+
+    # ── 조합 스킬 해금 메시지 ─────────────────────────────────────────────
+    'combo_unlock':     {'ko': '★ {} 해금!',                       'en': '★ {} unlocked!'},
+    'combo_need_level': {'ko': '{} 스킬북 획득! (Lv.{} 달성 시 해금)',
+                         'en': '{} skill book! (Unlock at Lv.{})'},
+    'combo_no_book':    {'ko': '{} — 스킬북을 찾으세요',           'en': '{} — find the skill book'},
+    'combo_no_unlock':  {'ko': '{} — 스킬북 + Lv.{} 필요',        'en': '{} — need book + Lv.{}'},
 
     # ── 아이템 사용 메시지 ─────────────────────────────────────────────────
     'item_heal':    {'ko': '{} 사용! HP +{}',            'en': '{} used! HP +{}'},

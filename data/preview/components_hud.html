@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background:#000; font-family: var(--font-body); padding: 0; }
+  /* Exact right panel recreation */
+  .right-panel {
+    width: 224px;
+    background: #0A0A14;
+    border-left: 2px solid #41415F;
+    height: 736px; /* WINDOW_HEIGHT - TOP_BAR_H */
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    overflow: hidden;
+  }
+  .sec-header {
+    background: #16162A;
+    border-bottom: 1px solid #37375A;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #A0A0B4;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    flex-shrink: 0;
+  }
+  .sec-hp-header { color: #D73A3A; }
+  .bar-track { height: 13px; border: 1px solid #41415F; position: relative; margin: 0 8px; flex-shrink:0; }
+  .bar-track-sm { height: 6px; }
+  .bar-fill { height: 100%; }
+  .stat-row { display:flex; justify-content:space-between; padding: 2px 8px; }
+  .inv-row { display:flex; padding: 2px 8px; }
+  .inv-slot { background: #14162A; width: calc(100% - 16px); padding: 1px 0; margin: 0 8px 1px; }
+  .skill-block { padding: 0 8px 2px; }
+  .ctrl-row { display:flex; justify-content:space-between; padding: 1px 8px; }
+</style>
+</head><body>
+
+<div class="right-panel">
+  <!-- HP section -->
+  <div class="sec-header sec-hp-header">HP</div>
+  <div style="height:4px;"></div>
+  <div class="bar-track">
+    <div class="bar-fill" style="width:73%; background:#D73A3A;"></div>
+    <span style="position:absolute;right:4px;top:0;font-size:11px;color:#C8C8C8;line-height:13px;">22 / 30</span>
+  </div>
+  <div style="height:4px;"></div>
+  <div class="bar-track bar-track-sm">
+    <div class="bar-fill" style="width:40%; background:#3CA5E1;"></div>
+  </div>
+  <div style="padding:1px 8px;font-size:10px;color:#5082C8;">XP 40/100</div>
+
+  <!-- Stats section -->
+  <div class="sec-header" style="margin-top:2px;">스탯</div>
+  <div class="stat-row"><span style="color:#646478;">ATK</span><span style="color:#fff;">7</span></div>
+  <div class="stat-row"><span style="color:#646478;">DEF</span><span style="color:#82B4FF;">3</span></div>
+  <div class="stat-row"><span style="color:#646478;">GOLD</span><span style="color:#EBB93C;">42 G</span></div>
+
+  <!-- Inventory section -->
+  <div class="sec-header" style="margin-top:2px;">인벤토리  [1-5]</div>
+  <div class="inv-slot"><span style="color:#D23C3C;">[1] 체력 물약</span></div>
+  <div class="inv-slot"><span style="color:#B4B9CD;">[2] 단검</span></div>
+  <div style="padding:1px 8px;color:#2E2E4A;font-size:13px;">[3] ---</div>
+  <div style="padding:1px 8px;color:#2E2E4A;font-size:13px;">[4] ---</div>
+  <div style="padding:1px 8px;color:#2E2E4A;font-size:13px;">[5] ---</div>
+
+  <!-- Skills section -->
+  <div class="sec-header" style="margin-top:2px;">스킬  [Q/E/F]</div>
+  <div class="skill-block">
+    <div style="background:#141C32;padding:2px 0 4px;">
+      <div style="color:#64B4FF;font-size:12px;">[Q] 돌진</div>
+      <div class="bar-track bar-track-sm" style="margin:2px 0 0;"><div class="bar-fill" style="width:100%;background:#3C60A0;"></div></div>
+    </div>
+    <div style="padding:2px 0 4px;">
+      <div style="color:#646480;font-size:12px;display:flex;justify-content:space-between;">[E] 회오리<span style="color:#646490;">2.8s</span></div>
+      <div class="bar-track bar-track-sm" style="margin:2px 0 0;"><div class="bar-fill" style="width:44%;background:#3C3C5A;"></div></div>
+    </div>
+    <div style="background:#141C32;padding:2px 0 4px;">
+      <div style="color:#3CD278;font-size:12px;">[F] 치유</div>
+      <div class="bar-track bar-track-sm" style="margin:2px 0 0;"><div class="bar-fill" style="width:100%;background:#1E5034;"></div></div>
+    </div>
+  </div>
+
+  <!-- Controls section -->
+  <div class="sec-header" style="margin-top:2px;color:#505078;">조작법</div>
+  <div class="ctrl-row"><span style="color:#7890B4;font-size:12px;">WASD/↑↓←→</span><span style="color:#404058;font-size:11px;">이동</span></div>
+  <div class="ctrl-row"><span style="color:#7890B4;font-size:12px;">Space</span><span style="color:#404058;font-size:11px;">공격</span></div>
+  <div class="ctrl-row"><span style="color:#7890B4;font-size:12px;">Q/E/F</span><span style="color:#404058;font-size:11px;">스킬</span></div>
+  <div class="ctrl-row"><span style="color:#7890B4;font-size:12px;">1-5</span><span style="color:#404058;font-size:11px;">아이템</span></div>
+  <div class="ctrl-row"><span style="color:#7890B4;font-size:12px;">ESC</span><span style="color:#404058;font-size:11px;">저장/메뉴</span></div>
+
+  <!-- Minimap section -->
+  <div class="sec-header" style="margin-top:2px;">미니맵</div>
+  <div style="margin:4px 8px; background:#08081A; border:1px solid #41415F; height:60px; position:relative; overflow:hidden;">
+    <!-- Fake minimap tiles -->
+    <svg width="160" height="60" viewBox="0 0 160 60" style="position:absolute;">
+      <rect width="160" height="60" fill="#08081A"/>
+      <!-- rooms -->
+      <rect x="10" y="8" width="30" height="20" fill="#4A4A60"/>
+      <rect x="50" y="4" width="40" height="28" fill="#4A4A60"/>
+      <rect x="100" y="10" width="25" height="18" fill="#4A4A60"/>
+      <rect x="55" y="32" width="30" height="22" fill="#4A4A60"/>
+      <!-- corridors -->
+      <rect x="40" y="14" width="10" height="4" fill="#3A3A52"/>
+      <rect x="90" y="14" width="10" height="4" fill="#3A3A52"/>
+      <rect x="65" y="28" width="4" height="6" fill="#3A3A52"/>
+      <!-- stairs -->
+      <rect x="108" y="16" width="2" height="2" fill="#D2AF55"/>
+      <!-- player -->
+      <rect x="25" y="16" width="3" height="3" fill="#ffffff"/>
+      <!-- enemies -->
+      <rect x="60" y="12" width="2" height="2" fill="#D73A3A"/>
+      <rect x="75" y="10" width="2" height="2" fill="#D73A3A"/>
+    </svg>
+  </div>
+</div>
+</body></html>

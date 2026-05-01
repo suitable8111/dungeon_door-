@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; margin-top: 4px; }
+  .row { display: flex; gap: 6px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 12px; }
+  .sp { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .sp-bar { background: #41415F; border-radius: 1px; width: 100%; min-width: 4px; }
+  .sp-label { font-size: 9px; color: var(--color-gray); font-family: monospace; text-align: center; }
+  .sp-val { font-size: 9px; color: var(--color-light-gray); font-family: monospace; }
+  .layout-diagram { background: #05050C; border: 2px solid #41415F; border-radius: 2px; position: relative; width: 256px; height: 192px; }
+  .l-top { position:absolute; top:0; left:0; right:0; height:8px; background:#16162A; border-bottom:1px solid #41415F; }
+  .l-right { position:absolute; top:0; right:0; width:56px; height:192px; background:#0E0E18; border-left:1px solid #41415F; }
+  .l-bottom { position:absolute; bottom:0; left:0; right:56px; height:32px; background:#0E0E18; border-top:1px solid #41415F; }
+  .l-game { position:absolute; top:8px; left:0; right:56px; bottom:32px; background: repeating-linear-gradient(0deg, transparent, transparent 11px, #1A1A26 11px, #1A1A26 12px), repeating-linear-gradient(90deg, transparent, transparent 11px, #1A1A26 11px, #1A1A26 12px); background-color: #191923; }
+  .l-label { position:absolute; font-size:7px; color:#505064; }
+  .divider { border:none; border-top: 1px solid var(--ui-border); margin: 8px 0; }
+</style>
+</head><body>
+
+<div class="group-title">Spacing Scale (8px base unit)</div>
+<div class="row">
+  <div class="sp"><div class="sp-bar" style="height:4px; width:16px;"></div><div class="sp-val">4</div><div class="sp-label">--space-1</div></div>
+  <div class="sp"><div class="sp-bar" style="height:8px; width:16px;"></div><div class="sp-val">8</div><div class="sp-label">--space-2</div></div>
+  <div class="sp"><div class="sp-bar" style="height:12px; width:16px;"></div><div class="sp-val">12</div><div class="sp-label">--space-3</div></div>
+  <div class="sp"><div class="sp-bar" style="height:16px; width:16px;"></div><div class="sp-val">16</div><div class="sp-label">--space-4</div></div>
+  <div class="sp"><div class="sp-bar" style="height:20px; width:16px;"></div><div class="sp-val">20</div><div class="sp-label">--space-5</div></div>
+  <div class="sp"><div class="sp-bar" style="height:24px; width:16px;"></div><div class="sp-val">24</div><div class="sp-label">--space-6</div></div>
+  <div class="sp"><div class="sp-bar" style="height:32px; width:16px; background:#EBB93C;"></div><div class="sp-val" style="color:#EBB93C;">32</div><div class="sp-label">1 tile</div></div>
+  <div class="sp"><div class="sp-bar" style="height:48px; width:16px;"></div><div class="sp-val">48</div><div class="sp-label">--space-12</div></div>
+  <div class="sp"><div class="sp-bar" style="height:64px; width:16px;"></div><div class="sp-val">64</div><div class="sp-label">2 tiles</div></div>
+  <div class="sp"><div class="sp-bar" style="height:96px; width:16px;"></div><div class="sp-val">96</div><div class="sp-label">--space-24</div></div>
+  <div class="sp"><div class="sp-bar" style="height:128px; width:20px; background:#3CA5E1;"></div><div class="sp-val" style="color:#3CA5E1;">128</div><div class="sp-label">bot bar</div></div>
+</div>
+
+<hr class="divider">
+<div class="group-title">1024×768 Layout Grid</div>
+<div style="display:flex; gap:16px; align-items:flex-start;">
+  <div class="layout-diagram">
+    <div class="l-top"></div>
+    <div class="l-game"></div>
+    <div class="l-right"></div>
+    <div class="l-bottom"></div>
+    <!-- Labels -->
+    <div class="l-label" style="top:1px; left:4px; color:#41415F;">Top Bar 32px</div>
+    <div class="l-label" style="top:50px; left:4px; color:#505064;">Game Viewport</div>
+    <div class="l-label" style="top:62px; left:4px; color:#41415F;">800 × 608px (25×19 tiles)</div>
+    <div class="l-label" style="top:175px; left:4px; color:#505064;">Message Log 128px</div>
+    <div class="l-label" style="top:12px; right:2px; color:#505064; writing-mode:vertical-rl; text-orientation:mixed;">Right Panel 224px</div>
+  </div>
+  <div style="font-size:10px; color:var(--color-gray); line-height:2; font-family:monospace;">
+    <div>Window: <span style="color:#A0A0B4;">1024 × 768</span></div>
+    <div>Top bar: <span style="color:#A0A0B4;">full-width, 32px</span></div>
+    <div>Right panel: <span style="color:#A0A0B4;">224px wide</span></div>
+    <div>Game view: <span style="color:#A0A0B4;">800 × 608px</span></div>
+    <div>Tile size: <span style="color:#EBB93C;">32 × 32px</span></div>
+    <div>Tiles: <span style="color:#A0A0B4;">25 × 19</span></div>
+    <div>Msg log: <span style="color:#A0A0B4;">800 × 128px</span></div>
+  </div>
+</div>
+</body></html>

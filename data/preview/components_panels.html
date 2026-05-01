@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background:#000; font-family: var(--font-body); padding: 16px; display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+  .col { display:flex; flex-direction:column; gap:10px; }
+
+  /* Panel chrome */
+  .panel {
+    background: rgba(8,8,22,0.94);
+    border: 2px solid #41415F;
+    border-radius: 0;
+    position: relative;
+  }
+  .panel::after {
+    content:'';
+    position:absolute;
+    inset: 3px;
+    border: 1px solid #1A1A30;
+    pointer-events: none;
+  }
+  .panel-header {
+    background: #0C0A1C;
+    border-bottom: 1px solid #41415F;
+    padding: 10px 16px;
+  }
+  .panel-body { padding: 14px 16px; }
+
+  /* Shop modal */
+  .shop { width: 220px; border-color: #EBB93C; }
+  .shop-title { background:#121220; border-bottom: 1px solid #EBB93C; padding: 8px; text-align:center; }
+  .shop-item { display:flex; justify-content:space-between; padding: 5px 10px; font-size:13px; }
+
+  /* Pause modal */
+  .pause { width: 200px; }
+  .pause-item { display:flex; align-items:center; padding: 6px 10px; font-size:13px; gap:6px; }
+  .pause-item.sel { background:#1E1E3A; border:1px solid #41415F; }
+</style>
+</head><body>
+
+<div class="col">
+  <div class="group-title">Base Panel</div>
+  <div class="panel" style="width:220px;">
+    <div class="panel-header">
+      <span style="font-family:var(--font-display);font-size:16px;color:#EBB93C;letter-spacing:0.1em;">DUNGEON</span>
+      <span style="font-family:var(--font-display);font-size:16px;color:#FFD769;margin-left:8px;letter-spacing:0.1em;">DOOR</span>
+    </div>
+    <div class="panel-body">
+      <div style="font-size:13px;color:#A0A0B4;margin-bottom:6px;">Panel content area</div>
+      <div style="font-size:11px;color:#505064;">Double-border bevel: outer 2px #41415F, inner 1px #1A1A30</div>
+    </div>
+  </div>
+</div>
+
+<div class="col">
+  <div class="group-title">Shop Modal</div>
+  <div class="panel shop">
+    <div class="shop-title">
+      <span style="font-size:18px;color:#EBB93C;font-weight:700;letter-spacing:0.08em;">상  점</span>
+    </div>
+    <div style="padding:6px 10px;text-align:center;font-size:12px;color:#EBB93C;border-bottom:1px solid #41415F;">보유 골드: 85 G</div>
+    <div class="shop-item"><span style="color:#D23C3C;">[1] 체력 물약</span><span style="color:#EBB93C;">30 G</span></div>
+    <div class="shop-item"><span style="color:#B4B9CD;">[2] 단검</span><span style="color:#EBB93C;">50 G</span></div>
+    <div class="shop-item"><span style="color:#505064;">[3] 플레이트 갑옷</span><span style="color:#505064;">120 G</span></div>
+    <div style="padding:6px 8px;text-align:center;font-size:10px;color:#A0A0B4;border-top:1px solid #41415F;">[1-5] 구매 · [ESC] 나가기</div>
+  </div>
+</div>
+
+<div class="col">
+  <div class="group-title">Pause Menu</div>
+  <div class="panel pause">
+    <div style="background:#1E1C38;border-bottom:1px solid #41415F;padding:8px;text-align:center;">
+      <span style="font-size:14px;color:#ffffff;letter-spacing:0.06em;">─ 일시 정지 ─</span>
+    </div>
+    <div style="padding:4px 0;">
+      <div class="pause-item sel"><span style="color:#EBB93C;">▶</span><span style="color:#EBB93C;">계속하기</span></div>
+      <div class="pause-item"><span style="width:12px;"></span><span style="color:#64C882;">저장하기</span></div>
+      <div class="pause-item"><span style="width:12px;"></span><span style="color:#A0A0B4;">BGM 볼륨 &nbsp; 70%</span></div>
+      <div class="pause-item"><span style="width:12px;"></span><span style="color:#A0A0B4;">전체화면 &nbsp; OFF</span></div>
+      <div class="pause-item"><span style="width:12px;"></span><span style="color:#78C8FF;">언어 &nbsp; 한국어</span></div>
+      <div class="pause-item"><span style="width:12px;"></span><span style="color:#C85050;">종료</span></div>
+    </div>
+    <div style="border-top:1px solid #41415F;padding:5px;text-align:center;font-size:9px;color:#505064;">ESC 닫기 · Space 선택</div>
+  </div>
+</div>
+</body></html>

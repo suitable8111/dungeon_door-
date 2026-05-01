@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .chip { width: 56px; height: 40px; border: 1px solid rgba(255,255,255,0.08); border-radius: 2px; }
+  .label { font-size: 10px; color: var(--color-light-gray); text-align: center; width: 60px; line-height: 1.3; }
+  .hex { font-size: 9px; color: var(--color-gray); font-family: monospace; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-family: var(--font-body); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; margin-top: 4px; }
+</style>
+</head><body>
+<div class="group-title">UI Shell</div>
+<div class="row">
+  <div class="swatch"><div class="chip" style="background:#000000;"></div><div class="label">Black</div><div class="hex">#000000</div></div>
+  <div class="swatch"><div class="chip" style="background:#0A0A14; border-color:#333;"></div><div class="label">BG Dark</div><div class="hex">#0A0A14</div></div>
+  <div class="swatch"><div class="chip" style="background:#0E0E18; border-color:#333;"></div><div class="label">UI BG</div><div class="hex">#0E0E18</div></div>
+  <div class="swatch"><div class="chip" style="background:#16162A;"></div><div class="label">Section BG</div><div class="hex">#16162A</div></div>
+  <div class="swatch"><div class="chip" style="background:#1A1A30;"></div><div class="label">Border Inner</div><div class="hex">#1A1A30</div></div>
+  <div class="swatch"><div class="chip" style="background:#41415F;"></div><div class="label">Border</div><div class="hex">#41415F</div></div>
+  <div class="swatch"><div class="chip" style="background:#505064;"></div><div class="label">Gray</div><div class="hex">#505064</div></div>
+  <div class="swatch"><div class="chip" style="background:#A0A0B4;"></div><div class="label">Light Gray</div><div class="hex">#A0A0B4</div></div>
+  <div class="swatch"><div class="chip" style="background:#ffffff;"></div><div class="label">White</div><div class="hex">#ffffff</div></div>
+</div>
+
+<div class="group-title">Accent & Primary</div>
+<div class="row">
+  <div class="swatch"><div class="chip" style="background:#A07319;"></div><div class="label">Gold Dark</div><div class="hex">#A07319</div></div>
+  <div class="swatch"><div class="chip" style="background:#EBB93C;"></div><div class="label">Gold ★</div><div class="hex">#EBB93C</div></div>
+  <div class="swatch"><div class="chip" style="background:#FFD764;"></div><div class="label">Gold Light</div><div class="hex">#FFD764</div></div>
+  <div class="swatch"><div class="chip" style="background:#3CD278;"></div><div class="label">Shop Green</div><div class="hex">#3CD278</div></div>
+  <div class="swatch"><div class="chip" style="background:#C850DC;"></div><div class="label">Boss Purple</div><div class="hex">#C850DC</div></div>
+  <div class="swatch"><div class="chip" style="background:#64B4FF;"></div><div class="label">Skill Blue</div><div class="hex">#64B4FF</div></div>
+  <div class="swatch"><div class="chip" style="background:#3CA5E1;"></div><div class="label">XP Blue</div><div class="hex">#3CA5E1</div></div>
+  <div class="swatch"><div class="chip" style="background:#D73A3A;"></div><div class="label">HP Red</div><div class="hex">#D73A3A</div></div>
+</div>
+</body></html>

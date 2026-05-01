@@ -1,3 +1,4 @@
+import os
 import random
 import sys
 import pygame
@@ -5,9 +6,10 @@ import pygame
 from core.constants import *
 from core.camera import Camera
 from core.input_handler import InputHandler
-from core.animator import Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim, AttackSwingAnim
+from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
+                            AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
 from core.audio import AudioManager
-from core.skills import SkillManager, SKILL_DEFS
+from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -28,6 +30,7 @@ _BELT   = ( 95,  60,  20); _BOOT   = ( 88,  55,  25)
 _BLACK  = (  0,   0,   0); _RED    = (200,  48,  48)
 _PLUME  = (230,  80,  80)
 _CKEY   = (  1,   2,   3)
+
 
 def _r(s, c, x, y, w, h): pygame.draw.rect(s, c, (x, y, w, h))
 def _p(s, c, pts):         pygame.draw.polygon(s, c, pts)
@@ -332,6 +335,7 @@ class Game:
         self._game_surf  = pygame.Surface((GAME_W, GAME_H))
         self._enemy_data = load_enemies()
         self._item_data  = load_items()
+        self._load_sprites()
 
         self.messages = []
         self.floor    = 1
@@ -348,6 +352,13 @@ class Game:
         self._fade_dir      = 0   # 1=fade to black, -1=fade from black
         self._fade_speed    = 12
         self._fade_callback = None
+
+        # 이동 슬라이딩 애니메이션 (지수 감쇠)
+        self._move_anim_offset = [0.0, 0.0]
+
+        # 조합 스킬 해금 상태
+        self._unlocked_combos: set = set()
+        self._skill_books: set     = set()   # 스킬북 소지 여부 (레벨 달성 전)
 
         # 일시정지
         self._pause_sel = 0
@@ -368,11 +379,44 @@ class Game:
         self.camera  = None
 
     # ------------------------------------------------------------------ #
+    def _load_sprites(self):
+        """assets/sprites/*.png 로드. 없으면 빈 딕셔너리."""
+        self._sprites: dict[str, pygame.Surface] = {}
+        base = os.path.join(os.path.dirname(__file__), '..', 'assets')
+        spr_dir = os.path.join(base, 'sprites')
+        names = [
+            'hero', 'hero_attack', 'hero_hurt',
+            'enemy_rat', 'enemy_goblin', 'enemy_skeleton',
+            'enemy_orc', 'enemy_troll',
+            'boss_dark_knight', 'boss_lich',
+        ]
+        for name in names:
+            path = os.path.join(spr_dir, f'{name}.png')
+            if os.path.exists(path):
+                try:
+                    surf = pygame.image.load(path).convert_alpha()
+                    self._sprites[name] = pygame.transform.scale(surf, (TILE_SIZE, TILE_SIZE))
+                except Exception:
+                    pass
+
+    # ── 적 key → 스프라이트 key 매핑 ─────────────────────────────────
+    _ENEMY_SPRITE_KEY = {
+        'rat':         'enemy_rat',
+        'goblin':      'enemy_goblin',
+        'skeleton':    'enemy_skeleton',
+        'orc':         'enemy_orc',
+        'troll':       'enemy_troll',
+        'dark_knight': 'boss_dark_knight',
+        'lich':        'boss_lich',
+    }
+
+    # ------------------------------------------------------------------ #
     def run(self):
         while True:
             dt = self.clock.tick(FPS)
             self._update_fade(dt)
             self._update_shake(dt)
+            self._update_move_anim(dt)
             if not self._is_fading:
                 self._handle_events(dt)
             self.animator.update(dt)
@@ -390,6 +434,17 @@ class Game:
 
     def _update_shake(self, dt):
         self._shake_timer = max(0, self._shake_timer - dt)
+
+    def _update_move_anim(self, dt):
+        if self._move_anim_offset[0] == 0.0 and self._move_anim_offset[1] == 0.0:
+            return
+        factor = 0.982 ** dt
+        self._move_anim_offset[0] *= factor
+        self._move_anim_offset[1] *= factor
+        if abs(self._move_anim_offset[0]) < 0.5:
+            self._move_anim_offset[0] = 0.0
+        if abs(self._move_anim_offset[1]) < 0.5:
+            self._move_anim_offset[1] = 0.0
 
     @property
     def _shake_offset(self):
@@ -439,13 +494,15 @@ class Game:
     # ─────────────── 새 게임 / 불러오기 ──────────────────────────────
     def _new_game(self):
         delete_save()
-        self._save_data  = None
-        self.floor       = 1
-        self._facing     = 'down'
-        self._walk_frame = 0
-        self.messages    = []
-        self.skills      = SkillManager()
-        self._run_kills  = 0
+        self._save_data       = None
+        self.floor            = 1
+        self._facing          = 'down'
+        self._walk_frame      = 0
+        self.messages         = []
+        self.skills           = SkillManager()
+        self._run_kills       = 0
+        self._unlocked_combos = set()
+        self._skill_books     = set()
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -457,9 +514,11 @@ class Game:
         self._facing     = 'down'
         self._walk_frame = 0
         self.messages    = []
-        self.skills      = SkillManager()
+        self.skills           = SkillManager()
         self.skills.from_dict(data.get('skills', {}))
-        self._run_kills  = 0
+        self._unlocked_combos = set(data.get('unlocked_combos', []))
+        self._skill_books     = set(data.get('skill_books', []))
+        self._run_kills       = 0
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
         self.dungeon = dungeon
@@ -486,7 +545,7 @@ class Game:
                 self.audio.play('boss_appear')
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
-            save_game(self.player, self.floor, self.skills)
+            save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books)
             self.messages.append((t('auto_saved'), 'info'))
             self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -529,7 +588,7 @@ class Game:
             elif self.state == 'shop':
                 self._handle_shop_action(action)
             elif self.state == 'playing':
-                if t in ('move', 'wait', 'attack', 'use_item', 'skill'):
+                if t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
                     self._process(action)
             elif self.state == 'dead':
                 if t == 'restart':
@@ -546,17 +605,22 @@ class Game:
             dy = action.get('dy', 0)
             if dy != 0:
                 self._menu_sel = (self._menu_sel + dy) % total
+                self.audio.play('menu_select')
         elif typ in ('wait', 'confirm'):
             if self._menu_sel == 0:
+                self.audio.play('menu_confirm')
                 self._new_game()
             elif self._menu_sel == 1 and self._save_data:
+                self.audio.play('menu_confirm')
                 self._continue_game()
             elif self._menu_sel == n_main:
+                self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
             elif self._menu_sel == n_main + 1:
                 pygame.quit(); sys.exit()
         elif typ == 'load' and self._save_data:
+            self.audio.play('menu_confirm')
             self._continue_game()
 
     def _handle_menu_settings_action(self, action):
@@ -566,9 +630,11 @@ class Game:
             dx = action.get('dx', 0)
             if dy != 0:
                 self._menu_settings_sel = (self._menu_settings_sel + dy) % 5
+                self.audio.play('menu_select')
             elif dx != 0:
                 self._adjust_menu_setting(dx)
         elif typ in ('wait', 'confirm'):
+            self.audio.play('menu_select')
             self._confirm_menu_setting()
 
     def _adjust_menu_setting(self, dx):
@@ -659,7 +725,7 @@ class Game:
             self.state = 'playing'
         elif self._pause_sel == 1:   # 저장하기
             if self.player:
-                save_game(self.player, self.floor, self.skills)
+                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -706,7 +772,8 @@ class Game:
         elif action['type'] == 'wait':     acted = True
         elif action['type'] == 'attack':   acted = self._player_basic_attack()
         elif action['type'] == 'use_item': acted = self._use_item(action['slot'])
-        elif action['type'] == 'skill':    acted = self._use_skill(action['skill'])
+        elif action['type'] == 'skill':       acted = self._use_skill(action['skill'])
+        elif action['type'] == 'combo_skill': acted = self._use_combo_skill(action['combo'])
         if acted:
             self.dungeon.update_visibility(self.player.x, self.player.y)
             self.camera.center_on(self.player.x, self.player.y)
@@ -724,6 +791,10 @@ class Game:
             self._player_attack(enemy); return True
         if not self.dungeon.is_walkable(nx, ny):
             return False
+
+        # 이동 슬라이딩: 현재 오프셋에 새 방향을 누적 (클램프)
+        self._move_anim_offset[0] = max(-TILE_SIZE, min(TILE_SIZE, self._move_anim_offset[0] - dx * TILE_SIZE))
+        self._move_anim_offset[1] = max(-TILE_SIZE, min(TILE_SIZE, self._move_anim_offset[1] - dy * TILE_SIZE))
 
         self.player.x, self.player.y = nx, ny
         item = self.dungeon.get_item_at(nx, ny)
@@ -768,7 +839,7 @@ class Game:
         self.animator.add(LungeAnim(self.player.x, self.player.y, enemy.x, enemy.y))
         self.animator.add(SlashAnim(self.player.x, self.player.y, enemy.x, enemy.y, sc))
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
-        self.audio.play('attack')
+        self.audio.play('crit' if crit else 'attack')
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
 
@@ -783,10 +854,29 @@ class Game:
         if self.player.gain_xp(enemy.xp_value):
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.audio.play('levelup')
+            for cid, cdef in COMBO_SKILL_DEFS.items():
+                if (cid in self._skill_books and
+                        cid not in self._unlocked_combos and
+                        self.player.level >= cdef['level_req']):
+                    self._unlocked_combos.add(cid)
+                    self.messages.append((t('combo_unlock', cdef['name']), 'good'))
         self.dungeon.enemies.remove(enemy)
         self._check_boss_cleared()
 
     def _pickup(self, item):
+        if item.effect == 'unlock_combo':
+            combo_id = str(item.value)
+            cdef = COMBO_SKILL_DEFS.get(combo_id)
+            self.dungeon.remove_item(item)
+            self.audio.play('pickup')
+            if cdef:
+                self._skill_books.add(combo_id)
+                if self.player.level >= cdef['level_req']:
+                    self._unlocked_combos.add(combo_id)
+                    self.messages.append((t('combo_unlock', cdef['name']), 'good'))
+                else:
+                    self.messages.append((t('combo_need_level', item.name, cdef['level_req']), 'warn'))
+            return
         if len(self.player.inventory) < self.player.max_inventory:
             self.player.inventory.append(item)
             self.dungeon.remove_item(item)
@@ -844,14 +934,16 @@ class Game:
         if not self.skills.ready(key):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
             return False
-        if key == 'Q': return self._skill_dash()
-        if key == 'E': return self._skill_whirl()
-        if key == 'F': return self._skill_heal()
+        if key == 'W': return self._skill_dash()
+        if key == 'A': return self._skill_whirl()
+        if key == 'S': return self._skill_heal()
+        if key == 'D': return self._skill_power_attack()
         return False
 
     def _skill_dash(self):
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
         moved = 0
         for _ in range(3):
             nx, ny = self.player.x + dx, self.player.y + dy
@@ -860,7 +952,9 @@ class Game:
                 self._player_attack(enemy); break
             if not self.dungeon.is_walkable(nx, ny): break
             self.player.x, self.player.y = nx, ny; moved += 1
-        self.skills.trigger('Q')
+        if moved > 0:
+            self.animator.add(DashTrailAnim(sx, sy, self.player.x, self.player.y))
+        self.skills.trigger('W')
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
         return True
@@ -881,8 +975,9 @@ class Game:
             hits += 1
             if not enemy.is_alive():
                 self._on_enemy_killed(enemy)
+        self.animator.add(WhirlAnim(self.player.x, self.player.y))
         if not no_cooldown:
-            self.skills.trigger('E')
+            self.skills.trigger('A')
         self.audio.play('skill_whirl')
         self.messages.append((t('skill_whirl_h', hits) if hits else t('skill_whirl_m'),
                                'warn' if hits else 'info'))
@@ -891,10 +986,159 @@ class Game:
     def _skill_heal(self):
         amt = max(1, int(self.player.max_hp * 0.30))
         self.player.heal(amt)
-        self.animator.add(HitFlashAnim(self.player.x, self.player.y, amt, (80,220,130)))
-        self.skills.trigger('F')
+        self.animator.add(HealAnim(self.player.x, self.player.y))
+        self.skills.trigger('S')
         self.audio.play('skill_heal')
         self.messages.append((t('skill_heal', amt), 'good'))
+        return True
+
+    def _skill_power_attack(self):
+        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
+        dx, dy = dirs.get(self._facing, (0, 1))
+        tx, ty = self.player.x + dx, self.player.y + dy
+        enemy  = self.dungeon.get_enemy_at(tx, ty)
+        self.animator.add(AttackSwingAnim(self.player.x, self.player.y, self._facing, hit=bool(enemy)))
+        if not enemy:
+            self.audio.play('swing')
+            self.skills.trigger('D')
+            self.messages.append((t('skill_power_miss'), 'info'))
+            return True
+        crit = random.random() < 0.25
+        dmg  = max(1, self.player.attack * 2 - enemy.defense)
+        if crit: dmg = int(dmg * 1.5)
+        enemy.take_damage(dmg)
+        self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
+        if crit:
+            self.audio.play('crit')
+            self.messages.append((t('crit_hit', enemy.name, dmg), 'bad'))
+        else:
+            self.audio.play('attack')
+            self.messages.append((t('skill_power', enemy.name, dmg), 'warn'))
+        if not enemy.is_alive():
+            self._on_enemy_killed(enemy)
+        self.skills.trigger('D')
+        return True
+
+    # ─────────────── 조합 스킬 ───────────────────────────────────────
+    def _use_combo_skill(self, combo_id):
+        cdef = COMBO_SKILL_DEFS.get(combo_id)
+        if not cdef:
+            return False
+        if combo_id not in self._unlocked_combos:
+            if combo_id in self._skill_books:
+                self.messages.append((t('combo_need_level', cdef['name'], cdef['level_req']), 'warn'))
+            else:
+                self.messages.append((t('combo_no_unlock', cdef['name'], cdef['level_req']), 'warn'))
+            return False
+        if not self.skills.ready(combo_id):
+            self.messages.append((t('skill_cd', self.skills.remaining_sec(combo_id)), 'info'))
+            return False
+        if combo_id == 'WS': return self._skill_fireball()
+        if combo_id == 'AD': return self._skill_thunder()
+        if combo_id == 'WA': return self._skill_frost()
+        if combo_id == 'WD': return self._skill_wind()
+        return False
+
+    def _skill_fireball(self):
+        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
+        dx, dy = dirs.get(self._facing, (0, 1))
+        px, py = self.player.x, self.player.y
+        hit = False
+        for step in range(1, 6):
+            tx, ty = px + dx * step, py + dy * step
+            if not self.dungeon.is_walkable(tx, ty) and not self.dungeon.get_enemy_at(tx, ty):
+                self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
+                break
+            enemy = self.dungeon.get_enemy_at(tx, ty)
+            if enemy:
+                crit = random.random() < 0.3
+                dmg  = max(1, int(self.player.attack * 2.2) - enemy.defense)
+                if crit: dmg = int(dmg * 1.5)
+                enemy.take_damage(dmg)
+                self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
+                self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 100, 30)))
+                if crit:
+                    self.messages.append((t('crit_hit', enemy.name, dmg), 'bad'))
+                else:
+                    self.messages.append((t('skill_fireball', enemy.name, dmg), 'warn'))
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+                hit = True
+                break
+        if not hit:
+            self.messages.append((t('skill_fireball_m'), 'info'))
+        self.audio.play('skill_dash')
+        self.skills.trigger('WS')
+        return True
+
+    def _skill_thunder(self):
+        hits = 0
+        for enemy in list(self.dungeon.enemies):
+            if not (enemy.is_alive() and self.dungeon.tiles[enemy.y][enemy.x].visible):
+                continue
+            dmg = max(1, int(self.player.attack * 0.85) - enemy.defense)
+            enemy.take_damage(dmg)
+            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
+            hits += 1
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        if hits:
+            self._start_shake(4, 350)
+            self.messages.append((t('skill_thunder', hits), 'warn'))
+        else:
+            self.messages.append((t('skill_thunder_m'), 'info'))
+        self.audio.play('skill_whirl')
+        self.skills.trigger('AD')
+        return True
+
+    def _skill_frost(self):
+        px, py = self.player.x, self.player.y
+        hits = 0
+        for enemy in list(self.dungeon.enemies):
+            if not enemy.is_alive():
+                continue
+            if max(abs(enemy.x - px), abs(enemy.y - py)) <= 2:
+                dmg = max(1, int(self.player.attack * 1.3) - enemy.defense)
+                enemy.take_damage(dmg)
+                self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        self.animator.add(WhirlAnim(px, py))
+        if hits:
+            self.messages.append((t('skill_frost', hits), 'good'))
+        else:
+            self.messages.append((t('skill_frost_m'), 'info'))
+        self.audio.play('skill_heal')
+        self.skills.trigger('WA')
+        return True
+
+    def _skill_wind(self):
+        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
+        dx, dy = dirs.get(self._facing, (0, 1))
+        px, py = self.player.x, self.player.y
+        hits = 0
+        for step in range(1, 7):
+            tx, ty = px + dx * step, py + dy * step
+            if not (0 <= tx < self.dungeon.width and 0 <= ty < self.dungeon.height):
+                break
+            if not self.dungeon.is_walkable(tx, ty) and not self.dungeon.get_enemy_at(tx, ty):
+                break
+            enemy = self.dungeon.get_enemy_at(tx, ty)
+            if enemy and enemy.is_alive():
+                dmg = max(1, int(self.player.attack * 1.5) - enemy.defense)
+                enemy.take_damage(dmg)
+                self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
+                self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        if hits:
+            self.messages.append((t('skill_wind', hits), 'warn'))
+        else:
+            self.messages.append((t('skill_wind_m'), 'info'))
+        self.audio.play('skill_dash')
+        self.skills.trigger('WD')
         return True
 
     # ─────────────── 보스 처치 ────────────────────────────────────────
@@ -953,7 +1197,9 @@ class Game:
 
         self._render_dungeon()
         self.hud.render(self.screen, self.player, self.messages, self.floor,
-                        self.dungeon, self.skills)
+                        self.dungeon, self.skills,
+                        unlocked_combos=self._unlocked_combos,
+                        skill_books=self._skill_books)
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -996,9 +1242,11 @@ class Game:
                 self._draw_enemy(enemy, (enemy.x-cx)*TILE_SIZE, (enemy.y-cy)*TILE_SIZE)
 
         ox, oy = self.animator.player_offset
+        ox += int(self._move_anim_offset[0])
+        oy += int(self._move_anim_offset[1])
         px = (self.player.x - cx) * TILE_SIZE + ox
         py = (self.player.y - cy) * TILE_SIZE + oy
-        draw_player(self._game_surf, px, py, self._facing, self._walk_frame)
+        self._draw_player_sprite(px, py)
 
         self.animator.draw(self._game_surf, cx, cy)
 
@@ -1033,9 +1281,24 @@ class Game:
                 pygame.draw.polygon(s, sc, [(ccx,ccy+7),(ccx-6,ccy-3),(ccx+6,ccy-3)])
                 pygame.draw.line(s, sc, (ccx-4,ccy-3),(ccx+4,ccy-3), 2)
 
+    def _draw_player_sprite(self, x, y):
+        spr = self._sprites.get('hero')
+        if spr:
+            # 좌측 이동만 수평 반전; 상하는 같은 앞면 사용 (수직 반전 x)
+            if self._facing == 'left':
+                spr = pygame.transform.flip(spr, True, False)
+            self._game_surf.blit(spr, (x, y))
+        else:
+            draw_player(self._game_surf, x, y, self._facing, self._walk_frame)
+
     def _draw_enemy(self, enemy, x, y):
-        fn = _SPRITE_FN.get(enemy.key, draw_generic)
-        fn(self._game_surf, x, y, enemy.color)
+        spr_key = self._ENEMY_SPRITE_KEY.get(enemy.key)
+        spr     = self._sprites.get(spr_key) if spr_key else None
+        if spr:
+            self._game_surf.blit(spr, (x, y))
+        else:
+            fn = _SPRITE_FN.get(enemy.key, draw_generic)
+            fn(self._game_surf, x, y, enemy.color)
         draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
 
     def _draw_item(self, item, x, y):

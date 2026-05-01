@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 120" width="112" height="120">
+  <defs>
+    <radialGradient id="trollSkin" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#5AAA5A"></stop>
+      <stop offset="100%" stop-color="#1E4818"></stop>
+    </radialGradient>
+    <radialGradient id="trollFace" cx="45%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#68B868"></stop>
+      <stop offset="100%" stop-color="#285828"></stop>
+    </radialGradient>
+    <radialGradient id="trollEye" cx="40%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#E8D020"></stop>
+      <stop offset="100%" stop-color="#806000"></stop>
+    </radialGradient>
+    <filter id="trollShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.6"></feDropShadow>
+    </filter>
+    <filter id="trollEyeGlow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+  </defs>
+  <ellipse cx="56" cy="116" rx="30" ry="6" fill="#000" opacity="0.35"></ellipse>
+  
+  <rect x="28" y="80" width="20" height="32" rx="8" fill="url(#trollSkin)" filter="url(#trollShadow)"></rect>
+  <rect x="64" y="80" width="20" height="32" rx="8" fill="url(#trollSkin)" filter="url(#trollShadow)"></rect>
+  
+  <path d="M26 96 Q20 106 22 114 L48 114 L50 96Z" fill="#3C3C28" opacity="0.8"></path>
+  <path d="M62 96 Q60 106 62 114 L84 114 L86 96Z" fill="#3C3C28" opacity="0.8"></path>
+  
+  <path d="M20 110 Q16 116 18 118 L28 116 Q30 120 34 118 Q36 114 32 110Z" fill="#1A2A10"></path>
+  <path d="M60 110 Q58 116 60 118 L70 116 Q72 120 76 118 Q78 114 74 110Z" fill="#1A2A10"></path>
+  
+  <path d="M28 70 Q56 80 84 70 L86 88 Q70 94 56 92 Q42 94 26 88Z" fill="#3A2808"></path>
+  
+  <ellipse cx="56" cy="56" rx="34" ry="28" fill="url(#trollSkin)" filter="url(#trollShadow)"></ellipse>
+  
+  <circle cx="42" cy="50" r="4" fill="#3A6828" opacity="0.5"></circle>
+  <circle cx="68" cy="48" r="3" fill="#3A6828" opacity="0.4"></circle>
+  <circle cx="50" cy="62" r="5" fill="#285820" opacity="0.5"></circle>
+  <circle cx="62" cy="58" r="3" fill="#285820" opacity="0.4"></circle>
+  
+  <path d="M46 52 Q56 60 66 52" stroke="#1E4210" stroke-width="2" fill="none" opacity="0.6"></path>
+  
+  <path d="M28 44 L24 52 L28 72 L36 76 L76 76 L84 72 L88 52 L84 44Z" fill="#3A3A28" opacity="0.45"></path>
+  
+  <ellipse cx="18" cy="48" rx="18" ry="14" fill="url(#trollSkin)" filter="url(#trollShadow)"></ellipse>
+  <ellipse cx="94" cy="48" rx="18" ry="14" fill="url(#trollSkin)" filter="url(#trollShadow)"></ellipse>
+  
+  <circle cx="12" cy="44" r="4" fill="#285020" opacity="0.6"></circle>
+  <circle cx="100" cy="42" r="4" fill="#285020" opacity="0.6"></circle>
+  
+  <rect x="4" y="48" width="18" height="32" rx="8" fill="url(#trollSkin)" filter="url(#trollShadow)"></rect>
+  <rect x="90" y="48" width="18" height="32" rx="8" fill="url(#trollSkin)" filter="url(#trollShadow)"></rect>
+  
+  <ellipse cx="13" cy="82" rx="11" ry="9" fill="#285820" filter="url(#trollShadow)"></ellipse>
+  <ellipse cx="99" cy="82" rx="11" ry="9" fill="#285820" filter="url(#trollShadow)"></ellipse>
+  
+  <path d="M92 76 L90 68 L96 72Z" fill="#1A3010"></path>
+  <path d="M100 74 L100 64 L104 70Z" fill="#1A3010"></path>
+  <path d="M108 76 L110 68 L104 72Z" fill="#1A3010"></path>
+  
+  <rect x="96" y="18" width="14" height="46" rx="6" fill="#5A3C18" filter="url(#trollShadow)"></rect>
+  
+  <path d="M98 24 Q110 28 98 36 Q110 40 98 48" stroke="#3A2410" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  
+  <ellipse cx="103" cy="18" rx="11" ry="9" fill="#4A3010" filter="url(#trollShadow)"></ellipse>
+  
+  <path d="M96 22 L88 14 L94 22" fill="#2A2010"></path>
+  <path d="M104 14 L102 4 L108 12" fill="#2A2010"></path>
+  <path d="M110 22 L118 14 L112 22" fill="#2A2010"></path>
+  
+  <ellipse cx="56" cy="24" rx="28" ry="24" fill="url(#trollFace)" filter="url(#trollShadow)"></ellipse>
+  
+  <circle cx="44" cy="12" r="6" fill="#3A6028" opacity="0.5"></circle>
+  <circle cx="68" cy="10" r="5" fill="#3A6028" opacity="0.4"></circle>
+  
+  <path d="M28 22 Q56 12 84 22 L82 28 Q56 20 30 28Z" fill="#1E4818" opacity="0.8"></path>
+  
+  <ellipse cx="40" cy="26" rx="9" ry="7" fill="#0A0A08"></ellipse>
+  <ellipse cx="72" cy="26" rx="9" ry="7" fill="#0A0A08"></ellipse>
+  <ellipse cx="40" cy="26" rx="6" ry="5" fill="url(#trollEye)" filter="url(#trollEyeGlow)"></ellipse>
+  <ellipse cx="72" cy="26" rx="6" ry="5" fill="url(#trollEye)" filter="url(#trollEyeGlow)"></ellipse>
+  <ellipse cx="40" cy="26" rx="3" ry="3.5" fill="#080408"></ellipse>
+  <ellipse cx="72" cy="26" rx="3" ry="3.5" fill="#080408"></ellipse>
+  
+  <path d="M48 32 Q56 36 64 32" fill="#285820" stroke="#1E4010" stroke-width="1"></path>
+  <circle cx="50" cy="34" r="4" fill="#1E4010"></circle>
+  <circle cx="62" cy="34" r="4" fill="#1E4010"></circle>
+  
+  <path d="M28 34 Q56 44 84 34 L82 42 Q56 50 30 42Z" fill="#285820" filter="url(#trollShadow)"></path>
+  
+  <path d="M34 38 L32 48" stroke="#D8D0A0" stroke-width="4" stroke-linecap="round"></path>
+  <path d="M44 40 L43 50" stroke="#D8D0A0" stroke-width="3" stroke-linecap="round"></path>
+  <path d="M56 42 L55 52" stroke="#D8D0A0" stroke-width="4" stroke-linecap="round"></path>
+  <path d="M66 42 L68 52" stroke="#C8C090" stroke-width="3" stroke-linecap="round"></path>
+  <path d="M76 40 L78 50" stroke="#D8D0A0" stroke-width="4" stroke-linecap="round"></path>
+  
+  <path d="M32 10 Q24 0 26 -4 Q32 4 36 10" fill="#2A3818"></path>
+  <path d="M80 10 Q88 0 86 -4 Q80 4 76 10" fill="#2A3818"></path>
+  
+  <path d="M36 20 L42 28" stroke="#1A3810" stroke-width="2" opacity="0.6"></path>
+  <path d="M70 20 L64 28" stroke="#1A3810" stroke-width="2" opacity="0.6"></path>
+</svg>

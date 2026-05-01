@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 104" width="80" height="104">
+  <defs>
+    <radialGradient id="skBone" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#E8E4C8"></stop>
+      <stop offset="100%" stop-color="#A09868"></stop>
+    </radialGradient>
+    <radialGradient id="skSkull" cx="45%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#F0ECD4"></stop>
+      <stop offset="100%" stop-color="#B0A878"></stop>
+    </radialGradient>
+    <filter id="skShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"></feDropShadow>
+    </filter>
+    <filter id="eyeGlow">
+      <feGaussianBlur stdDeviation="2" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+  </defs>
+  <ellipse cx="40" cy="100" rx="16" ry="4" fill="#000" opacity="0.3"></ellipse>
+  
+  <path d="M26 72 Q20 84 22 96 Q28 90 32 92 Q34 96 38 94 L38 72Z" fill="#2A2040" opacity="0.7"></path>
+  <path d="M54 72 Q60 84 58 96 Q52 90 48 92 Q46 96 42 94 L42 72Z" fill="#2A2040" opacity="0.7"></path>
+  
+  <rect x="29" y="72" width="8" height="22" rx="3" fill="url(#skBone)" filter="url(#skShadow)"></rect>
+  <rect x="43" y="72" width="8" height="22" rx="3" fill="url(#skBone)" filter="url(#skShadow)"></rect>
+  
+  <circle cx="33" cy="82" r="5" fill="#D4C89C" filter="url(#skShadow)"></circle>
+  <circle cx="47" cy="82" r="5" fill="#D4C89C" filter="url(#skShadow)"></circle>
+  
+  <path d="M26 92 Q22 96 24 98 L36 98 L38 92Z" fill="#C8BC90"></path>
+  <path d="M42 92 Q40 96 42 98 L54 98 L56 92Z" fill="#C8BC90"></path>
+  
+  <path d="M24 38 L20 52 L22 70 L28 74 L52 74 L58 70 L60 52 L56 38Z" fill="#2A2040" opacity="0.6" filter="url(#skShadow)"></path>
+  
+  <rect x="28" y="42" width="24" height="30" rx="4" fill="none" stroke="url(#skBone)" stroke-width="1.5" opacity="0.3"></rect>
+  
+  <path d="M28 46 Q40 50 52 46" stroke="#D4C890" stroke-width="2" fill="none" opacity="0.8"></path>
+  <path d="M28 52 Q40 56 52 52" stroke="#D4C890" stroke-width="2" fill="none" opacity="0.7"></path>
+  <path d="M28 58 Q40 62 52 58" stroke="#D4C890" stroke-width="2" fill="none" opacity="0.6"></path>
+  <path d="M28 64 Q40 66 52 64" stroke="#D4C890" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  
+  <line x1="40" y1="40" x2="40" y2="72" stroke="#B8AC80" stroke-width="2" stroke-dasharray="3,3"></line>
+  
+  <path d="M24 40 L40 36 L56 40" stroke="#D4C890" stroke-width="2.5" fill="none" opacity="0.8"></path>
+  
+  <rect x="12" y="40" width="8" height="26" rx="3" fill="url(#skBone)" filter="url(#skShadow)"></rect>
+  <rect x="60" y="40" width="8" height="26" rx="3" fill="url(#skBone)" filter="url(#skShadow)"></rect>
+  
+  <circle cx="16" cy="56" r="5" fill="#D4C89C"></circle>
+  <circle cx="64" cy="56" r="5" fill="#D4C89C"></circle>
+  
+  <line x1="72" y1="20" x2="66" y2="70" stroke="#7A6050" stroke-width="4" stroke-linecap="round" filter="url(#skShadow)"></line>
+  <line x1="72" y1="20" x2="66" y2="70" stroke="#A08870" stroke-width="1.5" stroke-linecap="round" opacity="0.5"></line>
+  <rect x="60" y="50" width="16" height="4" rx="1" fill="#8A7050" filter="url(#skShadow)"></rect>
+  <rect x="64" y="54" width="5" height="10" rx="1" fill="#5A3820"></rect>
+  
+  <path d="M8 64 Q6 68 8 70 L12 68 Q14 72 16 70 Q15 66 14 64Z" fill="#C8BC90"></path>
+  
+  <ellipse cx="40" cy="22" rx="20" ry="18" fill="url(#skSkull)" filter="url(#skShadow)"></ellipse>
+  
+  <path d="M22 26 Q40 32 58 26 L56 36 Q40 40 24 36Z" fill="#C8BC88" filter="url(#skShadow)"></path>
+  
+  <rect x="28" y="34" width="4" height="6" rx="1" fill="#F0ECD4"></rect>
+  <rect x="34" y="35" width="4" height="5" rx="1" fill="#F0ECD4"></rect>
+  <rect x="40" y="35" width="4" height="5" rx="1" fill="#F0ECD4"></rect>
+  <rect x="46" y="35" width="4" height="5" rx="1" fill="#F0ECD4"></rect>
+  <rect x="52" y="34" width="4" height="6" rx="1" fill="#F0ECD4"></rect>
+  
+  <ellipse cx="30" cy="20" rx="7" ry="6" fill="#0A0A12"></ellipse>
+  <ellipse cx="50" cy="20" rx="7" ry="6" fill="#0A0A12"></ellipse>
+  
+  <ellipse cx="30" cy="20" rx="4" ry="3" fill="#4060FF" filter="url(#eyeGlow)" opacity="0.9"></ellipse>
+  <ellipse cx="50" cy="20" rx="4" ry="3" fill="#4060FF" filter="url(#eyeGlow)" opacity="0.9"></ellipse>
+  <ellipse cx="30" cy="19" rx="2" ry="1.5" fill="#A0C0FF"></ellipse>
+  <ellipse cx="50" cy="19" rx="2" ry="1.5" fill="#A0C0FF"></ellipse>
+  
+  <path d="M38 26 L42 26 L40 30Z" fill="#8A8060" opacity="0.7"></path>
+  
+  <path d="M40 8 Q42 14 38 20" stroke="#A09868" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  
+  <path d="M26 14 L22 4 L28 10" fill="#C8BC90"></path>
+  <path d="M40 8 L38 0 L42 0 L40 8" fill="#D4C89C"></path>
+  <path d="M54 14 L58 4 L52 10" fill="#C8BC90"></path>
+</svg>

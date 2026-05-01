@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<script src="../assets/audio/bitcrawler_audio.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ui-bg); font-family: var(--font-body); padding: 16px; color: var(--color-fg2); }
+.section { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; margin-top: 4px; }
+.btn-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.sfx-btn {
+  padding: 7px 14px; border-radius: 4px; font-size: 12px; cursor: pointer;
+  background: var(--btn-bg); border: 1px solid var(--btn-border); color: var(--btn-text);
+  font-family: var(--font-body); transition: all 0.1s;
+  display: flex; align-items: center; gap: 6px;
+}
+.sfx-btn:hover { background: var(--btn-bg-hover); border-color: var(--btn-border-hover); color: #fff; }
+.sfx-btn:active { background: var(--btn-bg-active); border-color: var(--gold-color); color: var(--gold-color); transform: scale(0.97); }
+.sfx-btn.playing { background: #1A2A1A; border-color: var(--msg-good); color: var(--msg-good); }
+.category { font-size: 10px; color: var(--color-gray); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.08em; }
+.divider { border: none; border-top: 1px solid var(--ui-border); margin: 10px 0 14px; }
+.bgm-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bgm-btn { padding: 7px 16px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: var(--font-body); border: 1px solid; transition: all 0.1s; }
+.bgm-btn.active { background: #2A240A; border-color: var(--gold-color); color: var(--gold-color); }
+.bgm-btn.inactive { background: var(--btn-bg); border-color: var(--btn-border); color: var(--btn-text); }
+.vol-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.vol-label { font-size: 11px; color: var(--color-gray); width: 50px; }
+input[type=range] { accent-color: var(--gold-color); width: 120px; }
+.hint { font-size: 10px; color: var(--color-gray); margin-top: 8px; }
+</style>
+</head><body>
+
+<div class="vol-row">
+  <span class="vol-label">SFX Vol</span>
+  <input type="range" id="sfxVol" min="0" max="1" step="0.05" value="0.8">
+  <span id="sfxPct" style="font-size:11px;color:var(--color-light-gray);">80%</span>
+</div>
+<div class="vol-row">
+  <span class="vol-label">BGM Vol</span>
+  <input type="range" id="bgmVol" min="0" max="1" step="0.05" value="0.5">
+  <span id="bgmPct" style="font-size:11px;color:var(--color-light-gray);">50%</span>
+</div>
+
+<hr class="divider">
+<div class="section">Sound Effects</div>
+
+<div class="category">⚔ Combat</div>
+<div class="btn-grid" id="combat-btns">
+  <button class="sfx-btn" data-sound="attack">▶ attack</button>
+  <button class="sfx-btn" data-sound="swing">▶ swing (miss)</button>
+  <button class="sfx-btn" data-sound="hit">▶ hit</button>
+  <button class="sfx-btn" data-sound="crit">▶ crit ★</button>
+  <button class="sfx-btn" data-sound="player_hit">▶ player_hit</button>
+  <button class="sfx-btn" data-sound="death">▶ death</button>
+</div>
+
+<div class="category">⚡ Skills</div>
+<div class="btn-grid">
+  <button class="sfx-btn" data-sound="skill_dash">▶ [Q] dash</button>
+  <button class="sfx-btn" data-sound="skill_whirl">▶ [E] whirl</button>
+  <button class="sfx-btn" data-sound="skill_heal">▶ [F] heal</button>
+</div>
+
+<div class="category">🎒 Items</div>
+<div class="btn-grid">
+  <button class="sfx-btn" data-sound="pickup">▶ pickup</button>
+  <button class="sfx-btn" data-sound="use_item">▶ use_item</button>
+  <button class="sfx-btn" data-sound="teleport">▶ teleport</button>
+  <button class="sfx-btn" data-sound="levelup">▶ level up !</button>
+</div>
+
+<div class="category">🏪 Navigation</div>
+<div class="btn-grid">
+  <button class="sfx-btn" data-sound="stairs">▶ stairs</button>
+  <button class="sfx-btn" data-sound="shop_open">▶ shop_open</button>
+  <button class="sfx-btn" data-sound="buy">▶ buy</button>
+  <button class="sfx-btn" data-sound="no_gold">▶ no_gold</button>
+  <button class="sfx-btn" data-sound="save">▶ save</button>
+  <button class="sfx-btn" data-sound="menu_select">▶ menu_select</button>
+  <button class="sfx-btn" data-sound="menu_confirm">▶ menu_confirm</button>
+</div>
+
+<div class="category">★ Boss</div>
+<div class="btn-grid">
+  <button class="sfx-btn" data-sound="boss_appear">▶ boss_appear</button>
+</div>
+
+<hr class="divider">
+<div class="section">BGM Layers</div>
+<div class="bgm-row" id="bgm-row">
+  <button class="bgm-btn inactive" data-bgm="menu">♪ Menu</button>
+  <button class="bgm-btn inactive" data-bgm="normal">♪ Dungeon</button>
+  <button class="bgm-btn inactive" data-bgm="boss">♪ Boss</button>
+  <button class="bgm-btn inactive" data-bgm="shop">♪ Shop</button>
+  <button class="bgm-btn inactive" data-bgm="stop" style="border-color:#D74E4E;color:#D74E4E;background:#120808;">■ Stop</button>
+</div>
+<div class="hint">BGM is procedurally generated — pure Web Audio oscillators, no files needed.</div>
+
+<script>
+  // SFX volume
+  document.getElementById('sfxVol').addEventListener('input', function() {
+    BitCrawlerAudio.setSfxVolume(parseFloat(this.value));
+    document.getElementById('sfxPct').textContent = Math.round(this.value * 100) + '%';
+  });
+  document.getElementById('bgmVol').addEventListener('input', function() {
+    BitCrawlerAudio.setBgmVolume(parseFloat(this.value));
+    document.getElementById('bgmPct').textContent = Math.round(this.value * 100) + '%';
+  });
+
+  // SFX buttons
+  document.querySelectorAll('.sfx-btn[data-sound]').forEach(btn => {
+    btn.addEventListener('click', function() {
+      BitCrawlerAudio.play(this.dataset.sound);
+      this.classList.add('playing');
+      setTimeout(() => this.classList.remove('playing'), 500);
+    });
+  });
+
+  // BGM buttons
+  let activeBgm = null;
+  document.querySelectorAll('.bgm-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const type = this.dataset.bgm;
+      document.querySelectorAll('.bgm-btn').forEach(b => b.className = 'bgm-btn inactive');
+      if (type === 'stop') {
+        BitCrawlerAudio.bgm.stop();
+        activeBgm = null;
+      } else {
+        BitCrawlerAudio.bgm.play(type);
+        activeBgm = type;
+        this.className = 'bgm-btn active';
+      }
+    });
+  });
+</script>
+</body></html>

@@ -1,0 +1,136 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 112 120" width="112" height="120">
+  <defs>
+    <radialGradient id="dkArmor" cx="50%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#6A5A9A"></stop>
+      <stop offset="100%" stop-color="#1A0A2E"></stop>
+    </radialGradient>
+    <radialGradient id="dkHelm" cx="45%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#5A4888"></stop>
+      <stop offset="100%" stop-color="#120820"></stop>
+    </radialGradient>
+    <radialGradient id="dkGold" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#E8C820"></stop>
+      <stop offset="100%" stop-color="#806008"></stop>
+    </radialGradient>
+    <radialGradient id="dkBlade" cx="50%" cy="0%" r="100%">
+      <stop offset="0%" stop-color="#C0C8E8"></stop>
+      <stop offset="40%" stop-color="#6070A0"></stop>
+      <stop offset="100%" stop-color="#200830"></stop>
+    </radialGradient>
+    <filter id="dkShadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.7"></feDropShadow>
+    </filter>
+    <filter id="dkEyeGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+    <filter id="dkAura">
+      <feGaussianBlur stdDeviation="6" result="blur"></feGaussianBlur>
+      <feMerge><feMergeNode in="blur"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+    </filter>
+  </defs>
+
+  
+  <ellipse cx="56" cy="60" rx="52" ry="54" fill="#1A0830" opacity="0.4" filter="url(#dkAura)"></ellipse>
+
+  
+  <ellipse cx="56" cy="116" rx="32" ry="6" fill="#000" opacity="0.5"></ellipse>
+
+  
+  <path d="M28 40 Q4 60 2 100 Q14 90 28 88 Q32 100 36 96 L40 40Z" fill="#0E0620" opacity="0.95" filter="url(#dkShadow)"></path>
+  <path d="M84 40 Q108 60 110 100 Q98 90 84 88 Q80 100 76 96 L72 40Z" fill="#0A0418" opacity="0.95" filter="url(#dkShadow)"></path>
+  
+  <path d="M28 40 Q6 62 4 100" stroke="#3A1858" stroke-width="2" fill="none" opacity="0.6"></path>
+  <path d="M84 40 Q106 62 108 100" stroke="#3A1858" stroke-width="2" fill="none" opacity="0.6"></path>
+
+  
+  <rect x="30" y="78" width="18" height="30" rx="5" fill="url(#dkArmor)" filter="url(#dkShadow)"></rect>
+  <rect x="64" y="78" width="18" height="30" rx="5" fill="url(#dkArmor)" filter="url(#dkShadow)"></rect>
+  
+  <ellipse cx="39" cy="88" rx="10" ry="7" fill="#2A1848" filter="url(#dkShadow)"></ellipse>
+  <ellipse cx="73" cy="88" rx="10" ry="7" fill="#2A1848" filter="url(#dkShadow)"></ellipse>
+  <path d="M39 81 L37 72 L41 76Z" fill="#4A3870"></path>
+  <path d="M73 81 L71 72 L75 76Z" fill="#4A3870"></path>
+  
+  <rect x="28" y="96" width="22" height="12" rx="3" fill="#2A1848" filter="url(#dkShadow)"></rect>
+  <rect x="62" y="96" width="22" height="12" rx="3" fill="#2A1848" filter="url(#dkShadow)"></rect>
+  
+  <path d="M28 106 Q22 112 24 116 L50 116 L52 106Z" fill="#0E0618"></path>
+  <path d="M20 114 L26 116" stroke="#4A3870" stroke-width="2"></path>
+  <path d="M62 106 Q60 112 62 116 L84 116 L86 106Z" fill="#0E0618"></path>
+  <path d="M86 114 L80 116" stroke="#4A3870" stroke-width="2"></path>
+
+  
+  <rect x="26" y="40" width="60" height="42" rx="6" fill="url(#dkArmor)" filter="url(#dkShadow)"></rect>
+  
+  <path d="M30 44 Q56 50 82 44" stroke="#4A3870" stroke-width="2" fill="none" opacity="0.6"></path>
+  <path d="M28 54 Q56 60 84 54" stroke="#4A3870" stroke-width="2" fill="none" opacity="0.5"></path>
+  <path d="M28 64 Q56 68 84 64" stroke="#4A3870" stroke-width="1.5" fill="none" opacity="0.4"></path>
+  
+  <circle cx="56" cy="58" r="12" fill="#160826" stroke="#3A2858" stroke-width="1.5"></circle>
+  <ellipse cx="56" cy="56" rx="7" ry="6" fill="#2A1840"></ellipse>
+  <ellipse cx="52" cy="55" rx="2.5" ry="2" fill="#FF2020" opacity="0.8" filter="url(#dkEyeGlow)"></ellipse>
+  <ellipse cx="60" cy="55" rx="2.5" ry="2" fill="#FF2020" opacity="0.8" filter="url(#dkEyeGlow)"></ellipse>
+  <path d="M50 60 L52 58 L56 60 L60 58 L62 60" stroke="#A09098" stroke-width="1" fill="none" opacity="0.6"></path>
+  
+  <path d="M26 40 L26 82 L28 82 L28 40Z" fill="url(#dkGold)" opacity="0.6"></path>
+  <path d="M86 40 L86 82 L84 82 L84 40Z" fill="url(#dkGold)" opacity="0.6"></path>
+  <path d="M26 40 Q56 44 86 40 L84 44 Q56 48 28 44Z" fill="url(#dkGold)" opacity="0.5"></path>
+
+  
+  <ellipse cx="18" cy="44" rx="14" ry="12" fill="url(#dkArmor)" filter="url(#dkShadow)"></ellipse>
+  <path d="M6 38 Q0 26 8 20 Q14 28 16 38Z" fill="#1A0A2E" opacity="0.9"></path>
+  <path d="M8 22 Q4 14 10 10 Q14 18 12 24Z" fill="#3A1858" opacity="0.7"></path>
+  <ellipse cx="94" cy="44" rx="14" ry="12" fill="url(#dkArmor)" filter="url(#dkShadow)"></ellipse>
+  <path d="M106 38 Q112 26 104 20 Q98 28 96 38Z" fill="#1A0A2E" opacity="0.9"></path>
+  <path d="M104 22 Q108 14 102 10 Q98 18 100 24Z" fill="#3A1858" opacity="0.7"></path>
+
+  
+  <rect x="4" y="44" width="16" height="28" rx="6" fill="url(#dkArmor)" filter="url(#dkShadow)"></rect>
+  <rect x="92" y="44" width="16" height="28" rx="6" fill="url(#dkArmor)" filter="url(#dkShadow)"></rect>
+
+  
+  <path d="M96 4 L102 8 L88 108 L82 104Z" fill="url(#dkBlade)" filter="url(#dkShadow)"></path>
+  
+  <line x1="93" y1="12" x2="84" y2="100" stroke="#3A2858" stroke-width="1.5" opacity="0.7"></line>
+  
+  <path d="M96 4 L102 8 L88 108" stroke="#8040C0" stroke-width="1" fill="none" opacity="0.5" filter="url(#dkEyeGlow)"></path>
+  
+  <rect x="74" y="62" width="30" height="7" rx="3" fill="url(#dkGold)" filter="url(#dkShadow)"></rect>
+  
+  <rect x="83" y="69" width="7" height="20" rx="3" fill="#1A0A18"></rect>
+  <path d="M83 72 Q90 74 83 80 Q90 82 83 88" stroke="#3A1848" stroke-width="1.5" fill="none" opacity="0.6"></path>
+  
+  <ellipse cx="86" cy="90" rx="7" ry="5" fill="url(#dkGold)" filter="url(#dkShadow)"></ellipse>
+  <circle cx="86" cy="90" r="3" fill="#8040C0" filter="url(#dkEyeGlow)"></circle>
+
+  
+  <ellipse cx="12" cy="74" rx="9" ry="8" fill="#2A1848" filter="url(#dkShadow)"></ellipse>
+  
+  <path d="M6 70 L2 64" stroke="#4A3870" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M8 68 L6 60" stroke="#4A3870" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M12 68 L12 60" stroke="#4A3870" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M16 70 L18 62" stroke="#4A3870" stroke-width="2.5" stroke-linecap="round"></path>
+
+  
+  <path d="M22 32 Q24 8 56 4 Q88 8 90 32 L88 42 Q72 48 56 48 Q40 48 24 42Z" fill="url(#dkHelm)" filter="url(#dkShadow)"></path>
+  
+  <path d="M26 28 L86 28 L84 42 Q72 46 56 46 Q40 46 28 42Z" fill="#0C0618"></path>
+  
+  <rect x="30" y="30" width="52" height="6" rx="2" fill="#080412"></rect>
+  
+  <ellipse cx="38" cy="33" rx="7" ry="3" fill="#FF1800" filter="url(#dkEyeGlow)" opacity="0.9"></ellipse>
+  <ellipse cx="74" cy="33" rx="7" ry="3" fill="#FF1800" filter="url(#dkEyeGlow)" opacity="0.9"></ellipse>
+  <ellipse cx="38" cy="33" rx="4" ry="1.5" fill="#FF8040"></ellipse>
+  <ellipse cx="74" cy="33" rx="4" ry="1.5" fill="#FF8040"></ellipse>
+  
+  <path d="M28 18 L24 4 L32 14Z" fill="#2A1848"></path>
+  <path d="M42 12 L40 0 L46 0 L46 12" fill="#3A2858"></path>
+  <path d="M56 10 L54 0 L58 0 L56 10" fill="#3A2858"></path>
+  <path d="M70 12 L66 0 L72 0 L70 12" fill="#3A2858"></path>
+  <path d="M84 18 L88 4 L80 14Z" fill="#2A1848"></path>
+  
+  <path d="M24 28 Q56 22 88 28" stroke="#D4A020" stroke-width="2" fill="none" opacity="0.7"></path>
+  
+  <path d="M30 36 Q56 42 82 36" stroke="#6020A0" stroke-width="1" fill="none" opacity="0.4" filter="url(#dkEyeGlow)"></path>
+</svg>

@@ -68,5 +68,33 @@
     "type": "consumable",
     "effect": "whirlwind",
     "value": 0
+  },
+  "skillbook_wind": {
+    "name": "바람 스킬북",
+    "color": [160, 255, 160],
+    "type": "skillbook",
+    "effect": "unlock_combo",
+    "value": "WD"
+  },
+  "skillbook_fireball": {
+    "name": "파이어볼 스킬북",
+    "color": [255, 120, 40],
+    "type": "skillbook",
+    "effect": "unlock_combo",
+    "value": "WS"
+  },
+  "skillbook_frost": {
+    "name": "냉기 스킬북",
+    "color": [100, 220, 255],
+    "type": "skillbook",
+    "effect": "unlock_combo",
+    "value": "WA"
+  },
+  "skillbook_thunder": {
+    "name": "천둥 스킬북",
+    "color": [200, 160, 255],
+    "type": "skillbook",
+    "effect": "unlock_combo",
+    "value": "AD"
   }
 }

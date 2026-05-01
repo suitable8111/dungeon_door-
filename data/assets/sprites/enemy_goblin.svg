@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 96" width="80" height="96">
+  <defs>
+    <radialGradient id="gobSkin" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#70CC58"></stop>
+      <stop offset="100%" stop-color="#2A6018"></stop>
+    </radialGradient>
+    <radialGradient id="gobFace" cx="50%" cy="35%" r="60%">
+      <stop offset="0%" stop-color="#88D868"></stop>
+      <stop offset="100%" stop-color="#3A7828"></stop>
+    </radialGradient>
+    <filter id="gobShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000" flood-opacity="0.5"></feDropShadow>
+    </filter>
+  </defs>
+  <ellipse cx="40" cy="92" rx="18" ry="4" fill="#000" opacity="0.3"></ellipse>
+  
+  <path d="M30 62 Q40 68 50 62 L52 76 Q46 80 40 78 Q34 80 28 76Z" fill="#5A3800"></path>
+  <path d="M30 62 Q40 68 50 62 L50 66 Q40 70 30 66Z" fill="#7A5010"></path>
+  
+  <rect x="28" y="72" width="10" height="18" rx="4" fill="url(#gobSkin)" filter="url(#gobShadow)"></rect>
+  <rect x="42" y="72" width="10" height="18" rx="4" fill="url(#gobSkin)" filter="url(#gobShadow)"></rect>
+  
+  <path d="M26 88 Q24 92 26 94 L33 92 Q34 96 38 94 Q36 90 34 88Z" fill="#1E4010"></path>
+  <path d="M42 88 Q40 92 42 94 L49 92 Q50 96 54 94 Q52 90 52 88Z" fill="#1E4010"></path>
+  
+  <rect x="26" y="44" width="28" height="28" rx="5" fill="url(#gobSkin)" filter="url(#gobShadow)"></rect>
+  
+  <path d="M30 52 Q40 56 50 52" stroke="#2A5818" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  <path d="M30 58 Q40 62 50 58" stroke="#2A5818" stroke-width="1.5" fill="none" opacity="0.4"></path>
+  
+  <path d="M30 44 L26 52 L26 64 L30 68 L50 68 L54 64 L54 52 L50 44Z" fill="#4A3010" opacity="0.4"></path>
+  
+  <rect x="26" y="66" width="28" height="4" rx="1" fill="#3A2408"></rect>
+  <rect x="36" y="64" width="8" height="8" rx="1" fill="#7A5010"></rect>
+  
+  <line x1="46" y1="62" x2="48" y2="72" stroke="#909090" stroke-width="2" stroke-linecap="round"></line>
+  <rect x="44" y="64" width="6" height="2" rx="1" fill="#8A6010"></rect>
+  
+  <rect x="14" y="44" width="12" height="22" rx="5" fill="url(#gobSkin)" filter="url(#gobShadow)"></rect>
+  <rect x="54" y="44" width="12" height="22" rx="5" fill="url(#gobSkin)" filter="url(#gobShadow)"></rect>
+  
+  <path d="M14 64 Q10 68 12 72 L16 70 Q18 74 22 72 Q20 68 18 64Z" fill="#2A5818"></path>
+  <path d="M54 64 Q58 68 56 72 L60 70 Q62 74 66 72 Q64 68 62 64Z" fill="#2A5818"></path>
+  
+  <rect x="62" y="30" width="6" height="30" rx="3" fill="#5A3808" transform="rotate(-15 65 45)" filter="url(#gobShadow)"></rect>
+  <ellipse cx="68" cy="32" rx="8" ry="7" fill="#4A3006" transform="rotate(-15 65 32)" filter="url(#gobShadow)"></ellipse>
+  
+  <path d="M62 28 L58 22" stroke="#2A1A04" stroke-width="2"></path>
+  <path d="M68 26 L68 18" stroke="#2A1A04" stroke-width="2"></path>
+  <path d="M74 30 L78 24" stroke="#2A1A04" stroke-width="2"></path>
+  
+  <ellipse cx="40" cy="28" rx="18" ry="20" fill="url(#gobFace)" filter="url(#gobShadow)"></ellipse>
+  
+  <path d="M22 22 Q14 14 16 6 Q24 12 26 20Z" fill="#50A038"></path>
+  <path d="M22 22 Q16 16 18 10 Q24 14 24 20Z" fill="#88D868" opacity="0.5"></path>
+  <path d="M58 22 Q66 14 64 6 Q56 12 54 20Z" fill="#50A038"></path>
+  <path d="M58 22 Q64 16 62 10 Q56 14 56 20Z" fill="#88D868" opacity="0.5"></path>
+  
+  <path d="M24 20 Q40 14 56 20" stroke="#2A5818" stroke-width="3" fill="none" opacity="0.6"></path>
+  
+  <ellipse cx="32" cy="24" rx="6" ry="5" fill="#E8D020"></ellipse>
+  <ellipse cx="48" cy="24" rx="6" ry="5" fill="#E8D020"></ellipse>
+  <ellipse cx="32" cy="25" rx="3" ry="4" fill="#0A0A08"></ellipse>
+  <ellipse cx="48" cy="25" rx="3" ry="4" fill="#0A0A08"></ellipse>
+  <circle cx="31" cy="23" r="1.2" fill="#fff" opacity="0.7"></circle>
+  <circle cx="47" cy="23" r="1.2" fill="#fff" opacity="0.7"></circle>
+  
+  <path d="M26 20 L38 22" stroke="#1A4010" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M42 22 L54 20" stroke="#1A4010" stroke-width="2.5" stroke-linecap="round"></path>
+  
+  <circle cx="38" cy="30" r="2.5" fill="#2A5818"></circle>
+  <circle cx="42" cy="30" r="2.5" fill="#2A5818"></circle>
+  
+  <path d="M28 34 Q40 40 52 34" stroke="#1A4010" stroke-width="2" fill="none"></path>
+  <path d="M32 34 L30 40" stroke="#E8E0C0" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M36 36 L34 42" stroke="#E8E0C0" stroke-width="2" stroke-linecap="round"></path>
+  <path d="M48 34 L50 40" stroke="#E8E0C0" stroke-width="2.5" stroke-linecap="round"></path>
+  <path d="M44 36 L46 42" stroke="#E8E0C0" stroke-width="2" stroke-linecap="round"></path>
+</svg>

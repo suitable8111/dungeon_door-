@@ -1,0 +1,301 @@
+/**
+ * BitCrawler Design System — Colors & Typography
+ * Source: suitable8111/dungeon_door- (core/constants.py, ui/hud.py)
+ * All colors extracted directly from the game's Python constants.
+ */
+
+/* ============================================================
+   FONT FACES
+   Press Start 2P  — local TTF (brand supplied)
+   Noto Sans KR    — Google Fonts CDN (Korean body text)
+   ============================================================ */
+@font-face {
+  font-family: 'Press Start 2P';
+  src: url('fonts/PressStart2P-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap');
+
+/* ============================================================
+   BASE COLOR TOKENS
+   Direct mappings from core/constants.py
+   ============================================================ */
+:root {
+  /* ── Structure ─────────────────────────────────────── */
+  --color-black:       #000000;
+  --color-white:       #ffffff;
+  --color-dark-gray:   #1E1E28;   /* rgb(30,30,40) */
+  --color-gray:        #505064;   /* rgb(80,80,100) */
+  --color-light-gray:  #A0A0B4;   /* rgb(160,160,180) */
+
+  /* ── UI Shell ──────────────────────────────────────── */
+  --ui-bg:             #0E0E18;   /* rgb(14,14,24) */
+  --ui-bg-dark:        #0A0A14;   /* slightly darker panels */
+  --ui-border:         #41415F;   /* rgb(65,65,95) */
+  --ui-border-inner:   #1A1A30;   /* inner bevel */
+  --ui-section-bg:     #16162A;   /* section header strip */
+  --ui-panel-alpha:    rgba(8,8,22,0.87);  /* SRCALPHA panel bg */
+
+  /* ── Dungeon Tiles ─────────────────────────────────── */
+  --wall-lit:          #46465C;
+  --wall-dim:          #232332;
+  --wall-top:          #64647D;
+  --wall-bot:          #2A2A3A;
+  --floor-lit:         #2D2D3E;
+  --floor-dim:         #19191F; /* was rgb(25,25,35) */
+  --floor-edge:        #3A3A4E;
+
+  /* ── Stairs / Portals ──────────────────────────────── */
+  --stairs-lit:        #D2AF55;   /* gold */
+  --stairs-dim:        #695828;
+
+  /* ── Player / Gold ─────────────────────────────────── */
+  --player-color:      #EBB93C;   /* rgb(235,185,60) — warm gold */
+  --player-light:      #FFD764;   /* rgb(255,215,100) */
+  --player-dark:       #A07319;   /* rgb(160,115,25) */
+  --gold-color:        #EBB93C;
+
+  /* ── Health ────────────────────────────────────────── */
+  --hp-color:          #D73A3A;   /* rgb(215,58,58) */
+  --hp-bg:             #481414;   /* rgb(72,20,20) */
+
+  /* ── Experience ────────────────────────────────────── */
+  --xp-color:          #3CA5E1;   /* rgb(60,165,225) */
+  --xp-bg:             #123452;   /* rgb(18,52,82) */
+
+  /* ── Skills ────────────────────────────────────────── */
+  --skill-ready:       #64B4FF;   /* rgb(100,180,255) */
+  --skill-cd:          #3C3C5A;   /* rgb(60,60,90) */
+
+  /* ── Shop / Events ─────────────────────────────────── */
+  --shop-color:        #3CD278;   /* rgb(60,210,120) */
+
+  /* ── Boss / Magic ──────────────────────────────────── */
+  --boss-color:        #C850DC;   /* rgb(200,80,220) */
+
+  /* ── Items ─────────────────────────────────────────── */
+  --item-color:        #B9B97D;   /* rgb(185,185,125) */
+  --item-consumable:   #D23C3C;
+  --item-weapon:       #B4B9CD;
+  --item-armor:        #A07846;
+  --item-special:      #B464DC;
+
+  /* ── Message Log ────────────────────────────────────── */
+  --msg-info:          #C8C8B4;   /* rgb(200,200,180) — warm off-white */
+  --msg-warn:          #EBA532;   /* rgb(235,165,50) — amber */
+  --msg-good:          #5FD75F;   /* rgb(95,215,95) — green */
+  --msg-bad:           #D74E4E;   /* rgb(215,78,78) — red */
+
+  /* ── Button States ──────────────────────────────────── */
+  --btn-bg:            #0E0E1A;
+  --btn-bg-hover:      #16162A;
+  --btn-bg-active:     #2A240A;
+  --btn-border:        #2E2C46;
+  --btn-border-hover:  #696494;
+  --btn-border-active: #EBB93C;   /* gold */
+  --btn-text:          #A0A0B4;
+  --btn-text-hover:    #ffffff;
+  --btn-text-active:   #EBB93C;
+
+  /* ── Danger Button ──────────────────────────────────── */
+  --btn-danger-bg:       #120A0A;
+  --btn-danger-border:   #501E1E;
+  --btn-danger-text:     #823C3C;
+  --btn-danger-bg-hover: #200C0C;
+  --btn-danger-bdr-hover:#9B3232;
+  --btn-danger-txt-hover:#C85050;
+
+  /* ── Enemy Colors ───────────────────────────────────── */
+  --enemy-rat:         #A06E3C;   /* rgb(160,110,60) */
+  --enemy-goblin:      #50A046;   /* rgb(80,160,70) */
+  --enemy-skeleton:    #C8C8AF;   /* rgb(200,200,175) */
+  --enemy-orc:         #649150;   /* rgb(100,145,80) */
+  --enemy-troll:       #467846;   /* rgb(70,120,70) */
+  --enemy-wizard:      #8246D2;   /* rgb(130,70,210) */
+  --enemy-dragon:      #B43C14;   /* rgb(180,60,20) */
+  --enemy-dark-knight: #503C78;   /* rgb(80,60,120) */
+  --enemy-lich:        #78C8A0;   /* rgb(120,200,160) */
+
+  /* ============================================================
+     SEMANTIC COLOR ALIASES
+     ============================================================ */
+  --color-primary:     var(--gold-color);       /* gold — main accent */
+  --color-primary-dim: var(--player-dark);
+  --color-primary-bright: var(--player-light);
+  --color-bg:          var(--ui-bg);
+  --color-bg-dark:     var(--ui-bg-dark);
+  --color-surface:     var(--ui-section-bg);
+  --color-border:      var(--ui-border);
+  --color-fg1:         var(--color-white);
+  --color-fg2:         var(--color-light-gray);
+  --color-fg3:         var(--color-gray);
+  --color-success:     var(--msg-good);
+  --color-warning:     var(--msg-warn);
+  --color-error:       var(--msg-bad);
+  --color-info:        var(--msg-info);
+
+  /* ============================================================
+     TYPOGRAPHY
+     Pixel sizes from pygame font sizes; web approximations
+     ============================================================ */
+
+  /* Font families */
+  --font-display:  'Press Start 2P', 'Courier New', monospace;
+  --font-body:     'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-mono:     'Courier New', monospace;
+
+  /* Font sizes — mapped from pygame (font_sm=13, font_md=15, font_lg=30, font_xl=46) */
+  --text-xs:   11px;   /* below sm — hints */
+  --text-sm:   13px;   /* font_sm — stat labels, message log, hints */
+  --text-md:   15px;   /* font_md — button labels, inventory */
+  --text-lg:   24px;   /* font_lg — section titles, menu items (scaled for web) */
+  --text-xl:   40px;   /* font_xl — game title, GAME OVER (scaled for web) */
+  --text-2xl:  56px;   /* extra large — hero display */
+
+  /* Line heights */
+  --leading-tight:  1.2;
+  --leading-normal: 1.5;
+  --leading-loose:  1.8;
+
+  /* Letter spacing */
+  --tracking-tight:  -0.02em;
+  --tracking-normal:  0em;
+  --tracking-wide:    0.08em;
+  --tracking-wider:   0.16em;  /* title spread */
+
+  /* Font weights */
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-bold:   700;
+
+  /* ============================================================
+     SPACING & LAYOUT TOKENS
+     Based on 32px tile grid and 8px base unit
+     ============================================================ */
+
+  /* Base unit: 8px */
+  --space-1:   4px;
+  --space-2:   8px;
+  --space-3:   12px;
+  --space-4:   16px;
+  --space-5:   20px;
+  --space-6:   24px;
+  --space-8:   32px;   /* 1 tile */
+  --space-10:  40px;
+  --space-12:  48px;
+  --space-16:  64px;   /* 2 tiles */
+  --space-24:  96px;
+  --space-32:  128px;  /* 4 tiles — bottom bar height */
+
+  /* Layout constants from constants.py */
+  --layout-tile-size:     32px;
+  --layout-window-w:      1024px;
+  --layout-window-h:      768px;
+  --layout-top-bar-h:     32px;
+  --layout-right-panel-w: 224px;
+  --layout-bottom-bar-h:  128px;
+  --layout-game-w:        800px;
+  --layout-game-h:        608px;
+
+  /* ============================================================
+     BORDER RADIUS
+     Near-zero — pixel-art aesthetic
+     ============================================================ */
+  --radius-none:   0px;
+  --radius-sm:     2px;
+  --radius-md:     4px;   /* buttons only */
+  --radius-pill:   999px; /* never used in game; here for completeness */
+
+  /* ============================================================
+     BORDERS
+     ============================================================ */
+  --border-panel:  2px solid var(--ui-border);
+  --border-inner:  1px solid var(--ui-border-inner);
+  --border-gold:   2px solid var(--gold-color);
+  --border-hp:     1px solid #501E1E;
+  --border-xp:     1px solid #1A3A5A;
+
+  /* ============================================================
+     SHADOWS
+     No box shadows in the game — depth via border/inset only.
+     These are for web UI kit approximations.
+     ============================================================ */
+  --shadow-none:   none;
+  --shadow-panel:  0 4px 12px rgba(0,0,0,0.6);
+  --shadow-modal:  0 8px 32px rgba(0,0,0,0.8);
+
+  /* ============================================================
+     ANIMATION TOKENS
+     From core/animator.py timing
+     ============================================================ */
+  --anim-lunge:   240ms;
+  --anim-slash:   280ms;
+  --anim-flash:   480ms;
+  --anim-fade:    350ms;   /* floor transition ~21 frames at 60fps */
+  --anim-shake:   200ms;
+  --easing-linear: linear;
+  --easing-out:    ease-out;
+}
+
+/* ============================================================
+   SEMANTIC TEXT STYLES
+   ============================================================ */
+
+.text-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--gold-color);
+  letter-spacing: var(--tracking-wider);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+
+.text-subtitle {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--color-white);
+  letter-spacing: var(--tracking-wide);
+}
+
+.text-section-header {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-light-gray);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+.text-body {
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-weight: var(--weight-normal);
+  color: var(--color-fg2);
+  line-height: var(--leading-normal);
+}
+
+.text-label {
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
+  color: var(--color-fg3);
+  letter-spacing: var(--tracking-wide);
+}
+
+.text-hint {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--color-gray);
+}
+
+.text-msg-info  { color: var(--msg-info); }
+.text-msg-warn  { color: var(--msg-warn); }
+.text-msg-good  { color: var(--msg-good); }
+.text-msg-bad   { color: var(--msg-bad); }
+.text-gold      { color: var(--gold-color); }
+.text-hp        { color: var(--hp-color); }
+.text-xp        { color: var(--xp-color); }
+.text-boss      { color: var(--boss-color); }
+.text-skill     { color: var(--skill-ready); }

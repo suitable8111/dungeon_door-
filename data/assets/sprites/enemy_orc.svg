@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 104" width="96" height="104">
+  <defs>
+    <radialGradient id="orcSkin" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#7AC050"></stop>
+      <stop offset="100%" stop-color="#2E5C18"></stop>
+    </radialGradient>
+    <radialGradient id="orcFace" cx="45%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#8CD060"></stop>
+      <stop offset="100%" stop-color="#3A7020"></stop>
+    </radialGradient>
+    <radialGradient id="orcArmor" cx="50%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#888890"></stop>
+      <stop offset="100%" stop-color="#404048"></stop>
+    </radialGradient>
+    <filter id="orcShadow">
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.6"></feDropShadow>
+    </filter>
+  </defs>
+  <ellipse cx="48" cy="100" rx="24" ry="5" fill="#000" opacity="0.35"></ellipse>
+  
+  <rect x="28" y="74" width="14" height="22" rx="5" fill="url(#orcSkin)" filter="url(#orcShadow)"></rect>
+  <rect x="54" y="74" width="14" height="22" rx="5" fill="url(#orcSkin)" filter="url(#orcShadow)"></rect>
+  
+  <rect x="27" y="84" width="16" height="10" rx="2" fill="url(#orcArmor)"></rect>
+  <rect x="53" y="84" width="16" height="10" rx="2" fill="url(#orcArmor)"></rect>
+  
+  <path d="M26 92 Q22 98 24 102 L42 102 L44 92Z" fill="#3A2A14"></path>
+  <path d="M52 92 Q50 98 52 102 L68 102 L70 92Z" fill="#3A2A14"></path>
+  
+  <path d="M28 62 Q48 70 68 62 L70 78 Q60 82 48 80 Q36 82 26 78Z" fill="#4A3010"></path>
+  <path d="M28 62 Q48 68 68 62 L68 66 Q48 72 28 66Z" fill="#6A4818"></path>
+  
+  <rect x="22" y="38" width="52" height="36" rx="6" fill="url(#orcSkin)" filter="url(#orcShadow)"></rect>
+  
+  <path d="M26 40 L24 54 L26 72 L32 74 L64 74 L70 72 L72 54 L70 40Z" fill="url(#orcArmor)" opacity="0.8" filter="url(#orcShadow)"></path>
+  
+  <path d="M30 44 Q48 48 66 44" stroke="#A0A0B0" stroke-width="1.5" fill="none" opacity="0.6"></path>
+  <path d="M30 52 Q48 56 66 52" stroke="#A0A0B0" stroke-width="1.5" fill="none" opacity="0.5"></path>
+  <line x1="48" y1="40" x2="48" y2="74" stroke="#707080" stroke-width="2" opacity="0.5"></line>
+  
+  <circle cx="48" cy="56" r="8" fill="#3A3848" stroke="#808090" stroke-width="1.5"></circle>
+  <path d="M48 50 L50 54 L48 62 L46 54Z" fill="#C04020"></path>
+  
+  <ellipse cx="18" cy="42" rx="12" ry="10" fill="url(#orcArmor)" filter="url(#orcShadow)"></ellipse>
+  <path d="M8 40 Q18 34 28 40" stroke="#A0A0B0" stroke-width="1.5" fill="none" opacity="0.6"></path>
+  <ellipse cx="78" cy="42" rx="12" ry="10" fill="url(#orcArmor)" filter="url(#orcShadow)"></ellipse>
+  <path d="M68 40 Q78 34 88 40" stroke="#A0A0B0" stroke-width="1.5" fill="none" opacity="0.6"></path>
+  
+  <path d="M10 36 L8 26 L14 32Z" fill="#707080"></path>
+  <path d="M86 36 L88 26 L82 32Z" fill="#707080"></path>
+  
+  <rect x="6" y="42" width="14" height="26" rx="5" fill="url(#orcSkin)" filter="url(#orcShadow)"></rect>
+  <rect x="76" y="42" width="14" height="26" rx="5" fill="url(#orcSkin)" filter="url(#orcShadow)"></rect>
+  
+  <rect x="88" y="26" width="5" height="38" rx="2" fill="#5A3808" filter="url(#orcShadow)"></rect>
+  <path d="M86 22 Q96 14 100 26 Q96 34 88 32Z" fill="url(#orcArmor)" filter="url(#orcShadow)"></path>
+  <path d="M88 30 Q96 22 98 28" stroke="#C0C0C8" stroke-width="1" fill="none" opacity="0.6"></path>
+  
+  <ellipse cx="13" cy="70" rx="7" ry="6" fill="#3A6018"></ellipse>
+  
+  <ellipse cx="48" cy="24" rx="22" ry="20" fill="url(#orcFace)" filter="url(#orcShadow)"></ellipse>
+  
+  <path d="M26 18 Q48 10 70 18 L68 24 Q48 18 28 24Z" fill="#2A5814" opacity="0.7"></path>
+  
+  <ellipse cx="36" cy="22" rx="6" ry="5" fill="#CC1010"></ellipse>
+  <ellipse cx="60" cy="22" rx="6" ry="5" fill="#CC1010"></ellipse>
+  <ellipse cx="36" cy="23" rx="3" ry="3.5" fill="#080408"></ellipse>
+  <ellipse cx="60" cy="23" rx="3" ry="3.5" fill="#080408"></ellipse>
+  <circle cx="35" cy="21" r="1.2" fill="#fff" opacity="0.6"></circle>
+  <circle cx="59" cy="21" r="1.2" fill="#fff" opacity="0.6"></circle>
+  
+  <path d="M42 28 Q48 32 54 28" stroke="#2A5010" stroke-width="2" fill="#2A5010" opacity="0.6"></path>
+  <circle cx="44" cy="30" r="3" fill="#2A5010"></circle>
+  <circle cx="52" cy="30" r="3" fill="#2A5010"></circle>
+  
+  <path d="M26 30 Q48 38 70 30 L68 36 Q48 42 28 36Z" fill="#3A6818" filter="url(#orcShadow)"></path>
+  
+  <path d="M34 34 L30 46" stroke="#F0E8C0" stroke-width="4" stroke-linecap="round"></path>
+  <path d="M62 34 L66 46" stroke="#F0E8C0" stroke-width="4" stroke-linecap="round"></path>
+  
+  <path d="M36 34 Q48 40 60 34" stroke="#1A4008" stroke-width="1.5" fill="none"></path>
+  
+  <path d="M28 20 L36 24" stroke="#CC2020" stroke-width="2" opacity="0.7"></path>
+  <path d="M60 24 L68 20" stroke="#CC2020" stroke-width="2" opacity="0.7"></path>
+  
+  <path d="M28 14 Q48 6 68 14 L66 20 Q48 14 30 20Z" fill="url(#orcArmor)" opacity="0.8"></path>
+  <path d="M26 16 Q48 8 70 16" stroke="#A0A0B0" stroke-width="1.5" fill="none" opacity="0.6"></path>
+</svg>

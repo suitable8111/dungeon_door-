@@ -193,7 +193,10 @@ class AudioManager:
                 'death':       _noise(80,0.5,rate=r)+_sine(200,100,rate=r)+_sine(150,150,rate=r),
                 'save':        _sine(440,40,rate=r)+_sine(550,40,rate=r),
                 'teleport':    _square(880,60,rate=r)+_square(660,60,rate=r)+_square(440,80,rate=r),
-                'swing':       _square(440,30,0.15,rate=r)+_square(330,40,0.10,rate=r),
+                'swing':         _square(440,30,0.15,rate=r)+_square(330,40,0.10,rate=r),
+                'crit':          _square(200,40,0.40,rate=r)+_noise(60,0.25,rate=r)+_sine(1200,120,0.12,rate=r),
+                'menu_select':   _square(440,50,0.12,rate=r),
+                'menu_confirm':  _square(523,50,0.15,rate=r)+_square(659,80,0.15,rate=r),
             }
             for k, v in defs.items():
                 self._sounds[k] = _wave(v, ch)

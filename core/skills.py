@@ -1,64 +1,90 @@
-"""스킬 시스템: Q 돌진 / E 회오리 / F 치유."""
+"""스킬 시스템: 단일 WASD 스킬 + 조합 스킬."""
 
 SKILL_DEFS = [
-    {
-        'key': 'Q',
-        'name': '돌진',
-        'cooldown_ms': 3000,
-        'color': (100, 180, 255),
-        'desc': '3칸 전진',
-    },
-    {
-        'key': 'E',
-        'name': '회오리',
-        'cooldown_ms': 5000,
-        'color': (255, 180, 60),
-        'desc': '8방향 공격',
-    },
-    {
-        'key': 'F',
-        'name': '치유',
-        'cooldown_ms': 8000,
-        'color': (80, 220, 130),
-        'desc': 'HP 30% 회복',
-    },
+    {'key': 'W', 'name': '돌진',     'cooldown_ms': 3000, 'color': (100, 180, 255), 'desc': '3칸 전진'},
+    {'key': 'A', 'name': '회오리',   'cooldown_ms': 5000, 'color': (255, 180, 60),  'desc': '8방향 공격'},
+    {'key': 'S', 'name': '치유',     'cooldown_ms': 8000, 'color': (80, 220, 130),  'desc': 'HP 30% 회복'},
+    {'key': 'D', 'name': '파워어택', 'cooldown_ms': 4000, 'color': (255, 100, 80),  'desc': '강타 2배'},
 ]
+
+# 조합 스킬: combo_id → {name, cooldown_ms, color, level_req, book, desc, keys}
+COMBO_SKILL_DEFS = {
+    'WS': {
+        'name': '파이어볼',
+        'cooldown_ms': 6000,
+        'color': (255, 140, 40),
+        'level_req': 5,
+        'book': 'skillbook_fireball',
+        'desc': '전방 화염 투사체',
+        'keys': 'W+S',
+    },
+    'AD': {
+        'name': '천둥격',
+        'cooldown_ms': 9000,
+        'color': (200, 160, 255),
+        'level_req': 7,
+        'book': 'skillbook_thunder',
+        'desc': '시야 내 전체 공격',
+        'keys': 'A+D',
+    },
+    'WA': {
+        'name': '냉기 폭발',
+        'cooldown_ms': 7000,
+        'color': (100, 220, 255),
+        'level_req': 6,
+        'book': 'skillbook_frost',
+        'desc': '반경 2칸 범위 피해',
+        'keys': 'W+A',
+    },
+    'WD': {
+        'name': '바람 칼날',
+        'cooldown_ms': 5000,
+        'color': (160, 255, 160),
+        'level_req': 4,
+        'book': 'skillbook_wind',
+        'desc': '직선 관통 6칸',
+        'keys': 'W+D',
+    },
+}
 
 
 class SkillManager:
     def __init__(self):
-        self._cd = {s['key']: 0 for s in SKILL_DEFS}
+        self._cd: dict[str, int] = {s['key']: 0 for s in SKILL_DEFS}
+        self._cd.update({k: 0 for k in COMBO_SKILL_DEFS})
 
-    def update(self, dt_ms):
+    def update(self, dt_ms: int):
         for k in self._cd:
             if self._cd[k] > 0:
                 self._cd[k] = max(0, self._cd[k] - dt_ms)
 
-    def ready(self, key):
+    def ready(self, key: str) -> bool:
         return self._cd.get(key, 0) <= 0
 
-    def cooldown_frac(self, key):
+    def cooldown_frac(self, key: str) -> float:
         """0.0 = 사용 가능, 1.0 = 방금 사용."""
-        for s in SKILL_DEFS:
-            if s['key'] == key:
-                if s['cooldown_ms'] == 0:
-                    return 0.0
-                return self._cd[key] / s['cooldown_ms']
-        return 0.0
+        ms = self._get_max_cd(key)
+        return self._cd.get(key, 0) / ms if ms > 0 else 0.0
 
-    def remaining_sec(self, key):
+    def remaining_sec(self, key: str) -> float:
         return self._cd.get(key, 0) / 1000.0
 
-    def trigger(self, key):
+    def trigger(self, key: str):
+        ms = self._get_max_cd(key)
+        if ms > 0:
+            self._cd[key] = ms
+
+    def _get_max_cd(self, key: str) -> int:
         for s in SKILL_DEFS:
             if s['key'] == key:
-                self._cd[key] = s['cooldown_ms']
-                return
+                return s['cooldown_ms']
+        cdef = COMBO_SKILL_DEFS.get(key)
+        return cdef['cooldown_ms'] if cdef else 0
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return dict(self._cd)
 
-    def from_dict(self, d):
+    def from_dict(self, d: dict):
         for k in self._cd:
             if k in d:
                 self._cd[k] = d[k]

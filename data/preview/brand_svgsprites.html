@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--ui-bg); font-family: var(--font-body); padding: 16px; color: var(--color-fg2); }
+.grid { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.sprite-card { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.sprite-box { background: #121220; border: 1px solid var(--ui-border); display: flex; align-items: center; justify-content: center; padding: 8px; }
+.sprite-label { font-size: 10px; color: var(--color-gray); text-align: center; }
+.boss-label { color: var(--boss-color); }
+.section { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; margin-top: 4px; }
+.divider { border: none; border-top: 1px solid var(--ui-border); margin: 10px 0; }
+</style>
+</head><body>
+
+<div class="section">Hero</div>
+<div class="grid">
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/hero.svg" width="96" height="96"></div>
+    <div class="sprite-label">Standing</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/hero_attack.svg" width="96" height="96"></div>
+    <div class="sprite-label">Attack</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/hero_hurt.svg" width="96" height="96"></div>
+    <div class="sprite-label">Hurt</div>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="section">Enemies</div>
+<div class="grid">
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/enemy_rat.svg" width="80" height="80"></div>
+    <div class="sprite-label">Rat 쥐</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/enemy_goblin.svg" width="80" height="96"></div>
+    <div class="sprite-label">Goblin 고블린</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/enemy_skeleton.svg" width="80" height="104"></div>
+    <div class="sprite-label">Skeleton 스켈레톤</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/enemy_orc.svg" width="96" height="104"></div>
+    <div class="sprite-label">Orc 오크</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box"><img src="../assets/sprites/enemy_troll.svg" width="112" height="120"></div>
+    <div class="sprite-label">Troll 트롤</div>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="section">Bosses ★</div>
+<div class="grid">
+  <div class="sprite-card">
+    <div class="sprite-box" style="border-color: var(--boss-color);"><img src="../assets/sprites/boss_dark_knight.svg" width="112" height="120"></div>
+    <div class="sprite-label boss-label">Dark Knight 어둠의 기사</div>
+  </div>
+  <div class="sprite-card">
+    <div class="sprite-box" style="border-color: var(--boss-color);"><img src="../assets/sprites/boss_lich.svg" width="112" height="120"></div>
+    <div class="sprite-label boss-label">Lich 리치</div>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="section">Items</div>
+<div class="sprite-card" style="align-items:flex-start;">
+  <div class="sprite-box" style="width:320px;"><img src="../assets/sprites/items_sheet.svg" width="320" height="80"></div>
+  <div style="display:flex;gap:40px;margin-top:4px;">
+    <div class="sprite-label">Potion</div>
+    <div class="sprite-label" style="margin-left:14px;">Lg.Potion</div>
+    <div class="sprite-label" style="margin-left:8px;">Dagger</div>
+    <div class="sprite-label" style="margin-left:20px;">Sword</div>
+    <div class="sprite-label" style="margin-left:14px;">Leather</div>
+  </div>
+</div>
+</body></html>

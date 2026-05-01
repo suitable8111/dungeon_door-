@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background:#000; font-family: var(--font-body); padding: 0; }
+  .msg-log {
+    background: #0E0E18;
+    border-top: 1px solid #41415F;
+    width: 560px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .msg { font-size: 12px; line-height: 1.5; }
+  .msg.old { opacity: 0.38; }
+  .msg.older { opacity: 0.2; }
+</style>
+</head><body>
+<div class="msg-log">
+  <div class="msg older" style="color:#C8C8B4;">Dungeon Door에 오신 걸 환영합니다!</div>
+  <div class="msg older" style="color:#C8C8B4;">WASD 이동 / Space 공격 / Q·E·F 스킬 / ESC 저장·메뉴</div>
+  <div class="msg old" style="color:#5FD75F;">Floor 3에 도착했습니다.</div>
+  <div class="msg old" style="color:#C8C8B4;">✓ 자동 저장됨</div>
+  <div class="msg old" style="color:#EBA532;">▶ 고블린에게 7 피해</div>
+  <div class="msg old" style="color:#5FD75F;">고블린 처치! +15 XP  +6 G</div>
+  <div class="msg old" style="color:#EBA532;">▶ 스켈레톤에게 5 피해</div>
+  <div class="msg" style="color:#EBA532;">★ 치명타! 스켈레톤에게 16 피해!</div>
+  <div class="msg" style="color:#5FD75F;">스켈레톤 처치! +28 XP  +10 G</div>
+  <div class="msg" style="color:#5FD75F;">레벨업! Lv.4  HP 회복!</div>
+</div>
+</body></html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: flex-end; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .chip { width: 56px; height: 40px; border: 1px solid rgba(255,255,255,0.08); border-radius: 2px; }
+  .chip-tall { height: 56px; }
+  .label { font-size: 10px; color: var(--color-light-gray); text-align: center; width: 62px; line-height: 1.3; }
+  .hex { font-size: 9px; color: var(--color-gray); font-family: monospace; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; margin-top: 4px; }
+  .tile-demo { display: flex; gap: 1px; margin-bottom: 12px; }
+  .tile { width: 32px; height: 32px; display: inline-block; border: 1px solid rgba(255,255,255,0.04); }
+</style>
+</head><body>
+
+<div class="group-title">Dungeon Tile Colors</div>
+<div class="row">
+  <div class="swatch"><div class="chip chip-tall" style="background:#46465C;"></div><div class="label">Wall Lit</div><div class="hex">#46465C</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#232332;"></div><div class="label">Wall Dim</div><div class="hex">#232332</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#64647D;"></div><div class="label">Wall Top</div><div class="hex">#64647D</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#2A2A3A;"></div><div class="label">Wall Bot</div><div class="hex">#2A2A3A</div></div>
+  <div class="swatch" style="margin-left:12px"><div class="chip chip-tall" style="background:#2D2D3E;"></div><div class="label">Floor Lit</div><div class="hex">#2D2D3E</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#191923;"></div><div class="label">Floor Dim</div><div class="hex">#191923</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#3A3A4E;"></div><div class="label">Floor Edge</div><div class="hex">#3A3A4E</div></div>
+  <div class="swatch" style="margin-left:12px"><div class="chip chip-tall" style="background:#D2AF55;"></div><div class="label">Stairs Lit</div><div class="hex">#D2AF55</div></div>
+  <div class="swatch"><div class="chip chip-tall" style="background:#695828;"></div><div class="label">Stairs Dim</div><div class="hex">#695828</div></div>
+  <div class="swatch" style="margin-left:12px"><div class="chip chip-tall" style="background:#193B1E; border:1px solid #3CD278;"></div><div class="label">Shop Tile</div><div class="hex">#193B1E</div></div>
+</div>
+
+<div class="group-title">Tile Pattern Preview (lit → dim)</div>
+<div class="tile-demo">
+  <!-- wall lit row -->
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#46465C; border-top:1px solid #64647D; border-left:1px solid #64647D; border-bottom:1px solid #2A2A3A;"></div>
+    <div class="tile" style="background:#46465C; border-top:1px solid #64647D; border-left:1px solid #64647D; border-bottom:1px solid #2A2A3A;"></div>
+  </div>
+  <!-- floor lit row -->
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#2D2D3E; border:1px solid #3A3A4E;"></div>
+    <div class="tile" style="background:#2D2D3E; border:1px solid #3A3A4E;"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#2D2D3E; border:1px solid #3A3A4E;"></div>
+    <div class="tile" style="background:#2D2D3E; border:1px solid #3A3A4E;"></div>
+  </div>
+  <!-- stairs -->
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#2D2D3E; border:1px solid #3A3A4E; position:relative;">
+      <svg width="32" height="32" viewBox="0 0 32 32" style="position:absolute;top:0;left:0;"><polygon points="16,23 10,13 22,13" fill="#D2AF55"/><line x1="12" y1="13" x2="20" y2="13" stroke="#D2AF55" stroke-width="2"/></svg>
+    </div>
+    <div class="tile" style="background:#191923;"></div>
+  </div>
+  <!-- dim tiles -->
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#232332;"></div>
+    <div class="tile" style="background:#191923;"></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:1px;">
+    <div class="tile" style="background:#191923;"></div>
+    <div class="tile" style="background:#000000;"></div>
+  </div>
+  <!-- shop tile -->
+  <div style="display:flex;flex-direction:column;gap:1px;margin-left:8px;">
+    <div class="tile" style="background:#193B1E; border:1px solid #3CD278; position:relative;">
+      <svg width="32" height="32" viewBox="0 0 32 32" style="position:absolute;top:0;left:0;"><circle cx="16" cy="16" r="6" fill="none" stroke="#3CD278" stroke-width="2"/><rect x="16" y="11" width="5" height="2" fill="#3CD278"/></svg>
+    </div>
+    <div class="tile" style="background:#0C1E10; border:1px solid #1A6030;"></div>
+  </div>
+</div>
+</body></html>

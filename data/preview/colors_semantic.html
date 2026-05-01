@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .chip { width: 64px; height: 36px; border-radius: 2px; }
+  .label { font-size: 10px; color: var(--color-light-gray); text-align: center; width: 68px; line-height: 1.3; }
+  .hex { font-size: 9px; color: var(--color-gray); font-family: monospace; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; margin-top: 4px; }
+  .msg-demo { background: var(--ui-bg); border: 1px solid var(--ui-border); padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; border-radius: 2px; max-width: 380px; }
+  .msg { font-size: 12px; line-height: 1.5; }
+</style>
+</head><body>
+
+<div class="group-title">Semantic / Status Colors</div>
+<div class="row">
+  <div class="swatch"><div class="chip" style="background:#C8C8B4;"></div><div class="label">Info / Default</div><div class="hex">#C8C8B4</div></div>
+  <div class="swatch"><div class="chip" style="background:#EBA532;"></div><div class="label">Warn / Combat</div><div class="hex">#EBA532</div></div>
+  <div class="swatch"><div class="chip" style="background:#5FD75F;"></div><div class="label">Good / Pickup</div><div class="hex">#5FD75F</div></div>
+  <div class="swatch"><div class="chip" style="background:#D74E4E;"></div><div class="label">Bad / Damage</div><div class="hex">#D74E4E</div></div>
+  <div class="swatch" style="margin-left:12px"><div class="chip" style="background:#D73A3A;"></div><div class="label">HP Bar</div><div class="hex">#D73A3A</div></div>
+  <div class="swatch"><div class="chip" style="background:#481414;"></div><div class="label">HP BG</div><div class="hex">#481414</div></div>
+  <div class="swatch" style="margin-left:12px"><div class="chip" style="background:#3CA5E1;"></div><div class="label">XP Bar</div><div class="hex">#3CA5E1</div></div>
+  <div class="swatch"><div class="chip" style="background:#123452;"></div><div class="label">XP BG</div><div class="hex">#123452</div></div>
+</div>
+
+<div class="group-title">Message Log Demo</div>
+<div class="msg-demo">
+  <div class="msg" style="color:#C8C8B4;">Dungeon Door에 오신 걸 환영합니다!</div>
+  <div class="msg" style="color:#5FD75F;">✓ 자동 저장됨</div>
+  <div class="msg" style="color:#5FD75F;">체력 물약 획득!</div>
+  <div class="msg" style="color:#EBA532;">▶ 고블린에게 7 피해</div>
+  <div class="msg" style="color:#EBA532;">★ 치명타! 오크에게 18 피해!</div>
+  <div class="msg" style="color:#D74E4E;">오크에게 9 피해를 입었습니다.</div>
+  <div class="msg" style="color:#5FD75F;">레벨업! Lv.3  HP 회복!</div>
+  <div class="msg" style="color:#C8C8B4; opacity:0.5;">WASD 이동 / Space 공격 / Q·E·F 스킬</div>
+</div>
+</body></html>

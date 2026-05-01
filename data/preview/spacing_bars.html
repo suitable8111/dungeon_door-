@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  body { margin:0; background: var(--ui-bg); font-family: var(--font-body); padding: 16px; }
+  .group-title { font-size: 11px; color: var(--gold-color); font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; margin-top: 4px; }
+  .bar-group { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
+  .bar-row { display: flex; align-items: center; gap: 10px; }
+  .bar-label { font-size: 10px; color: var(--color-gray); width: 60px; text-align: right; flex-shrink: 0; font-family: monospace; }
+  .bar-track { height: 12px; border-radius: 0; border: 1px solid var(--ui-border); position: relative; overflow: hidden; }
+  .bar-fill { height: 100%; }
+  .bar-val { font-size: 10px; color: var(--color-light-gray); margin-left: 6px; flex-shrink: 0; }
+  .divider { border:none; border-top: 1px solid var(--ui-border); margin: 8px 0; }
+
+  /* skill cooldown bar animation */
+  @keyframes cooldown { from { width: 100%; } to { width: 20%; } }
+  .skill-anim { animation: cooldown 3s ease-out infinite alternate; }
+</style>
+</head><body>
+
+<div class="group-title">HP / XP Bars</div>
+<div class="bar-group">
+  <div class="bar-row">
+    <span class="bar-label">HP full</span>
+    <div class="bar-track" style="width:200px; background:#481414;">
+      <div class="bar-fill" style="width:100%; background:#D73A3A;"></div>
+    </div>
+    <span class="bar-val">30/30</span>
+  </div>
+  <div class="bar-row">
+    <span class="bar-label">HP mid</span>
+    <div class="bar-track" style="width:200px; background:#481414;">
+      <div class="bar-fill" style="width:55%; background:#D48530;"></div>
+    </div>
+    <span class="bar-val">16/30</span>
+  </div>
+  <div class="bar-row">
+    <span class="bar-label">HP low</span>
+    <div class="bar-track" style="width:200px; background:#481414;">
+      <div class="bar-fill" style="width:18%; background:#C83232;"></div>
+    </div>
+    <span class="bar-val">5/30</span>
+  </div>
+  <div class="bar-row">
+    <span class="bar-label">XP</span>
+    <div class="bar-track" style="width:200px; background:#123452; height:6px;">
+      <div class="bar-fill" style="width:68%; background:#3CA5E1;"></div>
+    </div>
+    <span class="bar-val" style="font-size:9px; color:#3CA5E1;">68/100</span>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="group-title">Skill Cooldown Bars</div>
+<div class="bar-group">
+  <div class="bar-row">
+    <span class="bar-label" style="color:#64B4FF;">[Q] Dash</span>
+    <div class="bar-track" style="width:180px; background:#12122A; height:6px;">
+      <div class="bar-fill" style="width:100%; background:#5A8FD2;"></div>
+    </div>
+    <span class="bar-val" style="font-size:9px; color:#5FD75F;">READY</span>
+  </div>
+  <div class="bar-row">
+    <span class="bar-label" style="color:#A0A0B4;">[E] Whirl</span>
+    <div class="bar-track" style="width:180px; background:#12122A; height:6px;">
+      <div class="bar-fill skill-anim" style="width:40%; background:#3C3C5A;"></div>
+    </div>
+    <span class="bar-val" style="font-size:9px; color:#646490;">3.2s</span>
+  </div>
+  <div class="bar-row">
+    <span class="bar-label" style="color:#5FD75F;">[F] Heal</span>
+    <div class="bar-track" style="width:180px; background:#12122A; height:6px;">
+      <div class="bar-fill" style="width:100%; background:#3CA060;"></div>
+    </div>
+    <span class="bar-val" style="font-size:9px; color:#5FD75F;">READY</span>
+  </div>
+</div>
+
+<hr class="divider">
+<div class="group-title">Border Radius Tokens</div>
+<div style="display:flex; gap:16px; align-items:center;">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+    <div style="width:40px;height:40px;background:#16162A;border:2px solid #41415F;border-radius:0;"></div>
+    <span style="font-size:9px;color:#646478;font-family:monospace;">0px<br>panels</span>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+    <div style="width:40px;height:40px;background:#2A240A;border:2px solid #EBB93C;border-radius:4px;"></div>
+    <span style="font-size:9px;color:#646478;font-family:monospace;">4px<br>buttons</span>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:4px;">
+    <div style="width:40px;height:40px;background:#16162A;border:1px solid #41415F;border-radius:0;"></div>
+    <span style="font-size:9px;color:#646478;font-family:monospace;">0px<br>bars</span>
+  </div>
+</div>
+</body></html>
