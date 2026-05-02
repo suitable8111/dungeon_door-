@@ -1,5 +1,31 @@
 """스킬 시스템: 단일 WASD 스킬 + 조합 스킬."""
 
+SKILL_MAX_LEVEL = 3
+
+# 각 스킬의 레벨별 스탯 (index = level - 1)
+SKILL_UPGRADES = {
+    'W': [
+        {'tiles': 3, 'cd_ms': 3000},
+        {'tiles': 4, 'cd_ms': 2500},
+        {'tiles': 5, 'cd_ms': 2000},
+    ],
+    'A': [
+        {'radius': 1, 'mul': 1.0, 'cd_ms': 5000},
+        {'radius': 2, 'mul': 1.0, 'cd_ms': 5000},
+        {'radius': 2, 'mul': 1.2, 'cd_ms': 4000},
+    ],
+    'S': [
+        {'heal_pct': 0.30, 'cd_ms': 8000},
+        {'heal_pct': 0.40, 'cd_ms': 8000},
+        {'heal_pct': 0.50, 'cd_ms': 6000},
+    ],
+    'D': [
+        {'mul': 2.0, 'crit': 0.25, 'cd_ms': 4000},
+        {'mul': 2.5, 'crit': 0.30, 'cd_ms': 3500},
+        {'mul': 3.0, 'crit': 0.35, 'cd_ms': 3000},
+    ],
+}
+
 SKILL_DEFS = [
     {'key': 'W', 'name': '돌진',     'cooldown_ms': 3000, 'color': (100, 180, 255), 'desc': '3칸 전진'},
     {'key': 'A', 'name': '회오리',   'cooldown_ms': 5000, 'color': (255, 180, 60),  'desc': '8방향 공격'},
@@ -52,6 +78,10 @@ class SkillManager:
     def __init__(self):
         self._cd: dict[str, int] = {s['key']: 0 for s in SKILL_DEFS}
         self._cd.update({k: 0 for k in COMBO_SKILL_DEFS})
+        self._max_cd_override: dict[str, int] = {}
+
+    def set_cd_override(self, key: str, ms: int):
+        self._max_cd_override[key] = ms
 
     def update(self, dt_ms: int):
         for k in self._cd:
@@ -75,6 +105,8 @@ class SkillManager:
             self._cd[key] = ms
 
     def _get_max_cd(self, key: str) -> int:
+        if key in self._max_cd_override:
+            return self._max_cd_override[key]
         for s in SKILL_DEFS:
             if s['key'] == key:
                 return s['cooldown_ms']

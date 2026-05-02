@@ -9,7 +9,7 @@ from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
 from core.audio import AudioManager
-from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS
+from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES, SKILL_MAX_LEVEL
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -420,8 +420,9 @@ class Game:
             if not self._is_fading:
                 self._handle_events(dt)
             self.animator.update(dt)
-            if self.state == 'playing':
+            if self.state in ('playing', 'upgrading'):
                 self.skills.update(dt)
+            if self.state == 'playing':
                 self._update_enemies(dt)
             self._update_bgm()
             self._render()
@@ -481,7 +482,7 @@ class Game:
             return
         if self.state == 'menu':
             self.audio.bgm.play('menu')
-        elif self.state in ('playing', 'shop', 'paused', 'dead'):
+        elif self.state in ('playing', 'shop', 'paused', 'dead', 'upgrading'):
             if self.dungeon is None:
                 return
             if self.dungeon.is_boss_floor:
@@ -503,6 +504,9 @@ class Game:
         self._run_kills       = 0
         self._unlocked_combos = set()
         self._skill_books     = set()
+        self._skill_levels    = {'W': 1, 'A': 1, 'S': 1, 'D': 1}
+        self._skill_points    = 0
+        self._upgrade_sel     = 0
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -518,6 +522,10 @@ class Game:
         self.skills.from_dict(data.get('skills', {}))
         self._unlocked_combos = set(data.get('unlocked_combos', []))
         self._skill_books     = set(data.get('skill_books', []))
+        self._skill_levels    = data.get('skill_levels', {'W': 1, 'A': 1, 'S': 1, 'D': 1})
+        self._skill_points    = data.get('skill_points', 0)
+        self._upgrade_sel     = 0
+        self._apply_skill_level_cds()
         self._run_kills       = 0
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
@@ -545,7 +553,8 @@ class Game:
                 self.audio.play('boss_appear')
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
-            save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books)
+            save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
+                          self._skill_levels, self._skill_points)
             self.messages.append((t('auto_saved'), 'info'))
             self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -565,7 +574,7 @@ class Game:
             t = action['type']
 
             if t == 'escape':
-                if self.state == 'shop':
+                if self.state in ('shop', 'upgrading'):
                     self.state = 'playing'
                 elif self.state == 'paused':
                     self.state = 'playing'
@@ -590,6 +599,11 @@ class Game:
             elif self.state == 'playing':
                 if t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
                     self._process(action)
+                elif t == 'skill_upgrade':
+                    self._upgrade_sel = 0
+                    self.state = 'upgrading'
+            elif self.state == 'upgrading':
+                self._handle_upgrade_action(action)
             elif self.state == 'dead':
                 if t == 'restart':
                     self._new_game()
@@ -725,7 +739,8 @@ class Game:
             self.state = 'playing'
         elif self._pause_sel == 1:   # 저장하기
             if self.player:
-                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books)
+                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
+                          self._skill_levels, self._skill_points)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -852,6 +867,7 @@ class Game:
         else:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
         if self.player.gain_xp(enemy.xp_value):
+            self._skill_points += 1
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.audio.play('levelup')
             for cid, cdef in COMBO_SKILL_DEFS.items():
@@ -941,11 +957,13 @@ class Game:
         return False
 
     def _skill_dash(self):
+        lvl   = self._skill_levels['W']
+        tiles = SKILL_UPGRADES['W'][lvl - 1]['tiles']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
         sx, sy = self.player.x, self.player.y
         moved = 0
-        for _ in range(3):
+        for _ in range(tiles):
             nx, ny = self.player.x + dx, self.player.y + dy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if enemy:
@@ -960,14 +978,20 @@ class Game:
         return True
 
     def _skill_whirl(self, no_cooldown=False):
-        dirs = [(1,0),(-1,0),(0,1),(0,-1),(1,1),(1,-1),(-1,1),(-1,-1)]
+        lvl    = self._skill_levels['A']
+        stats  = SKILL_UPGRADES['A'][lvl - 1]
+        radius = stats['radius']
+        mul    = stats['mul']
+        dirs = [(ddx, ddy) for ddx in range(-radius, radius+1)
+                for ddy in range(-radius, radius+1)
+                if not (ddx == 0 and ddy == 0)]
         hits = 0
         for ddx, ddy in dirs:
             nx, ny = self.player.x+ddx, self.player.y+ddy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
             crit = random.random() < 0.1
-            dmg  = max(1, self.player.attack - enemy.defense + random.randint(0,3))
+            dmg  = max(1, int(self.player.attack * mul) - enemy.defense + random.randint(0,3))
             if crit: dmg *= 2
             enemy.take_damage(dmg)
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (255,180,60)))
@@ -984,7 +1008,9 @@ class Game:
         return True
 
     def _skill_heal(self):
-        amt = max(1, int(self.player.max_hp * 0.30))
+        lvl      = self._skill_levels['S']
+        heal_pct = SKILL_UPGRADES['S'][lvl - 1]['heal_pct']
+        amt = max(1, int(self.player.max_hp * heal_pct))
         self.player.heal(amt)
         self.animator.add(HealAnim(self.player.x, self.player.y))
         self.skills.trigger('S')
@@ -993,6 +1019,10 @@ class Game:
         return True
 
     def _skill_power_attack(self):
+        lvl   = self._skill_levels['D']
+        stats = SKILL_UPGRADES['D'][lvl - 1]
+        mul   = stats['mul']
+        crit_chance = stats['crit']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
         tx, ty = self.player.x + dx, self.player.y + dy
@@ -1003,8 +1033,8 @@ class Game:
             self.skills.trigger('D')
             self.messages.append((t('skill_power_miss'), 'info'))
             return True
-        crit = random.random() < 0.25
-        dmg  = max(1, self.player.attack * 2 - enemy.defense)
+        crit = random.random() < crit_chance
+        dmg  = max(1, int(self.player.attack * mul) - enemy.defense)
         if crit: dmg = int(dmg * 1.5)
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
@@ -1018,6 +1048,38 @@ class Game:
             self._on_enemy_killed(enemy)
         self.skills.trigger('D')
         return True
+
+    # ─────────────── 스킬 강화 ───────────────────────────────────────
+    def _apply_skill_level_cds(self):
+        for key, lvl in self._skill_levels.items():
+            cd_ms = SKILL_UPGRADES[key][lvl - 1]['cd_ms']
+            self.skills.set_cd_override(key, cd_ms)
+
+    def _upgrade_skill(self, key):
+        if self._skill_points <= 0:
+            self.messages.append((t('upg_no_sp'), 'warn'))
+            return
+        lvl = self._skill_levels.get(key, 1)
+        if lvl >= SKILL_MAX_LEVEL:
+            return
+        self._skill_levels[key] = lvl + 1
+        self._skill_points -= 1
+        self._apply_skill_level_cds()
+        name_key = {'W': 'skill_w_name', 'A': 'skill_a_name',
+                    'S': 'skill_s_name', 'D': 'skill_d_name'}.get(key, key)
+        self.messages.append((t('upg_done', t(name_key), self._skill_levels[key]), 'good'))
+        self.audio.play('levelup')
+
+    def _handle_upgrade_action(self, action):
+        _KEYS = ['W', 'A', 'S', 'D']
+        typ = action['type']
+        if typ == 'move':
+            dy = action.get('dy', 0)
+            if dy != 0:
+                self._upgrade_sel = (self._upgrade_sel + dy) % len(_KEYS)
+                self.audio.play('menu_select')
+        elif typ in ('wait', 'confirm'):
+            self._upgrade_skill(_KEYS[self._upgrade_sel])
 
     # ─────────────── 조합 스킬 ───────────────────────────────────────
     def _use_combo_skill(self, combo_id):
@@ -1199,7 +1261,9 @@ class Game:
         self.hud.render(self.screen, self.player, self.messages, self.floor,
                         self.dungeon, self.skills,
                         unlocked_combos=self._unlocked_combos,
-                        skill_books=self._skill_books)
+                        skill_books=self._skill_books,
+                        skill_levels=self._skill_levels,
+                        skill_points=self._skill_points)
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -1215,6 +1279,9 @@ class Game:
             self.hud.render_shop(self.screen, self.dungeon.shop_items, self.player.gold)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel)
+        elif self.state == 'upgrading':
+            self.hud.render_skill_upgrade(self.screen, self._skill_levels,
+                                          self._skill_points, self._upgrade_sel)
         elif self.state == 'dead':
             self.hud.render_game_over(self.screen, self.floor, self._records)
 

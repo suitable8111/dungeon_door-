@@ -157,6 +157,18 @@ _T: dict[str, dict[str, str]] = {
     'combo_no_book':    {'ko': '{} — 스킬북을 찾으세요',           'en': '{} — find the skill book'},
     'combo_no_unlock':  {'ko': '{} — 스킬북 + Lv.{} 필요',        'en': '{} — need book + Lv.{}'},
 
+    # ── 스킬 강화 패널 ────────────────────────────────────────────────────
+    'upg_title':   {'ko': '스킬  강화',                           'en': 'Skill  Upgrade'},
+    'upg_sp':      {'ko': 'SP  {}',                               'en': 'SP  {}'},
+    'upg_hint':    {'ko': '↑↓ 선택   Space 강화   ESC 닫기',     'en': '↑↓ Select   Space Upgrade   ESC Close'},
+    'upg_confirm': {'ko': 'Space: 강화',                          'en': 'Space: Upgrade'},
+    'upg_max':     {'ko': '최대 레벨',                            'en': 'MAX Level'},
+    'upg_done':    {'ko': '{} 강화! Lv.{}',                       'en': '{} upgraded! Lv.{}'},
+    'upg_no_sp':   {'ko': 'SP 부족!',                             'en': 'No SP!'},
+    'sp_badge':    {'ko': '★ SP {}  [U] 스킬 강화',              'en': '★ SP {}  [U] Upgrade'},
+    'ctrl_upg':    {'ko': 'U',                                    'en': 'U'},
+    'ctrl_upg_d':  {'ko': '스킬 강화',                            'en': 'Skill Upg'},
+
     # ── 아이템 사용 메시지 ─────────────────────────────────────────────────
     'item_heal':    {'ko': '{} 사용! HP +{}',            'en': '{} used! HP +{}'},
     'item_atk':     {'ko': '{} 장착! ATK +{}',           'en': '{} equipped! ATK +{}'},

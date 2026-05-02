@@ -94,10 +94,12 @@ class HUD:
     # ------------------------------------------------------------------ #
     def render(self, screen, player, messages, floor_num,
                dungeon=None, skill_mgr=None,
-               unlocked_combos=None, skill_books=None):
+               unlocked_combos=None, skill_books=None,
+               skill_levels=None, skill_points=0):
         self._top_bar(screen, player, floor_num)
         self._right_panel(screen, player, dungeon, skill_mgr,
-                          unlocked_combos or set(), skill_books or set())
+                          unlocked_combos or set(), skill_books or set(),
+                          skill_levels or {}, skill_points)
         self._bottom_bar(screen, messages)
 
     # ------------------------------------------------------------------ #
@@ -465,43 +467,72 @@ class HUD:
     # ------------------------------------------------------------------ #
     def _top_bar(self, screen, player, floor_num):
         pygame.draw.rect(screen, (10, 10, 20), (0, 0, WINDOW_WIDTH, TOP_BAR_H))
-        # 하단 경계선 두 줄 (입체감)
         pygame.draw.line(screen, (50, 50, 80), (0, TOP_BAR_H - 2), (WINDOW_WIDTH, TOP_BAR_H - 2))
         pygame.draw.line(screen, (25, 25, 45), (0, TOP_BAR_H - 1), (WINDOW_WIDTH, TOP_BAR_H - 1))
 
-        # ── 왼쪽: 층 표시 ──
+        cy = TOP_BAR_H // 2  # 세로 중앙
+
+        # ── 층 표시 ──
         fl = self.font_md.render(f"B{floor_num}F", True, (180, 180, 220))
-        screen.blit(fl, (12, _midy(fl, TOP_BAR_H)))
+        screen.blit(fl, (12, cy - fl.get_height() // 2))
+        x = 12 + fl.get_width() + 10
 
-        sep_x = 12 + fl.get_width() + 8
-        pygame.draw.line(screen, (50, 50, 75), (sep_x, 6), (sep_x, TOP_BAR_H - 6))
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
 
-        # ── 중앙: 골드 + HP 인디케이터 ──
-        gx = sep_x + 12
-        gold_label = self.font_sm.render("G", True, GOLD_COLOR)
-        gold_val   = self.font_md.render(str(player.gold), True, GOLD_COLOR)
-        screen.blit(gold_label, (gx, _midy(gold_label, TOP_BAR_H) + 1))
-        screen.blit(gold_val,   (gx + gold_label.get_width() + 3, _midy(gold_val, TOP_BAR_H)))
-
-        # HP 미니바 (중앙 근처)
-        hp_bx = gx + gold_label.get_width() + gold_val.get_width() + 20
-        hp_bw = 120; hp_bh = 8
-        hp_by = (TOP_BAR_H - hp_bh) // 2
-        ratio = max(0.0, player.hp / player.max_hp)
-        pygame.draw.rect(screen, (55, 18, 18), (hp_bx, hp_by, hp_bw, hp_bh))
-        if ratio > 0:
-            bar_col = (int(200 + 55*(1-ratio)), int(210*ratio), 40)
-            pygame.draw.rect(screen, bar_col, (hp_bx, hp_by, max(1, int(hp_bw*ratio)), hp_bh))
-        pygame.draw.rect(screen, (80, 30, 30), (hp_bx, hp_by, hp_bw, hp_bh), 1)
-        hp_txt = self.font_sm.render(f"{player.hp}/{player.max_hp}", True, LIGHT_GRAY)
-        screen.blit(hp_txt, (hp_bx + hp_bw + 6, _midy(hp_txt, TOP_BAR_H) + 1))
-
-        # ── 오른쪽: 레벨 ──
+        # ── 레벨 ──
         lv = self.font_md.render(f"Lv.{player.level}", True, XP_COLOR)
-        screen.blit(lv, (GAME_W + (RIGHT_PANEL_W - lv.get_width()) // 2, _midy(lv, TOP_BAR_H)))
+        screen.blit(lv, (x, cy - lv.get_height() // 2))
+        x += lv.get_width() + 12
+
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
+
+        # ── HP 바 ──
+        hp_label = self.font_sm.render("HP", True, HP_COLOR)
+        screen.blit(hp_label, (x, cy - hp_label.get_height() // 2))
+        x += hp_label.get_width() + 6
+
+        hp_bw = 140; hp_bh = 10
+        hp_by = cy - hp_bh // 2
+        ratio = max(0.0, player.hp / player.max_hp)
+        pygame.draw.rect(screen, (55, 18, 18), (x, hp_by, hp_bw, hp_bh))
+        if ratio > 0:
+            bar_col = (int(180 + 70 * (1 - ratio)), int(200 * ratio), 30)
+            pygame.draw.rect(screen, bar_col, (x, hp_by, max(1, int(hp_bw * ratio)), hp_bh))
+        pygame.draw.rect(screen, (90, 35, 35), (x, hp_by, hp_bw, hp_bh), 1)
+        hp_txt = self.font_sm.render(f"{player.hp}/{player.max_hp}", True, (210, 210, 210))
+        screen.blit(hp_txt, (x + hp_bw + 5, cy - hp_txt.get_height() // 2))
+        x += hp_bw + hp_txt.get_width() + 16
+
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
+
+        # ── XP 바 ──
+        xp_label = self.font_sm.render("XP", True, XP_COLOR)
+        screen.blit(xp_label, (x, cy - xp_label.get_height() // 2))
+        x += xp_label.get_width() + 6
+
+        xp_bw = 110; xp_bh = 8
+        xp_by = cy - xp_bh // 2
+        pygame.draw.rect(screen, XP_BG, (x, xp_by, xp_bw, xp_bh))
+        if player.xp_next > 0:
+            xp_fill = max(0, int(xp_bw * player.xp / player.xp_next))
+            if xp_fill:
+                pygame.draw.rect(screen, XP_COLOR, (x, xp_by, xp_fill, xp_bh))
+        pygame.draw.rect(screen, (40, 60, 100), (x, xp_by, xp_bw, xp_bh), 1)
+        xp_txt = self.font_sm.render(f"{player.xp}/{player.xp_next}", True, (100, 160, 220))
+        screen.blit(xp_txt, (x + xp_bw + 5, cy - xp_txt.get_height() // 2))
+        x += xp_bw + xp_txt.get_width() + 16
+
+        # ── 골드 (오른쪽) ──
+        gold_s = self.font_md.render(f"G  {player.gold}", True, GOLD_COLOR)
+        gx = WINDOW_WIDTH - gold_s.get_width() - 16
+        screen.blit(gold_s, (gx, cy - gold_s.get_height() // 2))
 
     def _right_panel(self, screen, player, dungeon, skill_mgr,
-                     unlocked_combos=None, skill_books=None):
+                     unlocked_combos=None, skill_books=None,
+                     skill_levels=None, skill_points=0):
         rx = GAME_W
         pw = RIGHT_PANEL_W
         bw = pw - 16
@@ -519,18 +550,6 @@ class HUD:
             pygame.draw.line(screen, (55, 55, 85), (rx, y+20), (rx+pw, y+20))
             screen.blit(self.font_sm.render(t(key), True, col), (rx+8, y+3))
             y += 24
-
-        # ── HP ──────────────────────────────────────────────────────
-        sec_header('sec_hp', HP_COLOR)
-        _bar(screen, rx+8, y, bw, 13, player.hp, player.max_hp, HP_COLOR, HP_BG)
-        hp_txt = self.font_sm.render(f"{player.hp} / {player.max_hp}", True, (200, 200, 200))
-        screen.blit(hp_txt, (rx + pw - hp_txt.get_width() - 8, y + 1))
-        y += 18
-
-        # XP
-        _bar(screen, rx+8, y, bw, 6, player.xp, player.xp_next, XP_COLOR, XP_BG)
-        xp_txt = self.font_sm.render(f"XP {player.xp}/{player.xp_next}", True, (80, 140, 200))
-        screen.blit(xp_txt, (rx+8, y+8)); y += 20
 
         # ── 스탯 ────────────────────────────────────────────────────
         sec_header('sec_stats', LIGHT_GRAY)
@@ -568,6 +587,7 @@ class HUD:
             'S': ('skill_s_name', 'skill_s_desc'),
             'D': ('skill_d_name', 'skill_d_desc'),
         }
+        sl = skill_levels or {}
         for sdef in SKILL_DEFS:
             sk    = sdef['key']
             ready = skill_mgr.ready(sk) if skill_mgr else True
@@ -575,7 +595,9 @@ class HUD:
             rem   = skill_mgr.remaining_sec(sk) if skill_mgr else 0.0
             nc    = sdef['color'] if ready else (60, 60, 80)
             nk, dk = _SKILL_TRANS.get(sk, ('', ''))
-            label = f"[{sk}] {t(nk)}" if nk else f"[{sk}] {sdef['name']}"
+            lvl    = sl.get(sk, 1)
+            lv_str = f" Lv.{lvl}" if lvl > 1 else ""
+            label  = f"[{sk}] {t(nk)}{lv_str}" if nk else f"[{sk}] {sdef['name']}{lv_str}"
 
             if ready:
                 pygame.draw.rect(screen, (20, 28, 50), (rx+6, y-1, pw-12, 28))
@@ -588,6 +610,13 @@ class HUD:
             _bar(screen, rx+8, y, bw, 6, int(bw*(1-frac)), bw,
                  sdef['color'] if ready else (40, 40, 65), (18, 18, 35))
             y += 10
+
+        if skill_points > 0:
+            pygame.draw.rect(screen, (32, 28, 10), (rx+6, y, pw-12, 17))
+            pygame.draw.rect(screen, (120, 100, 30), (rx+6, y, pw-12, 17), 1)
+            sp_s = self.font_sm.render(t('sp_badge', skill_points), True, GOLD_COLOR)
+            screen.blit(sp_s, (rx+8, y+2))
+            y += 19
         y += 4
 
         # ── 조합 스킬 ────────────────────────────────────────────────
@@ -635,6 +664,7 @@ class HUD:
             (t('ctrl_skill'), t('ctrl_skill_d')),
             (t('ctrl_combo'), t('ctrl_combo_d')),
             (t('ctrl_item'),  t('ctrl_item_d')),
+            (t('ctrl_upg'),   t('ctrl_upg_d')),
             (t('ctrl_esc'),   t('ctrl_esc_d')),
         ]
         for key, desc in hints:
@@ -677,6 +707,77 @@ class HUD:
         pygame.draw.rect(screen, WHITE, (ox+player.x*scale-1, oy+player.y*scale-1, scale+1, scale+1))
         pygame.draw.rect(screen, UI_BORDER, (ox, oy, dungeon.width*scale, dungeon.height*scale), 1)
 
+    # ------------------------------------------------------------------ #
+    def render_skill_upgrade(self, screen, skill_levels, skill_points, sel):
+        from core.skills import SKILL_UPGRADES, SKILL_MAX_LEVEL
+
+        overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 195))
+        screen.blit(overlay, (0, 0))
+
+        bw = 420; bh = 390
+        bx = WINDOW_WIDTH  // 2 - bw // 2
+        by = WINDOW_HEIGHT // 2 - bh // 2
+
+        pygame.draw.rect(screen, (12, 12, 26), (bx, by, bw, bh))
+        pygame.draw.rect(screen, (90, 90, 130), (bx, by, bw, bh), 2)
+        pygame.draw.rect(screen, (30, 30, 55), (bx+2, by+2, bw-4, 40))
+
+        # ── 제목 + SP 표시 ──
+        title_s = self.font_lg.render(t('upg_title'), True, WHITE)
+        sp_col  = GOLD_COLOR if skill_points > 0 else (80, 80, 100)
+        sp_s    = self.font_md.render(t('upg_sp', skill_points), True, sp_col)
+        screen.blit(title_s, (bx + 20, by + 8))
+        screen.blit(sp_s,    (bx + bw - sp_s.get_width() - 18, by + 11))
+        pygame.draw.line(screen, (60, 60, 95), (bx+12, by+46), (bx+bw-12, by+46))
+
+        _KEYS  = ['W', 'A', 'S', 'D']
+        _NAMES = {'W': t('skill_w_name'), 'A': t('skill_a_name'),
+                  'S': t('skill_s_name'), 'D': t('skill_d_name')}
+        _COLS  = {'W': (100,180,255), 'A': (255,180,60),
+                  'S': (80,220,130),  'D': (255,100,80)}
+
+        for i, key in enumerate(_KEYS):
+            lvl    = skill_levels.get(key, 1)
+            is_sel = (i == sel)
+            is_max = (lvl >= SKILL_MAX_LEVEL)
+            iy     = by + 54 + i * 76
+
+            if is_sel:
+                pygame.draw.rect(screen, (28, 28, 58), (bx+8, iy-2, bw-16, 70))
+                pygame.draw.rect(screen, (75, 75, 125), (bx+8, iy-2, bw-16, 70), 1)
+
+            # 스킬 이름 + 레벨
+            base_col = _COLS[key]
+            name_col = base_col if is_sel else tuple(max(0, c - 70) for c in base_col)
+            lv_str   = "MAX" if is_max else f"Lv.{lvl}"
+            prefix   = "▶ " if is_sel else "  "
+            hdr = self.font_md.render(
+                f"{prefix}[{key}] {_NAMES[key]}  {lv_str}", True,
+                GOLD_COLOR if is_sel else LIGHT_GRAY)
+            screen.blit(hdr, (bx+16, iy+3))
+
+            # 현재 스탯
+            curr_s = self.font_sm.render(
+                _fmt_skill_stats(key, SKILL_UPGRADES[key][lvl - 1]), True, (130, 130, 160))
+            screen.blit(curr_s, (bx+28, iy+22))
+
+            if not is_max:
+                nxt_col = (90, 200, 120) if (is_sel and skill_points > 0) else (50, 90, 65)
+                nxt_s   = self.font_sm.render(
+                    "→ " + _fmt_skill_stats(key, SKILL_UPGRADES[key][lvl]), True, nxt_col)
+                screen.blit(nxt_s, (bx+28, iy+40))
+                if is_sel and skill_points > 0:
+                    cf = self.font_sm.render(t('upg_confirm'), True, (100, 220, 130))
+                    screen.blit(cf, (bx + bw - cf.get_width() - 18, iy+40))
+            else:
+                mx = self.font_sm.render(t('upg_max'), True, (180, 155, 50))
+                screen.blit(mx, (bx+28, iy+40))
+
+        pygame.draw.line(screen, (60, 60, 95), (bx+12, by+bh-36), (bx+bw-12, by+bh-36))
+        hint = self.font_sm.render(t('upg_hint'), True, GRAY)
+        screen.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 22))
+
     def _bottom_bar(self, screen, messages):
         by = GAME_Y + GAME_H
         pygame.draw.rect(screen, UI_BG, (0, by, GAME_W, BOTTOM_BAR_H))
@@ -704,6 +805,18 @@ def _bar(screen, x, y, w, h, cur, maximum, fg, bg):
         if fill:
             pygame.draw.rect(screen, fg, (x, y, fill, h))
     pygame.draw.rect(screen, UI_BORDER, (x, y, w, h), 1)
+
+def _fmt_skill_stats(key, stats):
+    cd = stats['cd_ms'] / 1000
+    if key == 'W':
+        return f"{stats['tiles']}칸 전진  CD {cd:.1f}s"
+    if key == 'A':
+        return f"반경 {stats['radius']}  공격력 {int(stats['mul']*100)}%  CD {cd:.1f}s"
+    if key == 'S':
+        return f"HP +{int(stats['heal_pct']*100)}%  CD {cd:.1f}s"
+    if key == 'D':
+        return f"{stats['mul']:.1f}배 강타  치명 {int(stats['crit']*100)}%  CD {cd:.1f}s"
+    return ""
 
 def _cx(surf, container_w):
     return (container_w - surf.get_width()) // 2

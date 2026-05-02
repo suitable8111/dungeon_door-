@@ -14,7 +14,8 @@ _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_ru
 
 
 # ── 세이브 ──────────────────────────────────────────────────────────
-def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None):
+def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
+              skill_levels=None, skill_points=0):
     data = {
         'floor': floor,
         'player': {
@@ -27,6 +28,8 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None):
         'skills': skill_mgr.to_dict(),
         'unlocked_combos': list(unlocked_combos) if unlocked_combos else [],
         'skill_books': list(skill_books) if skill_books else [],
+        'skill_levels': skill_levels or {'W': 1, 'A': 1, 'S': 1, 'D': 1},
+        'skill_points': skill_points,
     }
     try:
         with open(SAVE_PATH, 'w', encoding='utf-8') as f:

@@ -25,7 +25,7 @@ class InputHandler:
         pygame.K_SPACE, pygame.K_PERIOD, pygame.K_KP5,
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_r, pygame.K_ESCAPE, pygame.K_RETURN,
-        pygame.K_l,
+        pygame.K_l, pygame.K_u,
     }
     # WASD → 스킬 키 문자
     _WASD = {
@@ -73,6 +73,8 @@ class InputHandler:
                 actions.append({'type': 'restart'})
             elif k == pygame.K_l:
                 actions.append({'type': 'load'})
+            elif k == pygame.K_u:
+                actions.append({'type': 'skill_upgrade'})
             elif k == pygame.K_ESCAPE:
                 actions.append({'type': 'escape'})
 
