@@ -9,7 +9,7 @@ from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
 from core.audio import AudioManager
-from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES, SKILL_MAX_LEVEL
+from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES, SKILL_MAX_LEVEL, SKILL_XP_REQ
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -356,6 +356,14 @@ class Game:
         # 이동 슬라이딩 애니메이션 (지수 감쇠)
         self._move_anim_offset = [0.0, 0.0]
 
+        # 공격 스프라이트 애니메이션
+        # phase: 0=idle, 1=ready(백스윙), 2=strike(전진)
+        self._atk_phase = 0
+        self._atk_timer = 0
+
+        # 스킬 XP (hit 수 누적 → 자동 레벨업)
+        self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+
         # 조합 스킬 해금 상태
         self._unlocked_combos: set = set()
         self._skill_books: set     = set()   # 스킬북 소지 여부 (레벨 달성 전)
@@ -379,18 +387,47 @@ class Game:
         self.camera  = None
 
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _scale_fit(surf: pygame.Surface, size: int) -> pygame.Surface:
+        """종횡비를 유지하며 size×size 캔버스에 letterbox 배치."""
+        sw, sh = surf.get_size()
+        ratio  = min(size / sw, size / sh)
+        nw, nh = max(1, int(sw * ratio)), max(1, int(sh * ratio))
+        scaled  = pygame.transform.scale(surf, (nw, nh))
+        canvas  = pygame.Surface((size, size), pygame.SRCALPHA)
+        canvas.blit(scaled, ((size - nw) // 2, (size - nh) // 2))
+        return canvas
+
     def _load_sprites(self):
         """assets/sprites/*.png 로드. 없으면 빈 딕셔너리."""
         self._sprites: dict[str, pygame.Surface] = {}
-        base = os.path.join(os.path.dirname(__file__), '..', 'assets')
+        base    = os.path.join(os.path.dirname(__file__), '..', 'assets')
         spr_dir = os.path.join(base, 'sprites')
-        names = [
-            'hero', 'hero_attack', 'hero_hurt',
+
+        # 종횡비 유지 letterbox: 영웅 + 공격 스프라이트
+        fit_names = [
+            'hero', 'hero_up', 'hero_back', 'hero_hurt',
+            'hero_attack_ready_left',  'hero_attack_end_left',
+            'hero_attack_ready_right', 'hero_attack_end_right',
+            'hero_attack_ready_up',    'hero_attack_end_up',
+            'hero_attack_ready_down',  'hero_attack_end_down',
+        ]
+        for name in fit_names:
+            path = os.path.join(spr_dir, f'{name}.png')
+            if os.path.exists(path):
+                try:
+                    surf = pygame.image.load(path).convert_alpha()
+                    self._sprites[name] = self._scale_fit(surf, TILE_SIZE)
+                except Exception:
+                    pass
+
+        # 적 스프라이트: 단순 스케일
+        enemy_names = [
             'enemy_rat', 'enemy_goblin', 'enemy_skeleton',
             'enemy_orc', 'enemy_troll',
             'boss_dark_knight', 'boss_lich',
         ]
-        for name in names:
+        for name in enemy_names:
             path = os.path.join(spr_dir, f'{name}.png')
             if os.path.exists(path):
                 try:
@@ -420,7 +457,8 @@ class Game:
             if not self._is_fading:
                 self._handle_events(dt)
             self.animator.update(dt)
-            if self.state in ('playing', 'upgrading'):
+            self._update_atk_anim(dt)
+            if self.state == 'playing':
                 self.skills.update(dt)
             if self.state == 'playing':
                 self._update_enemies(dt)
@@ -435,6 +473,24 @@ class Game:
 
     def _update_shake(self, dt):
         self._shake_timer = max(0, self._shake_timer - dt)
+
+    _ATK_READY_MS  = 90    # 백스윙 유지 시간
+    _ATK_STRIKE_MS = 140   # 전진 타격 유지 시간
+
+    def _update_atk_anim(self, dt):
+        if self._atk_timer <= 0:
+            return
+        self._atk_timer -= dt
+        if self._atk_timer <= 0:
+            if self._atk_phase == 1:
+                self._atk_phase = 2
+                self._atk_timer = self._ATK_STRIKE_MS
+            else:
+                self._atk_phase = 0
+
+    def _trigger_atk_anim(self):
+        self._atk_phase = 1
+        self._atk_timer = self._ATK_READY_MS
 
     def _update_move_anim(self, dt):
         if self._move_anim_offset[0] == 0.0 and self._move_anim_offset[1] == 0.0:
@@ -482,7 +538,7 @@ class Game:
             return
         if self.state == 'menu':
             self.audio.bgm.play('menu')
-        elif self.state in ('playing', 'shop', 'paused', 'dead', 'upgrading'):
+        elif self.state in ('playing', 'shop', 'paused', 'dead'):
             if self.dungeon is None:
                 return
             if self.dungeon.is_boss_floor:
@@ -505,8 +561,7 @@ class Game:
         self._unlocked_combos = set()
         self._skill_books     = set()
         self._skill_levels    = {'W': 1, 'A': 1, 'S': 1, 'D': 1}
-        self._skill_points    = 0
-        self._upgrade_sel     = 0
+        self._skill_xp        = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -523,8 +578,7 @@ class Game:
         self._unlocked_combos = set(data.get('unlocked_combos', []))
         self._skill_books     = set(data.get('skill_books', []))
         self._skill_levels    = data.get('skill_levels', {'W': 1, 'A': 1, 'S': 1, 'D': 1})
-        self._skill_points    = data.get('skill_points', 0)
-        self._upgrade_sel     = 0
+        self._skill_xp        = data.get('skill_xp', {'W': 0, 'A': 0, 'S': 0, 'D': 0})
         self._apply_skill_level_cds()
         self._run_kills       = 0
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
@@ -554,7 +608,7 @@ class Game:
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
             save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                          self._skill_levels, self._skill_points)
+                          self._skill_levels, self._skill_xp)
             self.messages.append((t('auto_saved'), 'info'))
             self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -574,7 +628,7 @@ class Game:
             t = action['type']
 
             if t == 'escape':
-                if self.state in ('shop', 'upgrading'):
+                if self.state == 'shop':
                     self.state = 'playing'
                 elif self.state == 'paused':
                     self.state = 'playing'
@@ -599,11 +653,6 @@ class Game:
             elif self.state == 'playing':
                 if t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
                     self._process(action)
-                elif t == 'skill_upgrade':
-                    self._upgrade_sel = 0
-                    self.state = 'upgrading'
-            elif self.state == 'upgrading':
-                self._handle_upgrade_action(action)
             elif self.state == 'dead':
                 if t == 'restart':
                     self._new_game()
@@ -740,7 +789,7 @@ class Game:
         elif self._pause_sel == 1:   # 저장하기
             if self.player:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                          self._skill_levels, self._skill_points)
+                          self._skill_levels, self._skill_xp)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -803,6 +852,7 @@ class Game:
 
         enemy = self.dungeon.get_enemy_at(nx, ny)
         if enemy:
+            self._trigger_atk_anim()
             self._player_attack(enemy); return True
         if not self.dungeon.is_walkable(nx, ny):
             return False
@@ -829,15 +879,14 @@ class Game:
 
     def _player_basic_attack(self):
         """Space bar: 바라보는 방향 인접 타일 공격. 적 없으면 허공 스윙."""
+        self._trigger_atk_anim()
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0,1))
         tx, ty = self.player.x + dx, self.player.y + dy
         enemy = self.dungeon.get_enemy_at(tx, ty)
         if enemy:
-            self.animator.add(AttackSwingAnim(self.player.x, self.player.y, self._facing, hit=True))
             self._player_attack(enemy)
         else:
-            self.animator.add(AttackSwingAnim(self.player.x, self.player.y, self._facing, hit=False))
             self.audio.play('swing')
         return True
 
@@ -850,9 +899,6 @@ class Game:
         else:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
-        sc = (255, 80, 80) if crit else (255, 235, 80)
-        self.animator.add(LungeAnim(self.player.x, self.player.y, enemy.x, enemy.y))
-        self.animator.add(SlashAnim(self.player.x, self.player.y, enemy.x, enemy.y, sc))
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
         self.audio.play('crit' if crit else 'attack')
         if not enemy.is_alive():
@@ -867,7 +913,6 @@ class Game:
         else:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
         if self.player.gain_xp(enemy.xp_value):
-            self._skill_points += 1
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.audio.play('levelup')
             for cid, cdef in COMBO_SKILL_DEFS.items():
@@ -961,7 +1006,6 @@ class Game:
         tiles = SKILL_UPGRADES['W'][lvl - 1]['tiles']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
-        sx, sy = self.player.x, self.player.y
         moved = 0
         for _ in range(tiles):
             nx, ny = self.player.x + dx, self.player.y + dy
@@ -970,8 +1014,8 @@ class Game:
                 self._player_attack(enemy); break
             if not self.dungeon.is_walkable(nx, ny): break
             self.player.x, self.player.y = nx, ny; moved += 1
-        if moved > 0:
-            self.animator.add(DashTrailAnim(sx, sy, self.player.x, self.player.y))
+        self._trigger_atk_anim()
+        self._gain_skill_xp('W')
         self.skills.trigger('W')
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
@@ -1001,6 +1045,7 @@ class Game:
                 self._on_enemy_killed(enemy)
         self.animator.add(WhirlAnim(self.player.x, self.player.y))
         if not no_cooldown:
+            self._gain_skill_xp('A', hits)
             self.skills.trigger('A')
         self.audio.play('skill_whirl')
         self.messages.append((t('skill_whirl_h', hits) if hits else t('skill_whirl_m'),
@@ -1013,6 +1058,7 @@ class Game:
         amt = max(1, int(self.player.max_hp * heal_pct))
         self.player.heal(amt)
         self.animator.add(HealAnim(self.player.x, self.player.y))
+        self._gain_skill_xp('S')
         self.skills.trigger('S')
         self.audio.play('skill_heal')
         self.messages.append((t('skill_heal', amt), 'good'))
@@ -1027,6 +1073,7 @@ class Game:
         dx, dy = dirs.get(self._facing, (0, 1))
         tx, ty = self.player.x + dx, self.player.y + dy
         enemy  = self.dungeon.get_enemy_at(tx, ty)
+        self._trigger_atk_anim()
         self.animator.add(AttackSwingAnim(self.player.x, self.player.y, self._facing, hit=bool(enemy)))
         if not enemy:
             self.audio.play('swing')
@@ -1046,6 +1093,7 @@ class Game:
             self.messages.append((t('skill_power', enemy.name, dmg), 'warn'))
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
+        self._gain_skill_xp('D')
         self.skills.trigger('D')
         return True
 
@@ -1055,31 +1103,21 @@ class Game:
             cd_ms = SKILL_UPGRADES[key][lvl - 1]['cd_ms']
             self.skills.set_cd_override(key, cd_ms)
 
-    def _upgrade_skill(self, key):
-        if self._skill_points <= 0:
-            self.messages.append((t('upg_no_sp'), 'warn'))
-            return
+    def _gain_skill_xp(self, key: str, amount: int = 1):
         lvl = self._skill_levels.get(key, 1)
         if lvl >= SKILL_MAX_LEVEL:
             return
-        self._skill_levels[key] = lvl + 1
-        self._skill_points -= 1
-        self._apply_skill_level_cds()
-        name_key = {'W': 'skill_w_name', 'A': 'skill_a_name',
-                    'S': 'skill_s_name', 'D': 'skill_d_name'}.get(key, key)
-        self.messages.append((t('upg_done', t(name_key), self._skill_levels[key]), 'good'))
-        self.audio.play('levelup')
+        self._skill_xp[key] = self._skill_xp.get(key, 0) + amount
+        req = SKILL_XP_REQ[key][lvl - 1]
+        if self._skill_xp[key] >= req:
+            self._skill_xp[key] -= req
+            self._skill_levels[key] = lvl + 1
+            self._apply_skill_level_cds()
+            name_key = {'W': 'skill_w_name', 'A': 'skill_a_name',
+                        'S': 'skill_s_name', 'D': 'skill_d_name'}.get(key, key)
+            self.messages.append((t('upg_done', t(name_key), self._skill_levels[key]), 'good'))
+            self.audio.play('levelup')
 
-    def _handle_upgrade_action(self, action):
-        _KEYS = ['W', 'A', 'S', 'D']
-        typ = action['type']
-        if typ == 'move':
-            dy = action.get('dy', 0)
-            if dy != 0:
-                self._upgrade_sel = (self._upgrade_sel + dy) % len(_KEYS)
-                self.audio.play('menu_select')
-        elif typ in ('wait', 'confirm'):
-            self._upgrade_skill(_KEYS[self._upgrade_sel])
 
     # ─────────────── 조합 스킬 ───────────────────────────────────────
     def _use_combo_skill(self, combo_id):
@@ -1263,7 +1301,7 @@ class Game:
                         unlocked_combos=self._unlocked_combos,
                         skill_books=self._skill_books,
                         skill_levels=self._skill_levels,
-                        skill_points=self._skill_points)
+                        skill_xp=self._skill_xp)
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -1279,9 +1317,6 @@ class Game:
             self.hud.render_shop(self.screen, self.dungeon.shop_items, self.player.gold)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel)
-        elif self.state == 'upgrading':
-            self.hud.render_skill_upgrade(self.screen, self._skill_levels,
-                                          self._skill_points, self._upgrade_sel)
         elif self.state == 'dead':
             self.hud.render_game_over(self.screen, self.floor, self._records)
 
@@ -1349,14 +1384,42 @@ class Game:
                 pygame.draw.line(s, sc, (ccx-4,ccy-3),(ccx+4,ccy-3), 2)
 
     def _draw_player_sprite(self, x, y):
-        spr = self._sprites.get('hero')
+        facing = self._facing
+        phase  = self._atk_phase
+        ts  = TILE_SIZE
+        spr = None
+
+        if facing in ('left', 'right'):
+            side = 'left' if facing == 'left' else 'right'
+            if phase == 1:
+                spr = self._sprites.get(f'hero_attack_ready_{side}')
+            elif phase == 2:
+                spr = self._sprites.get(f'hero_attack_end_{side}')
+            if spr is None:
+                spr = self._sprites.get('hero')
+                if spr and facing == 'left':
+                    spr = pygame.transform.flip(spr, True, False)
+
+        elif facing == 'up':
+            if phase == 1:
+                spr = self._sprites.get('hero_attack_ready_up')
+            elif phase == 2:
+                spr = self._sprites.get('hero_attack_end_up')
+            if spr is None:
+                spr = self._sprites.get('hero_up') or self._sprites.get('hero')
+
+        else:  # down
+            if phase == 1:
+                spr = self._sprites.get('hero_attack_ready_down')
+            elif phase == 2:
+                spr = self._sprites.get('hero_attack_end_down')
+            if spr is None:
+                spr = self._sprites.get('hero')
+
         if spr:
-            # 좌측 이동만 수평 반전; 상하는 같은 앞면 사용 (수직 반전 x)
-            if self._facing == 'left':
-                spr = pygame.transform.flip(spr, True, False)
             self._game_surf.blit(spr, (x, y))
         else:
-            draw_player(self._game_surf, x, y, self._facing, self._walk_frame)
+            draw_player(self._game_surf, x, y, facing, self._walk_frame)
 
     def _draw_enemy(self, enemy, x, y):
         spr_key = self._ENEMY_SPRITE_KEY.get(enemy.key)

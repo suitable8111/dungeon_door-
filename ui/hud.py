@@ -2,7 +2,7 @@ import os
 import math
 import pygame
 from core.constants import *
-from core.skills import SKILL_DEFS
+from core.skills import SKILL_DEFS, SKILL_XP_REQ, SKILL_MAX_LEVEL
 from core.lang import t
 from map.tile import TileType
 
@@ -40,7 +40,10 @@ def _btn_colors(active, hovered, danger=False):
 
 _MSG_COLORS = {'info': MSG_INFO, 'warn': MSG_WARN, 'good': MSG_GOOD, 'bad': MSG_BAD}
 
-_KO_FONT_PATHS = [
+_DUNGGEU_FONT = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'DungGeunMo.ttf'))
+
+_KO_FONT_FALLBACKS = [
     '/System/Library/Fonts/AppleSDGothicNeo.ttc',
     '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
     'C:/Windows/Fonts/malgun.ttf',
@@ -49,7 +52,14 @@ _KO_FONT_PATHS = [
 
 
 def _load_ko_font(size, bold=False):
-    for path in _KO_FONT_PATHS:
+    # 번들 폰트 우선
+    if os.path.exists(_DUNGGEU_FONT):
+        try:
+            return pygame.font.Font(_DUNGGEU_FONT, size)
+        except Exception:
+            pass
+    # 시스템 폰트 폴백
+    for path in _KO_FONT_FALLBACKS:
         if os.path.exists(path):
             try:
                 return pygame.font.Font(path, size)
@@ -80,12 +90,11 @@ class HUD:
             self.font_pixel_title = None
             self.font_pixel_go    = None
 
-        # 타이틀 배경 이미지
+        # 타이틀 배경 이미지 (원본 크기 유지, 가로 초과분은 중앙 크롭)
         _bg = os.path.join(_base, 'ui', 'title_background.png')
         if os.path.exists(_bg):
             try:
-                surf = pygame.image.load(_bg).convert()
-                self._title_bg = pygame.transform.scale(surf, (WINDOW_WIDTH, WINDOW_HEIGHT))
+                self._title_bg = pygame.image.load(_bg).convert()
             except Exception:
                 self._title_bg = None
         else:
@@ -95,11 +104,11 @@ class HUD:
     def render(self, screen, player, messages, floor_num,
                dungeon=None, skill_mgr=None,
                unlocked_combos=None, skill_books=None,
-               skill_levels=None, skill_points=0):
+               skill_levels=None, skill_xp=None):
         self._top_bar(screen, player, floor_num)
         self._right_panel(screen, player, dungeon, skill_mgr,
                           unlocked_combos or set(), skill_books or set(),
-                          skill_levels or {}, skill_points)
+                          skill_levels or {}, skill_xp or {})
         self._bottom_bar(screen, messages)
 
     # ------------------------------------------------------------------ #
@@ -138,7 +147,12 @@ class HUD:
 
         # ── 공통 배경 ────────────────────────────────────────────────
         if self._title_bg:
-            screen.blit(self._title_bg, (0, 0))
+            # 이미지가 창보다 넓으면 중앙 크롭, 좁으면 그대로
+            bw_img = self._title_bg.get_width()
+            bh_img = self._title_bg.get_height()
+            bx_off = -(bw_img - W) // 2 if bw_img > W else (W - bw_img) // 2
+            by_off = -(bh_img - H) // 2 if bh_img > H else (H - bh_img) // 2
+            screen.blit(self._title_bg, (bx_off, by_off))
             # 패널 가독성을 위한 반투명 어둠 오버레이
             ov = pygame.Surface((W, H), pygame.SRCALPHA)
             ov.fill((0, 0, 0, 120))
@@ -177,8 +191,6 @@ class HUD:
         bg_s = pygame.Surface((p_w, p_h), pygame.SRCALPHA)
         bg_s.fill((8, 8, 22, 222))
         screen.blit(bg_s, (p_x, p_y))
-        pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
-        pygame.draw.rect(screen, (28, 26, 48), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         buttons = []
 
@@ -267,6 +279,9 @@ class HUD:
                              (p_x+20, fy-10), (p_x+p_w-20, fy-10))
             hint = self.font_sm.render(t('menu_hint'), True, (60, 58, 90))
             screen.blit(hint, (cx - hint.get_width()//2, fy))
+            # 테두리를 마지막에 그려 내용에 가리지 않게
+            pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
+            pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         # ════════════════════════════════════════════════════════════
         else:  # page == 'settings'
@@ -346,6 +361,9 @@ class HUD:
                              (p_x+20, fy-10), (p_x+p_w-20, fy-10))
             hint = self.font_sm.render(t('settings_hint'), True, (60, 58, 90))
             screen.blit(hint, (cx - hint.get_width()//2, fy))
+            # 테두리를 마지막에 그려 내용에 가리지 않게
+            pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
+            pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         return buttons
 
@@ -532,7 +550,7 @@ class HUD:
 
     def _right_panel(self, screen, player, dungeon, skill_mgr,
                      unlocked_combos=None, skill_books=None,
-                     skill_levels=None, skill_points=0):
+                     skill_levels=None, skill_xp=None):
         rx = GAME_W
         pw = RIGHT_PANEL_W
         bw = pw - 16
@@ -588,6 +606,7 @@ class HUD:
             'D': ('skill_d_name', 'skill_d_desc'),
         }
         sl = skill_levels or {}
+        sx = skill_xp or {}
         for sdef in SKILL_DEFS:
             sk    = sdef['key']
             ready = skill_mgr.ready(sk) if skill_mgr else True
@@ -596,7 +615,8 @@ class HUD:
             nc    = sdef['color'] if ready else (60, 60, 80)
             nk, dk = _SKILL_TRANS.get(sk, ('', ''))
             lvl    = sl.get(sk, 1)
-            lv_str = f" Lv.{lvl}" if lvl > 1 else ""
+            is_max = lvl >= SKILL_MAX_LEVEL
+            lv_str = " MAX" if is_max else (f" Lv.{lvl}" if lvl > 1 else "")
             label  = f"[{sk}] {t(nk)}{lv_str}" if nk else f"[{sk}] {sdef['name']}{lv_str}"
 
             if ready:
@@ -609,14 +629,13 @@ class HUD:
             y += 15
             _bar(screen, rx+8, y, bw, 6, int(bw*(1-frac)), bw,
                  sdef['color'] if ready else (40, 40, 65), (18, 18, 35))
-            y += 10
-
-        if skill_points > 0:
-            pygame.draw.rect(screen, (32, 28, 10), (rx+6, y, pw-12, 17))
-            pygame.draw.rect(screen, (120, 100, 30), (rx+6, y, pw-12, 17), 1)
-            sp_s = self.font_sm.render(t('sp_badge', skill_points), True, GOLD_COLOR)
-            screen.blit(sp_s, (rx+8, y+2))
-            y += 19
+            y += 8
+            if not is_max:
+                xp_cur = sx.get(sk, 0)
+                xp_req = SKILL_XP_REQ[sk][lvl - 1]
+                _bar(screen, rx+8, y, bw, 3, xp_cur, xp_req, (80, 160, 80), (12, 20, 12))
+                y += 5
+            y += 2
         y += 4
 
         # ── 조합 스킬 ────────────────────────────────────────────────
@@ -664,7 +683,6 @@ class HUD:
             (t('ctrl_skill'), t('ctrl_skill_d')),
             (t('ctrl_combo'), t('ctrl_combo_d')),
             (t('ctrl_item'),  t('ctrl_item_d')),
-            (t('ctrl_upg'),   t('ctrl_upg_d')),
             (t('ctrl_esc'),   t('ctrl_esc_d')),
         ]
         for key, desc in hints:
