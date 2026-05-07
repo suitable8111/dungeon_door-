@@ -16,6 +16,7 @@ from core.save_load import (save_game, load_game, has_save, delete_save,
 from core.lang import t, set_lang
 from map.generator import generate_dungeon
 from map.tile import Tile, TileType
+from map.theme import get_theme, is_new_theme, MAX_FLOOR
 from entities.player import Player
 from ui.hud import HUD
 from data_loader import load_enemies, load_items
@@ -339,6 +340,7 @@ class Game:
 
         self.messages = []
         self.floor    = 1
+        self._theme   = get_theme(1)
         self._facing     = 'down'
         self._walk_frame = 0
 
@@ -361,6 +363,13 @@ class Game:
         self._atk_phase = 0
         self._atk_timer = 0
 
+        # 공격 쿨다운 타이머 (ms) — 0 이하일 때만 공격 가능
+        self._atk_cd_timer: float = 0.0
+
+        # 인벤토리 / 장비 화면 선택 인덱스
+        self._inv_sel   = 0
+        self._equip_sel = 0
+
         # 스킬 XP (hit 수 누적 → 자동 레벨업)
         self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
 
@@ -374,6 +383,10 @@ class Game:
         # 기록
         self._run_kills = 0
         self._records   = load_records()
+
+        # 테스트 모드
+        self._is_test_mode = False
+        self._test_floor: int | None = None  # main.py 에서 세팅, 메뉴 버튼으로 진입
 
         # 저장파일 확인 후 메뉴로
         self._save_data         = load_game()
@@ -406,7 +419,8 @@ class Game:
 
         # 종횡비 유지 letterbox: 영웅 + 공격 스프라이트
         fit_names = [
-            'hero', 'hero_up', 'hero_back', 'hero_hurt',
+            'hero', 'hero_right', 'hero_left', 'hero_down',
+            'hero_up', 'hero_back', 'hero_hurt',
             'hero_attack_ready_left',  'hero_attack_end_left',
             'hero_attack_ready_right', 'hero_attack_end_right',
             'hero_attack_ready_up',    'hero_attack_end_up',
@@ -458,6 +472,12 @@ class Game:
                 self._handle_events(dt)
             self.animator.update(dt)
             self._update_atk_anim(dt)
+            # 공격 쿨다운 감소
+            if self._atk_cd_timer > 0:
+                self._atk_cd_timer = max(0.0, self._atk_cd_timer - dt)
+            # 플레이어 이동속도 → InputHandler 동기화
+            if self.player:
+                self.input.set_move_speed(self.player.move_speed)
             if self.state == 'playing':
                 self.skills.update(dt)
             if self.state == 'playing':
@@ -565,6 +585,39 @@ class Game:
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
+    # ─────────────── 테스트 모드 ──────────────────────────────────────
+    def start_test_mode(self, floor: int = 1):
+        """python3 main.py -test [층수] 로 호출 — 최대 스탯으로 지정 층 시작."""
+        self._is_test_mode    = True
+        self._save_data       = None
+        self.floor            = max(1, min(floor, MAX_FLOOR))
+        self._facing          = 'down'
+        self._walk_frame      = 0
+        self.messages         = []
+        self.skills           = SkillManager()
+        self._run_kills       = 0
+        # 모든 스킬 최대 레벨, 조합 스킬 전체 해금
+        self._skill_levels    = {k: SKILL_MAX_LEVEL for k in ('W', 'A', 'S', 'D')}
+        self._skill_xp        = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+        self._unlocked_combos = set(COMBO_SKILL_DEFS.keys())
+        self._skill_books     = set(COMBO_SKILL_DEFS.keys())
+        self._load_floor(is_new_game=True)
+        self._apply_skill_level_cds()
+        # 플레이어 최대 스탯 적용
+        p = self.player
+        p.level        = 99
+        p.max_hp       = 9999
+        p.hp           = 9999
+        p.attack       = 999
+        p.defense      = 99
+        p.attack_speed = 10.0   # 공격 쿨다운 100ms (최소)
+        p.move_speed   = 5.0    # 이동 간격 60ms (최소)
+        p.evasion      = 40     # 회피율 최대
+        p.gold         = 99999
+        self.state = 'playing'
+        self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
+        self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
+
     def _continue_game(self):
         data = self._save_data
         if not data:
@@ -584,6 +637,7 @@ class Game:
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
         self.dungeon = dungeon
+        self._theme  = get_theme(self.floor)
         self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data)
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
@@ -592,9 +646,11 @@ class Game:
         self.state = 'playing'
 
     def _load_floor(self, is_new_game=False):
+        self.floor = min(self.floor, MAX_FLOOR)
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
-        self.dungeon = dungeon
+        self.dungeon  = dungeon
+        self._theme   = get_theme(self.floor)
         if is_new_game:
             self.player = Player(*start)
             self.messages.append((t('welcome'), 'good'))
@@ -602,15 +658,18 @@ class Game:
         else:
             self.player.x, self.player.y = start
             self.messages.append((t('floor_arrive', self.floor), 'good'))
+            if is_new_theme(self.floor):
+                self.messages.append((t('new_theme', self._theme['name']), 'info'))
             if dungeon.is_boss_floor:
                 self.messages.append((t('boss_incoming'), 'bad'))
                 self.audio.play('boss_appear')
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
-            save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                          self._skill_levels, self._skill_xp)
-            self.messages.append((t('auto_saved'), 'info'))
-            self.audio.play('save')
+            if not self._is_test_mode:
+                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
+                              self._skill_levels, self._skill_xp)
+                self.messages.append((t('auto_saved'), 'info'))
+                self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         self.dungeon.update_visibility(self.player.x, self.player.y)
@@ -628,7 +687,9 @@ class Game:
             t = action['type']
 
             if t == 'escape':
-                if self.state == 'shop':
+                if self.state in ('inventory', 'equipment'):
+                    self.state = 'playing'
+                elif self.state == 'shop':
                     self.state = 'playing'
                 elif self.state == 'paused':
                     self.state = 'playing'
@@ -650,8 +711,18 @@ class Game:
                 self._handle_pause_action(action)
             elif self.state == 'shop':
                 self._handle_shop_action(action)
+            elif self.state == 'inventory':
+                self._handle_inventory_action(action)
+            elif self.state == 'equipment':
+                self._handle_equipment_action(action)
             elif self.state == 'playing':
-                if t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
+                if t == 'inventory':
+                    self._inv_sel = 0
+                    self.state = 'inventory'
+                elif t == 'equipment':
+                    self._equip_sel = 0
+                    self.state = 'equipment'
+                elif t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
                     self._process(action)
             elif self.state == 'dead':
                 if t == 'restart':
@@ -737,6 +808,8 @@ class Game:
                     self._new_game()
                 elif action == 'continue' and self._save_data:
                     self._continue_game()
+                elif action == 'test_mode' and self._test_floor is not None:
+                    self.start_test_mode(self._test_floor)
                 elif action == 'settings':
                     self._menu_page = 'settings'
                     self._menu_settings_sel = 0
@@ -787,7 +860,7 @@ class Game:
         if self._pause_sel == 0:
             self.state = 'playing'
         elif self._pause_sel == 1:   # 저장하기
-            if self.player:
+            if self.player and not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                           self._skill_levels, self._skill_xp)
                 self.messages.append((t('saved'), 'good'))
@@ -829,6 +902,73 @@ class Game:
             if t == 'move':
                 self._process(action)
 
+    def _handle_inventory_action(self, action):
+        t = action['type']
+        inv = self.player.inventory
+        cols = 5
+        if t == 'move':
+            dx, dy = action.get('dx', 0), action.get('dy', 0)
+            self._inv_sel = max(0, min(self.player.max_inventory - 1,
+                                       self._inv_sel + dx + dy * cols))
+        elif t in ('confirm', 'wait', 'attack'):
+            if self._inv_sel < len(inv):
+                self._do_use_inventory_item(inv[self._inv_sel])
+                self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
+
+    # ------------------------------------------------------------------ #
+    def _try_enemy_drop(self, enemy):
+        import random
+        from map.generator import drop_pool
+        from entities.item import Item
+
+        is_boss = getattr(enemy, 'is_boss', False)
+        if not is_boss and random.random() >= 0.28:
+            return
+
+        pool = drop_pool(self.floor)
+        if not pool:
+            return
+        key = random.choice(pool)
+        if key not in self._item_data:
+            return
+
+        d = dict(self._item_data[key])
+        d['key'] = key
+        self.dungeon.items.append(Item(enemy.x, enemy.y, d))
+
+    # 슬롯 순서: head=0, body=1, weapon=2, off_hand=3, accessory=4
+    _EQUIP_SLOTS = ['head', 'body', 'weapon', 'off_hand', 'accessory']
+    # (up, down, left, right) → 이동할 슬롯 인덱스 (None = 이동 불가)
+    _EQUIP_NAV = {
+        0: (None, 1,    3,    2),
+        1: (0,    4,    3,    2),
+        2: (0,    4,    1,    None),
+        3: (0,    4,    None, 1),
+        4: (1,    None, 3,    2),
+    }
+
+    def _handle_equipment_action(self, action):
+        t = action['type']
+        if t == 'move':
+            dx = action.get('dx', 0)
+            dy = action.get('dy', 0)
+            nav = self._EQUIP_NAV.get(self._equip_sel, (None, None, None, None))
+            if dy < 0:    nxt = nav[0]
+            elif dy > 0:  nxt = nav[1]
+            elif dx < 0:  nxt = nav[2]
+            elif dx > 0:  nxt = nav[3]
+            else:         nxt = None
+            if nxt is not None:
+                self._equip_sel = nxt
+        elif t in ('confirm', 'wait', 'attack'):
+            slot = self._EQUIP_SLOTS[self._equip_sel]
+            item = self.player.equipment.get(slot)
+            if item:
+                msg = item.unequip(self.player)
+                if msg:
+                    self.messages.append((msg, 'info'))
+                    self.audio.play('use_item')
+
     # ------------------------------------------------------------------ #
     def _process(self, action):
         acted = False
@@ -852,8 +992,12 @@ class Game:
 
         enemy = self.dungeon.get_enemy_at(nx, ny)
         if enemy:
+            if self._atk_cd_timer > 0:
+                return False  # 쿨다운 중: 이동 범프 공격 불가
             self._trigger_atk_anim()
-            self._player_attack(enemy); return True
+            self._player_attack(enemy)
+            self._atk_cd_timer = self.player.atk_cooldown_ms
+            return True
         if not self.dungeon.is_walkable(nx, ny):
             return False
 
@@ -873,12 +1017,20 @@ class Game:
             return True
 
         if (nx, ny) == self.dungeon.stairs_pos:
-            self.floor += 1
-            self._start_fade(self._load_floor)
+            if self.floor >= MAX_FLOOR:
+                self.messages.append((t('victory'), 'good'))
+                self._records = update_records(self.floor, self._run_kills, self.player.gold)
+                delete_save()
+                self.state = 'game_over'
+            else:
+                self.floor += 1
+                self._start_fade(self._load_floor)
         return True
 
     def _player_basic_attack(self):
         """Space bar: 바라보는 방향 인접 타일 공격. 적 없으면 허공 스윙."""
+        if self._atk_cd_timer > 0:
+            return False  # 쿨다운 중
         self._trigger_atk_anim()
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0,1))
@@ -888,11 +1040,34 @@ class Game:
             self._player_attack(enemy)
         else:
             self.audio.play('swing')
+        self._atk_cd_timer = self.player.atk_cooldown_ms
         return True
+
+    def _do_use_inventory_item(self, item):
+        """인벤토리 화면에서 선택한 아이템 사용/장착."""
+        if item not in self.player.inventory and item.equip_slot is None:
+            return
+        if item.effect == 'teleport':
+            if item in self.player.inventory:
+                self.player.inventory.remove(item)
+            self._use_teleport()
+        elif item.effect == 'whirlwind':
+            if item in self.player.inventory:
+                self.player.inventory.remove(item)
+            self._skill_whirl(no_cooldown=True)
+        elif item.equip_slot:
+            msg = item.use(self.player)
+            self.messages.append((msg, 'good'))
+            self.audio.play('use_item')
+        else:
+            if item in self.player.inventory:
+                self.player.inventory.remove(item)
+            self.messages.append((item.use(self.player), 'good'))
+            self.audio.play('use_item')
 
     def _player_attack(self, enemy):
         crit = random.random() < 0.1
-        dmg  = max(1, self.player.attack - enemy.defense + random.randint(0, 3))
+        dmg  = max(1, self.player.total_attack - enemy.defense + random.randint(0, 3))
         if crit:
             dmg *= 2
             self.messages.append((t('crit_hit', enemy.name, dmg), 'warn'))
@@ -905,6 +1080,7 @@ class Game:
             self._on_enemy_killed(enemy)
 
     def _on_enemy_killed(self, enemy):
+        import random
         gold = enemy.gold_drop
         self._run_kills += 1
         if gold:
@@ -923,6 +1099,8 @@ class Game:
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
         self.dungeon.enemies.remove(enemy)
         self._check_boss_cleared()
+        # ── 아이템 드랍 ───────────────────────────────────────────
+        self._try_enemy_drop(enemy)
 
     def _pickup(self, item):
         if item.effect == 'unlock_combo':
@@ -950,7 +1128,12 @@ class Game:
         if slot >= len(self.player.inventory):
             return False
         item = self.player.inventory[slot]
-        if item.effect == 'teleport':
+        if item.equip_slot:
+            # 장비 아이템: equip이 인벤토리 이동을 직접 처리
+            msg = item.use(self.player)
+            self.messages.append((msg, 'good'))
+            self.audio.play('use_item')
+        elif item.effect == 'teleport':
             self.player.inventory.pop(slot)
             self._use_teleport()
         elif item.effect == 'whirlwind':
@@ -1035,7 +1218,7 @@ class Game:
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
             crit = random.random() < 0.1
-            dmg  = max(1, int(self.player.attack * mul) - enemy.defense + random.randint(0,3))
+            dmg  = max(1, int(self.player.total_attack * mul) - enemy.defense + random.randint(0,3))
             if crit: dmg *= 2
             enemy.take_damage(dmg)
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (255,180,60)))
@@ -1081,7 +1264,7 @@ class Game:
             self.messages.append((t('skill_power_miss'), 'info'))
             return True
         crit = random.random() < crit_chance
-        dmg  = max(1, int(self.player.attack * mul) - enemy.defense)
+        dmg  = max(1, int(self.player.total_attack * mul) - enemy.defense)
         if crit: dmg = int(dmg * 1.5)
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
@@ -1152,7 +1335,7 @@ class Game:
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy:
                 crit = random.random() < 0.3
-                dmg  = max(1, int(self.player.attack * 2.2) - enemy.defense)
+                dmg  = max(1, int(self.player.total_attack * 2.2) - enemy.defense)
                 if crit: dmg = int(dmg * 1.5)
                 enemy.take_damage(dmg)
                 self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
@@ -1176,7 +1359,7 @@ class Game:
         for enemy in list(self.dungeon.enemies):
             if not (enemy.is_alive() and self.dungeon.tiles[enemy.y][enemy.x].visible):
                 continue
-            dmg = max(1, int(self.player.attack * 0.85) - enemy.defense)
+            dmg = max(1, int(self.player.total_attack * 0.85) - enemy.defense)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
             hits += 1
@@ -1198,7 +1381,7 @@ class Game:
             if not enemy.is_alive():
                 continue
             if max(abs(enemy.x - px), abs(enemy.y - py)) <= 2:
-                dmg = max(1, int(self.player.attack * 1.3) - enemy.defense)
+                dmg = max(1, int(self.player.total_attack * 1.3) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
                 hits += 1
@@ -1226,7 +1409,7 @@ class Game:
                 break
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy and enemy.is_alive():
-                dmg = max(1, int(self.player.attack * 1.5) - enemy.defense)
+                dmg = max(1, int(self.player.total_attack * 1.5) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
@@ -1291,6 +1474,7 @@ class Game:
                 page=self._menu_page,
                 settings=self._settings,
                 settings_sel=self._menu_settings_sel,
+                test_floor=self._test_floor,
             )
             pygame.display.flip()
             return
@@ -1301,7 +1485,8 @@ class Game:
                         unlocked_combos=self._unlocked_combos,
                         skill_books=self._skill_books,
                         skill_levels=self._skill_levels,
-                        skill_xp=self._skill_xp)
+                        skill_xp=self._skill_xp,
+                        is_test_mode=self._is_test_mode)
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -1319,11 +1504,16 @@ class Game:
             self.hud.render_paused(self.screen, self._settings, self._pause_sel)
         elif self.state == 'dead':
             self.hud.render_game_over(self.screen, self.floor, self._records)
+        elif self.state == 'inventory':
+            self.hud.render_inventory(self.screen, self.player, self._inv_sel)
+        elif self.state == 'equipment':
+            self.hud.render_equipment(self.screen, self.player, self._equip_sel,
+                                      self._sprites.get('hero_down'))
 
         pygame.display.flip()
 
     def _render_dungeon(self):
-        self._game_surf.fill(BLACK)
+        self._game_surf.fill(self._theme['bg'])
         cx, cy = self.camera.x, self.camera.y
 
         for ty in range(VIEWPORT_TILES_Y + 1):
@@ -1358,13 +1548,14 @@ class Game:
 
     def _draw_tile(self, tile, x, y, lit):
         ts = TILE_SIZE; s = self._game_surf; tt = tile.tile_type
+        th = self._theme
         if tt == TileType.WALL:
-            col = WALL_LIT if lit else WALL_DIM
+            col = th['wall_lit'] if lit else th['wall_dim']
             pygame.draw.rect(s, col, (x,y,ts,ts))
             if lit:
-                pygame.draw.line(s,WALL_TOP,(x,y),(x+ts-1,y))
-                pygame.draw.line(s,WALL_TOP,(x,y),(x,y+ts-1))
-                pygame.draw.line(s,WALL_BOT,(x,y+ts-1),(x+ts-1,y+ts-1))
+                pygame.draw.line(s,th['wall_top'],(x,y),(x+ts-1,y))
+                pygame.draw.line(s,th['wall_top'],(x,y),(x,y+ts-1))
+                pygame.draw.line(s,th['wall_bot'],(x,y+ts-1),(x+ts-1,y+ts-1))
         elif tt == TileType.SHOP:
             col = (25,55,30) if lit else (12,28,15)
             pygame.draw.rect(s, col, (x,y,ts,ts))
@@ -1374,11 +1565,11 @@ class Game:
                 pygame.draw.circle(s, SHOP_COLOR, (ccx, ccy), 6, 2)
                 _r(s, SHOP_COLOR, ccx, ccy-1, 5, 2)
         else:
-            col = FLOOR_LIT if lit else FLOOR_DIM
+            col = th['floor_lit'] if lit else th['floor_dim']
             pygame.draw.rect(s, col, (x,y,ts,ts))
-            if lit: pygame.draw.rect(s, FLOOR_EDGE, (x,y,ts,ts), 1)
+            if lit: pygame.draw.rect(s, th['floor_edge'], (x,y,ts,ts), 1)
             if tt == TileType.STAIRS_DOWN:
-                sc = STAIRS_LIT if lit else STAIRS_DIM
+                sc = th['stairs_lit'] if lit else th['stairs_dim']
                 ccx, ccy = x+ts//2, y+ts//2
                 pygame.draw.polygon(s, sc, [(ccx,ccy+7),(ccx-6,ccy-3),(ccx+6,ccy-3)])
                 pygame.draw.line(s, sc, (ccx-4,ccy-3),(ccx+4,ccy-3), 2)
@@ -1386,7 +1577,6 @@ class Game:
     def _draw_player_sprite(self, x, y):
         facing = self._facing
         phase  = self._atk_phase
-        ts  = TILE_SIZE
         spr = None
 
         if facing in ('left', 'right'):
@@ -1396,9 +1586,7 @@ class Game:
             elif phase == 2:
                 spr = self._sprites.get(f'hero_attack_end_{side}')
             if spr is None:
-                spr = self._sprites.get('hero')
-                if spr and facing == 'left':
-                    spr = pygame.transform.flip(spr, True, False)
+                spr = self._sprites.get(f'hero_{side}') or self._sprites.get('hero')
 
         elif facing == 'up':
             if phase == 1:
@@ -1406,7 +1594,9 @@ class Game:
             elif phase == 2:
                 spr = self._sprites.get('hero_attack_end_up')
             if spr is None:
-                spr = self._sprites.get('hero_up') or self._sprites.get('hero')
+                spr = (self._sprites.get('hero_up')
+                       or self._sprites.get('hero_back')
+                       or self._sprites.get('hero'))
 
         else:  # down
             if phase == 1:
@@ -1414,7 +1604,7 @@ class Game:
             elif phase == 2:
                 spr = self._sprites.get('hero_attack_end_down')
             if spr is None:
-                spr = self._sprites.get('hero')
+                spr = self._sprites.get('hero_down') or self._sprites.get('hero')
 
         if spr:
             self._game_surf.blit(spr, (x, y))
@@ -1441,5 +1631,15 @@ class Game:
             _r(s,(255,100,100),ccx-1,ccy-3,2,6); _r(s,(255,100,100),ccx-3,ccy-1,6,2)
         elif item.item_type == 'weapon':
             pygame.draw.line(s, WHITE, (ccx-3,ccy+3),(ccx+3,ccy-3), 2)
-        elif item.item_type == 'armor':
+        elif item.item_type in ('armor', 'body'):
             pygame.draw.rect(s, WHITE, (ccx-2,ccy-2,4,4), 1)
+        elif item.item_type == 'head':
+            # 반원 (투구 모양)
+            pygame.draw.arc(s, WHITE, (ccx-3, ccy-3, 6, 6), 0, 3.14159, 2)
+        elif item.item_type == 'off_hand':
+            # 방패: 위쪽 사각형 + 아래 삼각형
+            pygame.draw.rect(s, WHITE, (ccx-3, ccy-3, 6, 4), 1)
+            pygame.draw.line(s, WHITE, (ccx-3, ccy+1), (ccx, ccy+4), 1)
+            pygame.draw.line(s, WHITE, (ccx+3, ccy+1), (ccx, ccy+4), 1)
+        elif item.item_type == 'accessory':
+            pygame.draw.circle(s, WHITE, (ccx, ccy), 3, 1)

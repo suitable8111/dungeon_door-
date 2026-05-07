@@ -1,4 +1,4 @@
-"""스킬 시스템: 단일 WASD 스킬 + 조합 스킬."""
+"""스킬 시스템: 단일 WASD 스킬 + 강화 스킬."""
 
 SKILL_MAX_LEVEL = 3
 
@@ -41,7 +41,7 @@ SKILL_DEFS = [
     {'key': 'D', 'name': '파워어택', 'cooldown_ms': 4000, 'color': (255, 100, 80),  'desc': '강타 2배'},
 ]
 
-# 조합 스킬: combo_id → {name, cooldown_ms, color, level_req, book, desc, keys}
+# 강화 스킬: combo_id → {name, cooldown_ms, color, level_req, book, desc, keys}
 COMBO_SKILL_DEFS = {
     'WS': {
         'name': '파이어볼',
@@ -50,7 +50,7 @@ COMBO_SKILL_DEFS = {
         'level_req': 5,
         'book': 'skillbook_fireball',
         'desc': '전방 화염 투사체',
-        'keys': 'W+S',
+        'keys': 'Ctrl+S',
     },
     'AD': {
         'name': '천둥격',
@@ -59,7 +59,7 @@ COMBO_SKILL_DEFS = {
         'level_req': 7,
         'book': 'skillbook_thunder',
         'desc': '시야 내 전체 공격',
-        'keys': 'A+D',
+        'keys': 'Ctrl+A',
     },
     'WA': {
         'name': '냉기 폭발',
@@ -68,7 +68,7 @@ COMBO_SKILL_DEFS = {
         'level_req': 6,
         'book': 'skillbook_frost',
         'desc': '반경 2칸 범위 피해',
-        'keys': 'W+A',
+        'keys': 'Ctrl+W',
     },
     'WD': {
         'name': '바람 칼날',
@@ -77,7 +77,7 @@ COMBO_SKILL_DEFS = {
         'level_req': 4,
         'book': 'skillbook_wind',
         'desc': '직선 관통 6칸',
-        'keys': 'W+D',
+        'keys': 'Ctrl+D',
     },
 }
 

@@ -18,6 +18,9 @@ class Dungeon:
         self.shop_items     = []        # [(Item, price), ...]
         self.has_shop       = False
 
+        # 테마 인덱스 (50층마다 변경)
+        self.theme_index = 0
+
     def in_bounds(self, x, y):
         return 0 <= x < self.width and 0 <= y < self.height
 

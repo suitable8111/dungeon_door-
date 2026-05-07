@@ -104,8 +104,9 @@ class HUD:
     def render(self, screen, player, messages, floor_num,
                dungeon=None, skill_mgr=None,
                unlocked_combos=None, skill_books=None,
-               skill_levels=None, skill_xp=None):
-        self._top_bar(screen, player, floor_num)
+               skill_levels=None, skill_xp=None,
+               is_test_mode=False):
+        self._top_bar(screen, player, floor_num, is_test_mode=is_test_mode)
         self._right_panel(screen, player, dungeon, skill_mgr,
                           unlocked_combos or set(), skill_books or set(),
                           skill_levels or {}, skill_xp or {})
@@ -138,7 +139,8 @@ class HUD:
     # ------------------------------------------------------------------ #
     def render_menu(self, screen, has_save_file, save_floor=None,
                     sel=0, mouse_pos=(0, 0),
-                    page='main', settings=None, settings_sel=0):
+                    page='main', settings=None, settings_sel=0,
+                    test_floor=None):
         """메인 메뉴 렌더링. 버튼 (pygame.Rect, action_str) 목록을 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -365,6 +367,20 @@ class HUD:
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
+        # ── 우상단 디버그 아이콘 (패널 바깥, test_floor 있을 때만) ──
+        if test_floor is not None:
+            iw, ih = 110, 32
+            ix = W - iw - 10
+            iy = 10
+            irect = pygame.Rect(ix, iy, iw, ih)
+            hov = irect.collidepoint(mouse_pos)
+            pygame.draw.rect(screen, (160, 60, 0) if hov else (120, 40, 0), irect, border_radius=5)
+            pygame.draw.rect(screen, (255, 160, 0), irect, 2, border_radius=5)
+            lbl = self.font_sm.render(f"🐛 B{test_floor}F TEST", True, (255, 220, 100))
+            screen.blit(lbl, (irect.centerx - lbl.get_width() // 2,
+                               irect.centery - lbl.get_height() // 2))
+            buttons.append((irect, 'test_mode'))
+
         return buttons
 
     # ------------------------------------------------------------------ #
@@ -483,7 +499,7 @@ class HUD:
         screen.blit(esc_hint, (bx + (bw - esc_hint.get_width()) // 2, by + bh - 24))
 
     # ------------------------------------------------------------------ #
-    def _top_bar(self, screen, player, floor_num):
+    def _top_bar(self, screen, player, floor_num, is_test_mode=False):
         pygame.draw.rect(screen, (10, 10, 20), (0, 0, WINDOW_WIDTH, TOP_BAR_H))
         pygame.draw.line(screen, (50, 50, 80), (0, TOP_BAR_H - 2), (WINDOW_WIDTH, TOP_BAR_H - 2))
         pygame.draw.line(screen, (25, 25, 45), (0, TOP_BAR_H - 1), (WINDOW_WIDTH, TOP_BAR_H - 1))
@@ -548,6 +564,17 @@ class HUD:
         gx = WINDOW_WIDTH - gold_s.get_width() - 16
         screen.blit(gold_s, (gx, cy - gold_s.get_height() // 2))
 
+        # ── TEST 모드 배지 ──
+        if is_test_mode:
+            badge = self.font_md.render("TEST MODE", True, (20, 20, 20))
+            bw = badge.get_width() + 14
+            bh = TOP_BAR_H - 8
+            bx = gx - bw - 14
+            by = 4
+            pygame.draw.rect(screen, (255, 80, 0), (bx, by, bw, bh))
+            pygame.draw.rect(screen, (255, 160, 60), (bx, by, bw, bh), 1)
+            screen.blit(badge, (bx + 7, by + bh // 2 - badge.get_height() // 2))
+
     def _right_panel(self, screen, player, dungeon, skill_mgr,
                      unlocked_combos=None, skill_books=None,
                      skill_levels=None, skill_xp=None):
@@ -559,43 +586,66 @@ class HUD:
         pygame.draw.line(screen, (50, 50, 80), (rx, 0), (rx, WINDOW_HEIGHT))
         pygame.draw.line(screen, (25, 25, 45), (rx+1, 0), (rx+1, WINDOW_HEIGHT))
 
-        y = TOP_BAR_H + 8
+        y = TOP_BAR_H + 4
 
         # ── 섹션 헤더 유틸 ──────────────────────────────────────────
         def sec_header(key, col):
             nonlocal y
-            pygame.draw.rect(screen, (22, 22, 42), (rx, y, pw, 20))
-            pygame.draw.line(screen, (55, 55, 85), (rx, y+20), (rx+pw, y+20))
-            screen.blit(self.font_sm.render(t(key), True, col), (rx+8, y+3))
-            y += 24
+            pygame.draw.rect(screen, (22, 22, 42), (rx, y, pw, 18))
+            pygame.draw.line(screen, (55, 55, 85), (rx, y+18), (rx+pw, y+18))
+            screen.blit(self.font_sm.render(t(key), True, col), (rx+8, y+2))
+            y += 21
 
         # ── 스탯 ────────────────────────────────────────────────────
         sec_header('sec_stats', LIGHT_GRAY)
-        stats = [('ATK', str(player.attack), WHITE),
-                 ('DEF', str(player.defense), (130, 180, 255)),
-                 ('GOLD', f"{player.gold} G", GOLD_COLOR)]
+        atk_bonus = player.total_attack - player.attack
+        def_bonus = player.total_defense - player.defense
+        atk_str = str(player.total_attack) + (f" (+{atk_bonus})" if atk_bonus else "")
+        def_str = str(player.total_defense) + (f" (+{def_bonus})" if def_bonus else "")
+        stats = [
+            ('공격력',   atk_str,                         WHITE),
+            ('방어력',   def_str,                         (130, 180, 255)),
+            ('공격속도', f"{player.attack_speed:.2f}",    (255, 200, 80)),
+            ('회피율',   f"{player.evasion}%",            (80, 220, 160)),
+            ('이동속도', f"{player.move_speed:.2f}",      (160, 160, 255)),
+        ]
         for label, val, col in stats:
             lbl_s = self.font_sm.render(label, True, (100, 100, 130))
             val_s = self.font_sm.render(val, True, col)
             screen.blit(lbl_s, (rx+8, y))
             screen.blit(val_s, (rx + pw - val_s.get_width() - 8, y))
-            y += 18
-        y += 4
+            y += 15
+        y += 3
 
-        # ── 인벤토리 ─────────────────────────────────────────────────
+        # ── 장착 장비 ───────────────────────────────────────────────
+        sec_header('sec_equip', LIGHT_GRAY)
+        _SLOT_LABELS = {'head': '투구', 'body': '갑옷', 'weapon': '무기',
+                        'off_hand': '보조', 'accessory': '장신구'}
+        for slot, item in player.equipment.items():
+            lbl_s = self.font_sm.render(_SLOT_LABELS.get(slot, slot), True, (100, 100, 130))
+            if item:
+                pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 15))
+                nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
+                val_s = self.font_sm.render(nm, True, item.color)
+            else:
+                val_s = self.font_sm.render('--', True, (40, 40, 60))
+            screen.blit(lbl_s, (rx+8, y))
+            screen.blit(val_s, (rx + pw - val_s.get_width() - 8, y))
+            y += 15
+        y += 3
+
+        # ── 빠른 아이템 (슬롯 1-5) ──────────────────────────────────
         sec_header('sec_inv', LIGHT_GRAY)
-        for i in range(player.max_inventory):
+        for i in range(5):
             if i < len(player.inventory):
                 item = player.inventory[i]
                 nm = item.name if len(item.name) <= 9 else item.name[:8] + '…'
-                slot_col = item.color
-                # 슬롯 배경 (소지 중)
-                pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 18))
-                txt = self.font_sm.render(f"[{i+1}] {nm}", True, slot_col)
+                pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 15))
+                txt = self.font_sm.render(f"[{i+1}] {nm}", True, item.color)
             else:
                 txt = self.font_sm.render(f"[{i+1}] ---", True, (40, 40, 60))
-            screen.blit(txt, (rx+8, y)); y += 19
-        y += 4
+            screen.blit(txt, (rx+8, y)); y += 15
+        y += 3
 
         # ── 단일 스킬 (W/A/S/D) ─────────────────────────────────────
         sec_header('sec_skills', LIGHT_GRAY)
@@ -620,25 +670,25 @@ class HUD:
             label  = f"[{sk}] {t(nk)}{lv_str}" if nk else f"[{sk}] {sdef['name']}{lv_str}"
 
             if ready:
-                pygame.draw.rect(screen, (20, 28, 50), (rx+6, y-1, pw-12, 28))
+                pygame.draw.rect(screen, (20, 28, 50), (rx+6, y-1, pw-12, 24))
             name_s = self.font_sm.render(label, True, nc)
             screen.blit(name_s, (rx+8, y))
             if not ready:
                 rem_s = self.font_sm.render(f"{rem:.1f}s", True, (90, 90, 110))
                 screen.blit(rem_s, (rx + pw - rem_s.get_width() - 8, y))
-            y += 15
-            _bar(screen, rx+8, y, bw, 6, int(bw*(1-frac)), bw,
+            y += 13
+            _bar(screen, rx+8, y, bw, 5, int(bw*(1-frac)), bw,
                  sdef['color'] if ready else (40, 40, 65), (18, 18, 35))
-            y += 8
+            y += 6
             if not is_max:
                 xp_cur = sx.get(sk, 0)
                 xp_req = SKILL_XP_REQ[sk][lvl - 1]
                 _bar(screen, rx+8, y, bw, 3, xp_cur, xp_req, (80, 160, 80), (12, 20, 12))
-                y += 5
+                y += 4
             y += 2
-        y += 4
+        y += 3
 
-        # ── 조합 스킬 ────────────────────────────────────────────────
+        # ── 강화 스킬 ────────────────────────────────────────────────
         from core.skills import COMBO_SKILL_DEFS
         sec_header('sec_combo', (130, 110, 200))
         uc = unlocked_combos or set()
@@ -652,7 +702,7 @@ class HUD:
             key_lbl = f"[{cdef['keys']}]"
             if unlocked:
                 col = cdef['color'] if ready else (70, 70, 100)
-                pygame.draw.rect(screen, (18, 20, 38), (rx+6, y-1, pw-12, 14))
+                pygame.draw.rect(screen, (18, 20, 38), (rx+6, y-1, pw-12, 13))
                 ks = self.font_sm.render(key_lbl, True, col)
                 ns = self.font_sm.render(cdef['name'], True, col)
                 screen.blit(ks, (rx+8, y))
@@ -672,8 +722,8 @@ class HUD:
                 ns  = self.font_sm.render(f"??? Lv.{cdef['level_req']}", True, col)
                 screen.blit(ks, (rx+8, y))
                 screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
-            y += 14
-        y += 4
+            y += 13
+        y += 3
 
         # ── 조작법 ──────────────────────────────────────────────────
         sec_header('sec_controls', (70, 70, 100))
@@ -683,6 +733,8 @@ class HUD:
             (t('ctrl_skill'), t('ctrl_skill_d')),
             (t('ctrl_combo'), t('ctrl_combo_d')),
             (t('ctrl_item'),  t('ctrl_item_d')),
+            (t('ctrl_inv'),   t('ctrl_inv_d')),
+            (t('ctrl_equip'), t('ctrl_equip_d')),
             (t('ctrl_esc'),   t('ctrl_esc_d')),
         ]
         for key, desc in hints:
@@ -690,8 +742,8 @@ class HUD:
             d_s = self.font_sm.render(desc, True, (70, 70, 95))
             screen.blit(k_s, (rx+8, y))
             screen.blit(d_s, (rx + pw - d_s.get_width() - 8, y))
-            y += 16
-        y += 4
+            y += 14
+        y += 3
 
         # ── 미니맵 ──────────────────────────────────────────────────
         sec_header('sec_minimap', LIGHT_GRAY)
@@ -813,6 +865,206 @@ class HUD:
 
     def _label(self, screen, text, x, y, color):
         screen.blit(self.font_sm.render(text, True, color), (x, y))
+
+    # ------------------------------------------------------------------ #
+    def render_inventory(self, screen, player, sel):
+        """인벤토리 화면 오버레이."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 200))
+        screen.blit(ov, (0, 0))
+
+        cols, rows = 5, 4
+        cell = 140
+        pad  = 6
+        pw   = cols * cell + pad * 2
+        ph   = 56 + rows * cell + pad * 2 + 60
+        bx   = W // 2 - pw // 2
+        by   = H // 2 - ph // 2
+
+        pygame.draw.rect(screen, (12, 12, 26), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (80, 80, 120), (bx, by, pw, ph), 2, border_radius=6)
+
+        # 제목
+        title = self.font_lg.render(t('inv_title'), True, GOLD_COLOR)
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 12))
+        pygame.draw.line(screen, (60, 60, 90), (bx+12, by+46), (bx+pw-12, by+46))
+
+        # 슬롯 그리드
+        gx = bx + pad
+        gy = by + 56
+        inv = player.inventory
+        for i in range(player.max_inventory):
+            col_i = i % cols
+            row_i = i // cols
+            sx = gx + col_i * cell
+            sy = gy + row_i * cell
+
+            is_sel = (i == sel)
+            if is_sel:
+                pygame.draw.rect(screen, (50, 50, 90), (sx, sy, cell-2, cell-2), border_radius=4)
+                pygame.draw.rect(screen, GOLD_COLOR,   (sx, sy, cell-2, cell-2), 2, border_radius=4)
+            else:
+                pygame.draw.rect(screen, (20, 20, 38), (sx, sy, cell-2, cell-2), border_radius=4)
+                pygame.draw.rect(screen, (45, 45, 70), (sx, sy, cell-2, cell-2), 1, border_radius=4)
+
+            if i < len(inv):
+                item = inv[i]
+                # 아이콘 (색상 사각형)
+                ico_size = 28
+                ico_x = sx + (cell - 2 - ico_size) // 2
+                ico_y = sy + 10
+                pygame.draw.rect(screen, item.color, (ico_x, ico_y, ico_size, ico_size), border_radius=3)
+                pygame.draw.rect(screen, tuple(max(0, c-60) for c in item.color),
+                                 (ico_x, ico_y, ico_size, ico_size), 1, border_radius=3)
+                # 이름 (2줄로 줄임)
+                name = item.name
+                if len(name) > 5:
+                    lines = [name[:5], name[5:10]]
+                else:
+                    lines = [name]
+                for li, ln in enumerate(lines):
+                    ln_s = self.font_sm.render(ln, True, WHITE if is_sel else LIGHT_GRAY)
+                    screen.blit(ln_s, (sx + (cell - 2 - ln_s.get_width()) // 2, ico_y + ico_size + 4 + li * 14))
+                # 장착 중 표시
+                for eitem in player.equipment.values():
+                    if eitem is item:
+                        eq_s = self.font_sm.render("E", True, GOLD_COLOR)
+                        screen.blit(eq_s, (sx + cell - 2 - eq_s.get_width() - 3, sy + 3))
+                        break
+            else:
+                empty_s = self.font_sm.render(str(i+1), True, (35, 35, 55))
+                screen.blit(empty_s, (sx + (cell-2-empty_s.get_width())//2,
+                                       sy + (cell-2-empty_s.get_height())//2))
+
+        # 선택된 아이템 정보
+        info_y = gy + rows * cell + pad + 4
+        pygame.draw.line(screen, (50, 50, 80), (bx+12, info_y), (bx+pw-12, info_y))
+        if sel < len(inv):
+            item = inv[sel]
+            type_map = {'weapon': '무기', 'armor': '갑옷', 'head': '투구',
+                        'off_hand': '보조무기', 'accessory': '장신구',
+                        'consumable': '소비', 'skillbook': '스킬북'}
+            tname = type_map.get(item.item_type, item.item_type)
+            info = f"{item.name}  [{tname}]"
+            if item.equip_slot:
+                if item.effect == 'stat_up_all':
+                    info += f"  ATK+{item.value} DEF+{item.value}"
+                elif item.effect == 'attack_up':
+                    info += f"  ATK +{item.value}"
+                elif item.effect == 'defense_up':
+                    info += f"  DEF +{item.value}"
+            elif item.effect == 'heal':
+                info += f"  HP +{item.value}"
+            info_s = self.font_sm.render(info, True, item.color)
+            screen.blit(info_s, (bx + (pw - info_s.get_width()) // 2, info_y + 6))
+
+        # 힌트
+        hint_s = self.font_sm.render(t('inv_hint'), True, (80, 80, 110))
+        screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 20))
+
+    # ------------------------------------------------------------------ #
+    def render_equipment(self, screen, player, sel, player_spr=None):
+        """장비 장착 화면 — 페이퍼돌 레이아웃."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 200))
+        screen.blit(ov, (0, 0))
+
+        pw, ph = 520, 458
+        bx = W // 2 - pw // 2
+        by = H // 2 - ph // 2
+
+        pygame.draw.rect(screen, (12, 12, 26), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (80, 80, 120), (bx, by, pw, ph), 2, border_radius=6)
+
+        title = self.font_lg.render(t('equip_title'), True, GOLD_COLOR)
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 12))
+        pygame.draw.line(screen, (60, 60, 90), (bx+12, by+46), (bx+pw-12, by+46))
+
+        # ── 캐릭터 기준점 ───────────────────────────────────────────
+        char_cx = bx + pw // 2
+        char_cy = by + 218
+
+        # ── 슬롯 정의: (key, label_key, color, (dx, dy)) ────────────
+        # dx/dy: top-left of 110×54 slot box relative to char_cx/char_cy
+        SW, SH = 110, 54
+        SLOT_DEFS = [
+            ('head',      'slot_head',      (220, 210, 140), (-SW//2, -128)),
+            ('body',      'slot_body',      (130, 160, 200), (-SW//2, +48)),
+            ('weapon',    'slot_weapon',    (220, 190, 100), (+76,    -SH//2)),
+            ('off_hand',  'slot_off_hand',  (180, 140, 210), (-186,   -SH//2)),
+            ('accessory', 'slot_accessory', (140, 210, 165), (-SW//2, +122)),
+        ]
+
+        # ── 연결선 ──────────────────────────────────────────────────
+        line_col = (50, 50, 75)
+        # head ↕ body
+        head_bot = (char_cx, char_cy - 128 + SH)
+        body_top = (char_cx, char_cy + 48)
+        pygame.draw.line(screen, line_col, head_bot, (char_cx, char_cy - 44), 1)
+        pygame.draw.line(screen, line_col, (char_cx, char_cy + 22), body_top, 1)
+        # body ↕ accessory
+        acc_top = (char_cx, char_cy + 122)
+        pygame.draw.line(screen, line_col, (char_cx, char_cy + 48 + SH), acc_top, 1)
+        # weapon ←→ off_hand (horizontal, through character)
+        weap_left  = (char_cx + 76,          char_cy)
+        ofhd_right = (char_cx - 186 + SW,    char_cy)
+        pygame.draw.line(screen, line_col, ofhd_right, (char_cx - 38, char_cy), 1)
+        pygame.draw.line(screen, line_col, (char_cx + 38, char_cy), weap_left,  1)
+
+        # ── 캐릭터 그림 ─────────────────────────────────────────────
+        if player_spr:
+            spr = pygame.transform.scale(player_spr, (64, 64))
+            screen.blit(spr, (char_cx - 32, char_cy - 44))
+        else:
+            fig_col = (100, 120, 160)
+            pygame.draw.circle(screen, fig_col, (char_cx, char_cy - 32), 14)
+            pygame.draw.rect(screen, fig_col, (char_cx - 11, char_cy - 18, 22, 32))
+            pygame.draw.line(screen, fig_col, (char_cx - 11, char_cy - 10), (char_cx - 28, char_cy + 8), 3)
+            pygame.draw.line(screen, fig_col, (char_cx + 11, char_cy - 10), (char_cx + 28, char_cy + 8), 3)
+            pygame.draw.line(screen, fig_col, (char_cx - 7,  char_cy + 14), (char_cx - 12, char_cy + 38), 3)
+            pygame.draw.line(screen, fig_col, (char_cx + 7,  char_cy + 14), (char_cx + 12, char_cy + 38), 3)
+
+        # ── 슬롯 박스 ───────────────────────────────────────────────
+        for i, (slot_key, label_key, slot_col, (dx, dy)) in enumerate(SLOT_DEFS):
+            sx = char_cx + dx
+            sy = char_cy + dy
+            item   = player.equipment.get(slot_key)
+            is_sel = (i == sel)
+
+            bg_col = (48, 44, 82) if is_sel else (18, 18, 38)
+            bd_col = GOLD_COLOR   if is_sel else slot_col
+            bd_w   = 2 if is_sel else 1
+            pygame.draw.rect(screen, bg_col, (sx, sy, SW, SH), border_radius=4)
+            pygame.draw.rect(screen, bd_col, (sx, sy, SW, SH), bd_w, border_radius=4)
+
+            lbl_col = GOLD_COLOR if is_sel else slot_col
+            lbl_s   = self.font_sm.render(t(label_key), True, lbl_col)
+            screen.blit(lbl_s, (sx + (SW - lbl_s.get_width()) // 2, sy + 4))
+
+            if item:
+                ico = 10
+                pygame.draw.rect(screen, item.color, (sx + 5, sy + SH - ico - 5, ico, ico), border_radius=2)
+                nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
+                nm_s = self.font_sm.render(f"+{item.value} {nm}", True,
+                                           WHITE if is_sel else LIGHT_GRAY)
+                screen.blit(nm_s, (sx + 17, sy + SH - nm_s.get_height() - 4))
+            else:
+                none_s = self.font_sm.render(t('equip_none'), True, (55, 55, 80))
+                screen.blit(none_s, (sx + (SW - none_s.get_width()) // 2,
+                                     sy + SH - none_s.get_height() - 4))
+
+        # ── 스탯 + 힌트 ─────────────────────────────────────────────
+        sep_y = by + ph - 56
+        pygame.draw.line(screen, (50, 50, 80), (bx+12, sep_y), (bx+pw-12, sep_y))
+        stat_str = (f"ATK {player.total_attack}   DEF {player.total_defense}   "
+                    f"SPD {player.attack_speed:.2f}   EVA {player.evasion}%")
+        stat_s = self.font_sm.render(stat_str, True, (130, 130, 160))
+        screen.blit(stat_s, (bx + (pw - stat_s.get_width()) // 2, sep_y + 6))
+
+        hint_s = self.font_sm.render(t('equip_hint'), True, (80, 80, 110))
+        screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 22))
 
 
 # ---- helpers ----

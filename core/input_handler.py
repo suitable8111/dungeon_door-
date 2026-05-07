@@ -1,15 +1,13 @@
 import pygame
 
-# 첫 입력 후 연속 이동 시작까지 대기 시간 (ms)
-MOVE_INITIAL_DELAY = 220
-# 연속 이동 간격 (ms)
-MOVE_REPEAT_RATE   = 90
-# 두 WASD 키가 이 시간 이내에 눌리면 조합으로 처리 (ms)
-_COMBO_WINDOW_MS = 150
+# 첫 입력 후 연속 이동 시작까지 대기 시간 (ms) — move_speed=1.0 기준
+MOVE_INITIAL_DELAY = 300
+# 연속 이동 간격 (ms) — move_speed=1.0 기준 (Player.BASE_MOVE_REPEAT_MS 와 동기)
+MOVE_REPEAT_RATE   = 220
 
 
 class InputHandler:
-    # 이동: 방향키 + 숫자패드만 사용 (WASD 제거)
+    # 이동: 방향키 + 숫자패드만 사용
     _MOVE = {
         pygame.K_UP:    (0, -1),
         pygame.K_DOWN:  (0,  1),
@@ -25,35 +23,38 @@ class InputHandler:
         pygame.K_SPACE, pygame.K_PERIOD, pygame.K_KP5,
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_r, pygame.K_ESCAPE, pygame.K_RETURN,
-        pygame.K_l,
+        pygame.K_l, pygame.K_i, pygame.K_o,
     }
     # WASD → 스킬 키 문자
     _WASD = {
         pygame.K_w: 'W', pygame.K_a: 'A',
         pygame.K_s: 'S', pygame.K_d: 'D',
     }
-    # 조합 쌍 → 조합 ID
-    _COMBO_PAIRS = {
-        frozenset({'W', 'S'}): 'WS',   # 파이어볼
-        frozenset({'A', 'D'}): 'AD',   # 천둥격
-        frozenset({'W', 'A'}): 'WA',   # 냉기 폭발
-        frozenset({'W', 'D'}): 'WD',   # 바람 칼날
+    # Ctrl + WASD → 강화 스킬 (Ctrl+W=WA, Ctrl+A=AD, Ctrl+S=WS, Ctrl+D=WD)
+    _CTRL_COMBO = {
+        pygame.K_w: 'WA',
+        pygame.K_a: 'AD',
+        pygame.K_s: 'WS',
+        pygame.K_d: 'WD',
     }
 
     def __init__(self):
-        self._prev_single     = set()
-        self._held_key        = None
-        self._move_timer      = 0.0
-        # WASD 조합 감지 상태
-        self._wasd_prev       = set()   # 이전 프레임에 눌린 WASD 문자 집합
-        self._wasd_press_time = {}      # char -> 최초 눌린 시각(ms)
-        self._wasd_fired      = set()   # 이미 단일/조합으로 처리된 문자
+        self._prev_single  = set()
+        self._held_key     = None
+        self._move_timer   = 0.0
+        self._move_speed   = 1.0
+        self._wasd_prev    = set()
+        self._wasd_fired   = set()
+        self._ctrl_prev    = set()  # Ctrl 조합 중복 방지
+
+    def set_move_speed(self, speed: float):
+        self._move_speed = max(0.5, float(speed))
 
     def update(self, dt_ms):
         """매 프레임 호출. 발생한 액션 리스트를 반환."""
         keys    = pygame.key.get_pressed()
         actions = []
-        now     = pygame.time.get_ticks()
+        ctrl    = keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]
 
         # ── 단일 입력 감지 ────────────────────────────────────────────
         curr_single  = {k for k in self._SINGLE_KEYS if keys[k]}
@@ -73,49 +74,40 @@ class InputHandler:
                 actions.append({'type': 'restart'})
             elif k == pygame.K_l:
                 actions.append({'type': 'load'})
+            elif k == pygame.K_i:
+                actions.append({'type': 'inventory'})
+            elif k == pygame.K_o:
+                actions.append({'type': 'equipment'})
             elif k == pygame.K_ESCAPE:
                 actions.append({'type': 'escape'})
 
-        # ── WASD 조합 / 단일 스킬 감지 ──────────────────────────────
+        # ── Ctrl+WASD → 조합 스킬 ────────────────────────────────────
+        ctrl_curr = {k for k in self._CTRL_COMBO if keys[k]} if ctrl else set()
+        ctrl_just = ctrl_curr - self._ctrl_prev
+        self._ctrl_prev = ctrl_curr
+        for k in ctrl_just:
+            actions.append({'type': 'combo_skill', 'combo': self._CTRL_COMBO[k]})
+
+        # ── WASD 단일 스킬 (Ctrl 없을 때만) ──────────────────────────
         wasd_curr          = {char for k, char in self._WASD.items() if keys[k]}
         wasd_just_pressed  = wasd_curr - self._wasd_prev
         wasd_just_released = self._wasd_prev - wasd_curr
 
-        # 새로 눌린 키: 시각 기록 + 조합 감지
-        for char in wasd_just_pressed:
-            self._wasd_press_time[char] = now
-            if char in self._wasd_fired:
-                continue
-            # 현재 눌린 다른 WASD 키와 조합 여부 확인
-            for other in (wasd_curr - {char}):
-                if other in self._wasd_fired:
-                    continue
-                if now - self._wasd_press_time.get(other, 0) <= _COMBO_WINDOW_MS:
-                    pair = frozenset({char, other})
-                    if pair in self._COMBO_PAIRS:
-                        actions.append({'type': 'combo_skill',
-                                        'combo': self._COMBO_PAIRS[pair]})
-                        self._wasd_fired.add(char)
-                        self._wasd_fired.add(other)
-                        break
-
-        # 조합 창(150ms)을 넘긴 키 → 단일 스킬로 처리
-        for char in wasd_curr:
-            if char not in self._wasd_fired:
-                if now - self._wasd_press_time.get(char, now) > _COMBO_WINDOW_MS:
+        if not ctrl:
+            for char in wasd_just_pressed:
+                if char not in self._wasd_fired:
                     actions.append({'type': 'skill', 'skill': char})
                     self._wasd_fired.add(char)
 
-        # 떼어진 키: 아직 미처리라면 단일 스킬로 즉시 처리
         for char in wasd_just_released:
-            if char not in self._wasd_fired:
-                actions.append({'type': 'skill', 'skill': char})
-            self._wasd_press_time.pop(char, None)
             self._wasd_fired.discard(char)
 
         self._wasd_prev = wasd_curr
 
-        # ── 이동 (방향키 꾹 누름 지원) ────────────────────────────────
+        # ── 이동 (방향키 꾹 누름 지원, 속도 연동) ────────────────────
+        repeat_rate   = max(60, int(MOVE_REPEAT_RATE / self._move_speed))
+        initial_delay = max(80, int(MOVE_INITIAL_DELAY / self._move_speed))
+
         active = None
         for k, vec in self._MOVE.items():
             if keys[k]:
@@ -126,12 +118,12 @@ class InputHandler:
             k, (dx, dy) = active
             if self._held_key != k:
                 self._held_key   = k
-                self._move_timer = MOVE_INITIAL_DELAY
+                self._move_timer = initial_delay
                 actions.append({'type': 'move', 'dx': dx, 'dy': dy})
             else:
                 self._move_timer -= dt_ms
                 if self._move_timer <= 0:
-                    self._move_timer += MOVE_REPEAT_RATE
+                    self._move_timer += repeat_rate
                     actions.append({'type': 'move', 'dx': dx, 'dy': dy})
         else:
             self._held_key   = None

@@ -52,7 +52,11 @@ class Enemy(Entity):
 
     # ------------------------------------------------------------------ #
     def _do_attack(self, player, messages):
-        dmg = max(1, self.attack - player.defense + random.randint(0, 2))
+        # 회피 판정
+        if random.random() < player.evasion / 100:
+            messages.append((f"{self.name}의 공격을 회피했습니다!", 'good'))
+            return
+        dmg = max(1, self.attack - player.total_defense + random.randint(0, 2))
         player.take_damage(dmg)
         messages.append((f"{self.name}이(가) {dmg} 피해를 입혔습니다!", 'bad'))
 

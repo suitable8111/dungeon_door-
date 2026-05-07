@@ -17,9 +17,23 @@ _T: dict[str, dict[str, str]] = {
     # ── HUD 섹션 헤더 ──────────────────────────────────────────────────────
     'sec_hp':        {'ko': 'HP',               'en': 'HP'},
     'sec_stats':     {'ko': '스탯',             'en': 'Stats'},
-    'sec_inv':       {'ko': '인벤토리  [1-5]',  'en': 'Inventory [1-5]'},
+    'sec_inv':       {'ko': '빠른 아이템  [1-5]', 'en': 'Quick Items [1-5]'},
+    'sec_equip':     {'ko': '장착 장비  [O]',    'en': 'Equipment  [O]'},
+    'inv_title':     {'ko': '인  벤  토  리',     'en': 'Inventory'},
+    'inv_hint':      {'ko': '↑↓←→ 이동   Enter 사용/장착   ESC 닫기',
+                      'en': '↑↓←→ Move   Enter Use/Equip   ESC Close'},
+    'equip_title':     {'ko': '장  비  장  착',     'en': 'Equipment'},
+    'equip_hint':      {'ko': '↑↓←→ 이동   Enter 해제   ESC 닫기',
+                        'en': '↑↓←→ Move   Enter Unequip   ESC Close'},
+    'equip_none':      {'ko': '-- 없음 --',         'en': '-- None --'},
+    'slot_weapon':     {'ko': '주  무  기',          'en': 'Weapon'},
+    'slot_armor':      {'ko': '갑  옷',              'en': 'Armor'},
+    'slot_head':       {'ko': '머  리',              'en': 'Head'},
+    'slot_body':       {'ko': '몸  통',              'en': 'Body'},
+    'slot_off_hand':   {'ko': '보조무기',             'en': 'Off-Hand'},
+    'slot_accessory':  {'ko': '장신구',              'en': 'Accessory'},
     'sec_skills':    {'ko': '스킬  [W/A/S/D]',  'en': 'Skills [W/A/S/D]'},
-    'sec_combo':     {'ko': '조합 스킬',         'en': 'Combo Skills'},
+    'sec_combo':     {'ko': '강화 스킬',          'en': 'Enhanced Skills'},
     'sec_controls':  {'ko': '조작법',            'en': 'Controls'},
     'sec_minimap':   {'ko': '미니맵',            'en': 'Minimap'},
     'inv_empty':     {'ko': '---',              'en': '---'},
@@ -31,10 +45,14 @@ _T: dict[str, dict[str, str]] = {
     'ctrl_atk_d':  {'ko': '공격',          'en': 'Attack'},
     'ctrl_skill':  {'ko': 'W/A/S/D',      'en': 'W/A/S/D'},
     'ctrl_skill_d':{'ko': '스킬',          'en': 'Skills'},
-    'ctrl_combo':  {'ko': 'W+S / A+D …',  'en': 'W+S / A+D …'},
-    'ctrl_combo_d':{'ko': '조합 스킬',    'en': 'Combo'},
+    'ctrl_combo':  {'ko': 'Ctrl+W/A/S/D',  'en': 'Ctrl+W/A/S/D'},
+    'ctrl_combo_d':{'ko': '강화 스킬',    'en': 'Enhanced'},
     'ctrl_item':   {'ko': '1-5',           'en': '1-5'},
     'ctrl_item_d': {'ko': '아이템',        'en': 'Items'},
+    'ctrl_inv':    {'ko': 'I',             'en': 'I'},
+    'ctrl_inv_d':  {'ko': '인벤토리',     'en': 'Inventory'},
+    'ctrl_equip':  {'ko': 'O',            'en': 'O'},
+    'ctrl_equip_d':{'ko': '장비',         'en': 'Equipment'},
     'ctrl_esc':    {'ko': 'ESC',           'en': 'ESC'},
     'ctrl_esc_d':  {'ko': '저장/메뉴',    'en': 'Save/Menu'},
 
@@ -150,7 +168,7 @@ _T: dict[str, dict[str, str]] = {
     'skill_wind':       {'ko': '💨 바람 칼날! {}마리 관통',        'en': '💨 Wind! Pierce {}'},
     'skill_wind_m':     {'ko': '💨 바람 칼날! 빗나감',              'en': '💨 Wind Blade! Miss'},
 
-    # ── 조합 스킬 해금 메시지 ─────────────────────────────────────────────
+    # ── 강화 스킬 해금 메시지 ─────────────────────────────────────────────
     'combo_unlock':     {'ko': '★ {} 해금!',                       'en': '★ {} unlocked!'},
     'combo_need_level': {'ko': '{} 스킬북 획득! (Lv.{} 달성 시 해금)',
                          'en': '{} skill book! (Unlock at Lv.{})'},
@@ -175,6 +193,11 @@ _T: dict[str, dict[str, str]] = {
     'item_def':     {'ko': '{} 장착! DEF +{}',           'en': '{} equipped! DEF +{}'},
     'item_all':     {'ko': '{} 착용! ATK+{} DEF+{}',     'en': '{} worn! ATK+{} DEF+{}'},
     'item_use':     {'ko': '{} 사용',                    'en': '{} used'},
+
+    # ── 테마 / 999층 ──────────────────────────────────────────────────
+    'new_theme':    {'ko': '◆ 새로운 구역: {}',          'en': '◆ New Zone: {}'},
+    'victory':      {'ko': '★★★ 축하합니다! 999층 클리어! ★★★',
+                     'en': '★★★ Congratulations! Floor 999 cleared! ★★★'},
 }
 
 

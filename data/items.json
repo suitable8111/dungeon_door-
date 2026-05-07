@@ -25,7 +25,21 @@
     "color": [205, 210, 230],
     "type": "weapon",
     "effect": "attack_up",
-    "value": 4
+    "value": 5
+  },
+  "broad_sword": {
+    "name": "브로드소드",
+    "color": [220, 225, 245],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 9
+  },
+  "great_sword": {
+    "name": "대검",
+    "color": [240, 240, 255],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 14
   },
   "leather_armor": {
     "name": "가죽 갑옷",
@@ -39,13 +53,83 @@
     "color": [160, 165, 185],
     "type": "armor",
     "effect": "defense_up",
-    "value": 2
+    "value": 3
   },
   "plate_armor": {
     "name": "플레이트 갑옷",
     "color": [200, 205, 215],
     "type": "armor",
     "effect": "defense_up",
+    "value": 5
+  },
+  "mythril_armor": {
+    "name": "미스릴 갑옷",
+    "color": [160, 210, 230],
+    "type": "armor",
+    "effect": "defense_up",
+    "value": 8
+  },
+  "leather_helm": {
+    "name": "가죽 투구",
+    "color": [170, 130, 75],
+    "type": "head",
+    "effect": "defense_up",
+    "value": 1
+  },
+  "iron_helm": {
+    "name": "철 투구",
+    "color": [150, 155, 175],
+    "type": "head",
+    "effect": "defense_up",
+    "value": 2
+  },
+  "knight_helm": {
+    "name": "기사 투구",
+    "color": [195, 200, 220],
+    "type": "head",
+    "effect": "defense_up",
+    "value": 4
+  },
+  "wooden_shield": {
+    "name": "나무 방패",
+    "color": [160, 110, 60],
+    "type": "off_hand",
+    "effect": "defense_up",
+    "value": 1
+  },
+  "iron_shield": {
+    "name": "철 방패",
+    "color": [145, 150, 170],
+    "type": "off_hand",
+    "effect": "defense_up",
+    "value": 3
+  },
+  "tower_shield": {
+    "name": "타워 방패",
+    "color": [180, 185, 205],
+    "type": "off_hand",
+    "effect": "defense_up",
+    "value": 5
+  },
+  "silver_ring": {
+    "name": "은반지",
+    "color": [200, 200, 225],
+    "type": "accessory",
+    "effect": "stat_up_all",
+    "value": 1
+  },
+  "war_pendant": {
+    "name": "전투 목걸이",
+    "color": [225, 135, 50],
+    "type": "accessory",
+    "effect": "attack_up",
+    "value": 3
+  },
+  "magic_stone": {
+    "name": "마법석",
+    "color": [130, 80, 225],
+    "type": "accessory",
+    "effect": "stat_up_all",
     "value": 3
   },
   "teleport_scroll": {
