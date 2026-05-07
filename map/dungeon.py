@@ -42,6 +42,13 @@ class Dungeon:
     def remove_item(self, item):
         self.items.remove(item)
 
+    def reveal_all(self):
+        """테스트 모드: 전체 맵과 몬스터를 즉시 공개."""
+        for row in self.tiles:
+            for t in row:
+                t.visible  = True
+                t.explored = True
+
     def update_visibility(self, px, py, radius=7):
         for row in self.tiles:
             for t in row:

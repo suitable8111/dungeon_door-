@@ -7,6 +7,7 @@ class TileType(Enum):
     FLOOR = auto()
     STAIRS_DOWN = auto()
     SHOP = auto()
+    DOOR = auto()
 
 
 @dataclass
@@ -32,3 +33,7 @@ class Tile:
     @classmethod
     def shop(cls):
         return cls(TileType.SHOP, blocked=False, block_sight=False)
+
+    @classmethod
+    def door(cls):
+        return cls(TileType.DOOR, blocked=False, block_sight=True)

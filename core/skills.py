@@ -112,6 +112,10 @@ class SkillManager:
         if ms > 0:
             self._cd[key] = ms
 
+    def reset(self, key: str):
+        """쿨다운 즉시 초기화 — 적 히트 시 재사용 허용."""
+        self._cd[key] = 0
+
     def _get_max_cd(self, key: str) -> int:
         if key in self._max_cd_override:
             return self._max_cd_override[key]

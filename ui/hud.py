@@ -586,15 +586,15 @@ class HUD:
         pygame.draw.line(screen, (50, 50, 80), (rx, 0), (rx, WINDOW_HEIGHT))
         pygame.draw.line(screen, (25, 25, 45), (rx+1, 0), (rx+1, WINDOW_HEIGHT))
 
-        y = TOP_BAR_H + 4
+        y = TOP_BAR_H + 2
 
         # ── 섹션 헤더 유틸 ──────────────────────────────────────────
         def sec_header(key, col):
             nonlocal y
-            pygame.draw.rect(screen, (22, 22, 42), (rx, y, pw, 18))
-            pygame.draw.line(screen, (55, 55, 85), (rx, y+18), (rx+pw, y+18))
-            screen.blit(self.font_sm.render(t(key), True, col), (rx+8, y+2))
-            y += 21
+            pygame.draw.rect(screen, (22, 22, 42), (rx, y, pw, 16))
+            pygame.draw.line(screen, (55, 55, 85), (rx, y+16), (rx+pw, y+16))
+            screen.blit(self.font_sm.render(t(key), True, col), (rx+8, y+1))
+            y += 18
 
         # ── 스탯 ────────────────────────────────────────────────────
         sec_header('sec_stats', LIGHT_GRAY)
@@ -614,8 +614,8 @@ class HUD:
             val_s = self.font_sm.render(val, True, col)
             screen.blit(lbl_s, (rx+8, y))
             screen.blit(val_s, (rx + pw - val_s.get_width() - 8, y))
-            y += 15
-        y += 3
+            y += 14
+        y += 2
 
         # ── 장착 장비 ───────────────────────────────────────────────
         sec_header('sec_equip', LIGHT_GRAY)
@@ -631,8 +631,8 @@ class HUD:
                 val_s = self.font_sm.render('--', True, (40, 40, 60))
             screen.blit(lbl_s, (rx+8, y))
             screen.blit(val_s, (rx + pw - val_s.get_width() - 8, y))
-            y += 15
-        y += 3
+            y += 14
+        y += 2
 
         # ── 빠른 아이템 (슬롯 1-5) ──────────────────────────────────
         sec_header('sec_inv', LIGHT_GRAY)
@@ -640,12 +640,12 @@ class HUD:
             if i < len(player.inventory):
                 item = player.inventory[i]
                 nm = item.name if len(item.name) <= 9 else item.name[:8] + '…'
-                pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 15))
+                pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 14))
                 txt = self.font_sm.render(f"[{i+1}] {nm}", True, item.color)
             else:
                 txt = self.font_sm.render(f"[{i+1}] ---", True, (40, 40, 60))
-            screen.blit(txt, (rx+8, y)); y += 15
-        y += 3
+            screen.blit(txt, (rx+8, y)); y += 14
+        y += 2
 
         # ── 단일 스킬 (W/A/S/D) ─────────────────────────────────────
         sec_header('sec_skills', LIGHT_GRAY)
@@ -723,27 +723,7 @@ class HUD:
                 screen.blit(ks, (rx+8, y))
                 screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
             y += 13
-        y += 3
-
-        # ── 조작법 ──────────────────────────────────────────────────
-        sec_header('sec_controls', (70, 70, 100))
-        hints = [
-            (t('ctrl_move'),  t('ctrl_move_d')),
-            (t('ctrl_atk'),   t('ctrl_atk_d')),
-            (t('ctrl_skill'), t('ctrl_skill_d')),
-            (t('ctrl_combo'), t('ctrl_combo_d')),
-            (t('ctrl_item'),  t('ctrl_item_d')),
-            (t('ctrl_inv'),   t('ctrl_inv_d')),
-            (t('ctrl_equip'), t('ctrl_equip_d')),
-            (t('ctrl_esc'),   t('ctrl_esc_d')),
-        ]
-        for key, desc in hints:
-            k_s = self.font_sm.render(key, True, (120, 140, 180))
-            d_s = self.font_sm.render(desc, True, (70, 70, 95))
-            screen.blit(k_s, (rx+8, y))
-            screen.blit(d_s, (rx + pw - d_s.get_width() - 8, y))
-            y += 14
-        y += 3
+        y += 2
 
         # ── 미니맵 ──────────────────────────────────────────────────
         sec_header('sec_minimap', LIGHT_GRAY)
@@ -761,11 +741,14 @@ class HUD:
                     continue
                 tt = tile.tile_type
                 if not tile.visible:
-                    col = (30,30,42) if tt == TileType.WALL else (40,40,55)
+                    if tt == TileType.DOOR: col = (80, 40, 120)
+                    elif tt == TileType.WALL: col = (30, 30, 42)
+                    else: col = (40, 40, 55)
                 else:
                     if tt == TileType.WALL:        col = (60,60,80)
                     elif tt == TileType.STAIRS_DOWN: col = STAIRS_LIT
                     elif tt == TileType.SHOP:        col = SHOP_COLOR
+                    elif tt == TileType.DOOR:        col = (160, 80, 255)
                     else:                            col = (75,75,100)
                 pygame.draw.rect(screen, col, (ox+mx*scale, oy+my*scale, scale, scale))
 

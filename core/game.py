@@ -1,3 +1,4 @@
+import math
 import os
 import random
 import sys
@@ -117,171 +118,7 @@ def draw_hp_bar(s, x, y, hp, max_hp):
     if ratio > 0:
         _r(s,(200+int(55*(1-ratio)),int(210*ratio),40),x+2,y+2,max(1,int(bw*ratio)),4)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 적 스프라이트
-# ─────────────────────────────────────────────────────────────────────────────
-def draw_rat(s,x,y,col):
-    R,G,B=col; D=(max(0,R-55),max(0,G-55),max(0,B-40))
-    PINK=(220,150,145); BLK=(0,0,0); RED=(210,50,50)
-    pygame.draw.arc(s,D,(x+1,y+20,12,8),0.3,2.8,2)
-    pygame.draw.ellipse(s,col,(x+5,y+15,22,13)); pygame.draw.ellipse(s,D,(x+5,y+22,22,6))
-    pygame.draw.ellipse(s,col,(x+17,y+10,13,12)); pygame.draw.ellipse(s,D,(x+25,y+15,7,5))
-    pygame.draw.circle(s,PINK,(x+30,y+18),2)
-    pygame.draw.ellipse(s,D,(x+14,y+6,6,8)); pygame.draw.ellipse(s,PINK,(x+15,y+7,4,6))
-    pygame.draw.ellipse(s,D,(x+20,y+5,6,8)); pygame.draw.ellipse(s,PINK,(x+21,y+6,4,6))
-    pygame.draw.circle(s,BLK,(x+26,y+14),2); pygame.draw.circle(s,RED,(x+26,y+14),1)
-    _r(s,D,x+7,y+25,4,4); _r(s,D,x+13,y+25,4,4)
-
-def draw_goblin(s,x,y,col):
-    R,G,B=col; D=(max(0,R-50),max(0,G-60),max(0,B-35)); L=(min(255,R+45),min(255,G+45),min(255,B+20))
-    YEL=(230,210,30); BLK=(0,0,0); TOOTH=(225,215,200)
-    _r(s,col,x+10,y+19,12,10); _r(s,D,x+10,y+19,2,10)
-    _r(s,col,x+6,y+19,5,9); _r(s,col,x+21,y+19,5,9)
-    pygame.draw.ellipse(s,D,(x+5,y+26,6,5)); pygame.draw.ellipse(s,D,(x+21,y+26,6,5))
-    _r(s,D,x+11,y+29,4,3); _r(s,D,x+17,y+29,4,3); _r(s,D,x+10,y+30,5,2); _r(s,D,x+17,y+30,5,2)
-    _r(s,col,x+7,y+5,18,15); _r(s,L,x+7,y+5,18,3)
-    _p(s,col,[(x+5,y+7),(x+5,y+16),(x+9,y+12)]); _p(s,L,[(x+5,y+7),(x+6,y+8),(x+7,y+12)])
-    _p(s,col,[(x+27,y+7),(x+27,y+16),(x+23,y+12)])
-    _r(s,YEL,x+10,y+11,4,4); _r(s,YEL,x+18,y+11,4,4)
-    _r(s,BLK,x+11,y+12,2,2); _r(s,BLK,x+19,y+12,2,2)
-    _r(s,D,x+14,y+15,4,2); _r(s,BLK,x+15,y+15,1,1); _r(s,BLK,x+17,y+15,1,1)
-    _r(s,BLK,x+11,y+17,10,2); _r(s,TOOTH,x+12,y+17,2,1); _r(s,TOOTH,x+18,y+17,2,1)
-
-def draw_skeleton(s,x,y,col):
-    R,G,B=col; D=(max(0,R-80),max(0,G-80),max(0,B-70)); BLK=(0,0,0); DK=(30,30,30)
-    _r(s,col,x+10,y+15,12,2)
-    for i in range(3):
-        ry=y+18+i*4; _r(s,col,x+10,ry,12,2); _r(s,D,x+10,ry,2,2); _r(s,D,x+20,ry,2,2)
-    for i in range(8): _r(s,D,x+15,y+14+i*2,2,1)
-    _r(s,col,x+6,y+16,4,10); _r(s,col,x+22,y+16,4,10)
-    pygame.draw.circle(s,D,(x+8,y+21),2); pygame.draw.circle(s,D,(x+24,y+21),2)
-    _r(s,col,x+5,y+26,5,3); _r(s,col,x+22,y+26,5,3)
-    _r(s,D,x+11,y+29,4,3); _r(s,D,x+17,y+29,4,3); _r(s,D,x+10,y+30,5,2); _r(s,D,x+17,y+30,5,2)
-    pygame.draw.ellipse(s,col,(x+8,y+3,16,14)); pygame.draw.ellipse(s,D,(x+8,y+10,16,7))
-    _r(s,BLK,x+10,y+7,4,4); _r(s,BLK,x+18,y+7,4,4); _r(s,DK,x+11,y+8,2,2); _r(s,DK,x+19,y+8,2,2)
-    _r(s,BLK,x+15,y+12,2,2)
-    for i in range(4): _r(s,col,x+10+i*3,y+15,2,3)
-    _r(s,BLK,x+10,y+15,12,1)
-
-def draw_orc(s,x,y,col):
-    R,G,B=col; D=(max(0,R-50),max(0,G-55),max(0,B-35)); L=(min(255,R+35),min(255,G+35),min(255,B+15))
-    RED=(215,55,55); BLK=(0,0,0); MTL=(135,135,155); TSK=(235,220,180)
-    _r(s,col,x+8,y+14,16,14); _r(s,L,x+8,y+14,16,2); _r(s,D,x+8,y+22,16,6)
-    _r(s,L,x+10,y+16,3,7); _r(s,L,x+19,y+16,3,7)
-    pygame.draw.ellipse(s,D,(x+2,y+12,10,8)); pygame.draw.ellipse(s,D,(x+20,y+12,10,8))
-    pygame.draw.ellipse(s,col,(x+3,y+12,8,6)); pygame.draw.ellipse(s,col,(x+21,y+12,8,6))
-    _r(s,col,x+4,y+17,5,10); _r(s,col,x+23,y+17,5,10)
-    pygame.draw.ellipse(s,D,(x+3,y+25,7,6)); pygame.draw.ellipse(s,D,(x+22,y+25,7,6))
-    _r(s,MTL,x+26,y+14,3,14); _p(s,MTL,[(x+26,y+14),(x+31,y+10),(x+31,y+20),(x+26,y+20)])
-    _r(s,(90,60,25),x+27,y+21,2,6)
-    _r(s,D,x+10,y+28,6,4); _r(s,D,x+16,y+28,6,4); _r(s,D,x+9,y+30,7,2); _r(s,D,x+16,y+30,7,2)
-    pygame.draw.ellipse(s,col,(x+7,y+3,18,14)); pygame.draw.ellipse(s,L,(x+7,y+3,18,4))
-    pygame.draw.ellipse(s,D,(x+7,y+11,18,6))
-    _r(s,RED,x+10,y+8,4,4); _r(s,RED,x+18,y+8,4,4); _r(s,BLK,x+11,y+9,2,2); _r(s,BLK,x+19,y+9,2,2)
-    _p(s,TSK,[(x+12,y+15),(x+14,y+8),(x+15,y+15)]); _p(s,TSK,[(x+18,y+15),(x+19,y+8),(x+21,y+15)])
-    _r(s,D,x+14,y+12,4,3); _r(s,BLK,x+15,y+12,1,2); _r(s,BLK,x+17,y+12,1,2)
-
-def draw_troll(s,x,y,col):
-    R,G,B=col; D=(max(0,R-45),max(0,G-50),max(0,B-35)); L=(min(255,R+30),min(255,G+30),min(255,B+15))
-    BLK=(0,0,0); YEL=(215,195,30); WD=(110,75,30); WDD=(75,50,18)
-    _r(s,WD,x+24,y+8,4,16); _r(s,WDD,x+25,y+8,1,16)
-    pygame.draw.ellipse(s,WD,(x+22,y+4,8,8)); pygame.draw.ellipse(s,WDD,(x+23,y+5,5,5))
-    _r(s,col,x+5,y+14,20,16); _r(s,L,x+5,y+14,20,3); _r(s,D,x+5,y+24,20,6)
-    _r(s,D,x+5,y+17,2,10); _r(s,L,x+7,y+17,3,9); _r(s,D,x+22,y+17,2,10); _r(s,L,x+20,y+17,3,9)
-    pygame.draw.ellipse(s,col,(x+1,y+12,12,8)); pygame.draw.ellipse(s,col,(x+19,y+12,12,8))
-    _r(s,col,x+2,y+17,6,11); _r(s,col,x+24,y+17,6,11)
-    pygame.draw.ellipse(s,D,(x+1,y+26,8,6)); pygame.draw.ellipse(s,D,(x+23,y+26,8,6))
-    _r(s,D,x+8,y+29,6,3); _r(s,D,x+18,y+29,6,3); _r(s,D,x+7,y+30,8,2); _r(s,D,x+17,y+30,8,2)
-    pygame.draw.ellipse(s,col,(x+5,y+2,22,14)); pygame.draw.ellipse(s,L,(x+5,y+2,22,4))
-    pygame.draw.ellipse(s,D,(x+5,y+10,22,6))
-    _r(s,YEL,x+8,y+6,5,5); _r(s,YEL,x+19,y+6,5,5); _r(s,BLK,x+9,y+7,3,3); _r(s,BLK,x+20,y+7,3,3)
-    _r(s,D,x+13,y+10,6,4); _r(s,BLK,x+14,y+10,2,3); _r(s,BLK,x+17,y+10,2,3)
-    _p(s,(230,215,175),[(x+11,y+14),(x+12,y+19),(x+14,y+14)])
-    _p(s,(230,215,175),[(x+18,y+14),(x+19,y+19),(x+21,y+14)])
-    _r(s,BLK,x+11,y+13,10,2)
-
-def draw_wizard(s, x, y, col):
-    R,G,B=col; D=(max(0,R-50),max(0,G-50),max(0,B-60)); L=(min(255,R+40),min(255,G+40),min(255,B+50))
-    ORB=(100,200,255); BLK=(0,0,0); SKIN=(220,185,150); BEARD=(200,195,175)
-    # 지팡이
-    _r(s,(80,60,35),x+3,y+7,3,23)
-    pygame.draw.circle(s,ORB,(x+4,y+7),4); pygame.draw.circle(s,(200,230,255),(x+4,y+7),2)
-    # 로브
-    _p(s,col,[(x+8,y+16),(x+24,y+16),(x+26,y+32),(x+6,y+32)])
-    _p(s,L,  [(x+8,y+16),(x+24,y+16),(x+24,y+18),(x+8,y+18)])
-    _p(s,D,  [(x+8,y+26),(x+24,y+26),(x+26,y+32),(x+6,y+32)])
-    _r(s,col,x+5,y+17,4,8); _r(s,col,x+23,y+17,4,8)
-    # 빛나는 손
-    pygame.draw.circle(s,ORB,(x+7,y+25),3); pygame.draw.circle(s,(200,230,255),(x+7,y+25),1)
-    # 얼굴
-    pygame.draw.ellipse(s,SKIN,(x+10,y+9,12,9))
-    _r(s,BEARD,x+10,y+14,12,4)
-    _r(s,BLK,x+12,y+11,2,2); _r(s,BLK,x+18,y+11,2,2)
-    _r(s,ORB,x+12,y+11,1,1); _r(s,ORB,x+18,y+11,1,1)
-    # 뾰족한 모자
-    _p(s,D,  [(x+16,y+0),(x+8,y+10),(x+24,y+10)])
-    _p(s,col,[(x+16,y+0),(x+9,y+10),(x+23,y+10)])
-    _r(s,D,x+7,y+9,18,4); _r(s,L,x+7,y+9,18,1)
-    pygame.draw.circle(s,(255,255,150),(x+16,y+4),2)
-
-def draw_dragon(s, x, y, col):
-    R,G,B=col; D=(max(0,R-50),max(0,G-40),max(0,B-20)); L=(min(255,R+40),min(255,G+30),min(255,B+20))
-    BLK=(0,0,0); FIRE=(255,165,0)
-    # 꼬리
-    _p(s,D,[(x+2,y+28),(x+7,y+22),(x+9,y+28)])
-    # 날개
-    _p(s,D,[(x+10,y+16),(x+2,y+8),(x+8,y+19)])
-    _p(s,D,[(x+22,y+16),(x+30,y+8),(x+24,y+19)])
-    _p(s,L,[(x+10,y+16),(x+3,y+10),(x+8,y+19)])
-    _p(s,L,[(x+22,y+16),(x+29,y+10),(x+24,y+19)])
-    # 몸통
-    pygame.draw.ellipse(s,col,(x+8,y+16,18,14)); pygame.draw.ellipse(s,L,(x+9,y+16,16,5))
-    pygame.draw.ellipse(s,D,(x+8,y+24,18,6))
-    # 목 + 머리
-    pygame.draw.ellipse(s,col,(x+10,y+7,12,11)); pygame.draw.ellipse(s,L,(x+11,y+7,10,4))
-    # 뿔
-    _p(s,D,[(x+11,y+7),(x+9,y+2),(x+13,y+7)])
-    _p(s,D,[(x+19,y+7),(x+22,y+2),(x+23,y+7)])
-    # 눈
-    _r(s,FIRE,x+13,y+10,3,2); _r(s,FIRE,x+18,y+10,3,2)
-    _r(s,BLK, x+14,y+10,1,2); _r(s,BLK, x+19,y+10,1,2)
-    # 이빨
-    _r(s,D,x+12,y+14,8,2)
-    _r(s,(240,220,200),x+13,y+14,2,2); _r(s,(240,220,200),x+17,y+14,2,2)
-    # 다리
-    _r(s,D,x+10,y+29,4,3); _r(s,D,x+18,y+29,4,3)
-    _r(s,BLK,x+9,y+31,6,1); _r(s,BLK,x+17,y+31,6,1)
-
-def draw_dark_knight(s, x, y, col):
-    draw_orc(s, x, y, col)
-    DARK=(15,8,25); DH=(50,35,85); CROWN=(200,155,20)
-    pygame.draw.ellipse(s,DARK,(x+7,y+2,18,14)); pygame.draw.ellipse(s,DH,(x+8,y+3,16,5))
-    _r(s,(255,30,30),x+10,y+7,4,3); _r(s,(255,30,30),x+18,y+7,4,3)
-    _r(s,(255,160,0),x+11,y+8,2,2); _r(s,(255,160,0),x+19,y+8,2,2)
-    _r(s,CROWN,x+9,y+1,14,3)
-    for cx2 in [x+10, x+14, x+19]:
-        _p(s,CROWN,[(cx2,y-3),(cx2+2,y-3),(cx2+1,y+1)])
-    _r(s,(20,14,40),x+8,y+14,16,14); _r(s,DH,x+9,y+15,14,2)
-
-def draw_lich(s, x, y, col):
-    draw_skeleton(s, x, y, col)
-    ROBE=(18,18,55); ROBE_L=(50,50,110)
-    _r(s,ROBE,  x+8, y+14,16,16); _r(s,ROBE_L,x+9, y+15,3,8); _r(s,ROBE_L,x+20,y+15,3,8)
-    _r(s,(70,55,35),x+2,y+8,3,23)
-    pygame.draw.circle(s,(80,180,255),(x+3,y+7),5); pygame.draw.circle(s,(180,220,255),(x+3,y+7),3)
-    _r(s,(0,200,255),x+10,y+7,4,4); _r(s,(0,200,255),x+18,y+7,4,4)
-    _r(s,(150,230,255),x+11,y+8,2,2); _r(s,(150,230,255),x+19,y+8,2,2)
-
-def draw_generic(s,x,y,col):
-    ts=TILE_SIZE; D=tuple(max(0,c-55)for c in col); L=tuple(min(255,c+45)for c in col)
-    _r(s,col,x+5,y+7,ts-10,ts-10); pygame.draw.rect(s,L,(x+5,y+7,ts-10,2))
-    _r(s,(255,255,255),x+9,y+11,3,3); _r(s,(255,255,255),x+ts-12,y+11,3,3)
-    _r(s,(0,0,0),x+10,y+12,2,2); _r(s,(0,0,0),x+ts-11,y+12,2,2)
-
-_SPRITE_FN = {
-    'rat':draw_rat,'goblin':draw_goblin,'skeleton':draw_skeleton,'orc':draw_orc,'troll':draw_troll,
-    'wizard':draw_wizard,'dragon':draw_dragon,'dark_knight':draw_dark_knight,'lich':draw_lich,
-}
+from entities.enemy_sprites import ENEMY_SPRITE_FNS as _SPRITE_FN, draw_generic
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -372,6 +209,7 @@ class Game:
 
         # 스킬 XP (hit 수 누적 → 자동 레벨업)
         self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+
 
         # 조합 스킬 해금 상태
         self._unlocked_combos: set = set()
@@ -566,7 +404,7 @@ class Game:
             elif self.dungeon.has_shop:
                 self.audio.bgm.play('shop')
             else:
-                self.audio.bgm.play('normal')
+                self.audio.bgm.play(f'theme_{self.dungeon.theme_index}')
 
     # ─────────────── 새 게임 / 불러오기 ──────────────────────────────
     def _new_game(self):
@@ -614,6 +452,7 @@ class Game:
         p.move_speed   = 5.0    # 이동 간격 60ms (최소)
         p.evasion      = 40     # 회피율 최대
         p.gold         = 99999
+        self.dungeon.reveal_all()
         self.state = 'playing'
         self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
@@ -641,7 +480,8 @@ class Game:
         self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data)
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
-        self.dungeon.update_visibility(self.player.x, self.player.y)
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(self.player.x, self.player.y)
         self.messages.append((t('floor_cont', self.floor), 'good'))
         self.state = 'playing'
 
@@ -672,7 +512,8 @@ class Game:
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
-        self.dungeon.update_visibility(self.player.x, self.player.y)
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(self.player.x, self.player.y)
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
@@ -979,7 +820,8 @@ class Game:
         elif action['type'] == 'skill':       acted = self._use_skill(action['skill'])
         elif action['type'] == 'combo_skill': acted = self._use_combo_skill(action['combo'])
         if acted:
-            self.dungeon.update_visibility(self.player.x, self.player.y)
+            if not self._is_test_mode:
+                self.dungeon.update_visibility(self.player.x, self.player.y)
             self.camera.center_on(self.player.x, self.player.y)
 
     def _player_move(self, dx, dy):
@@ -998,6 +840,21 @@ class Game:
             self._player_attack(enemy)
             self._atk_cd_timer = self.player.atk_cooldown_ms
             return True
+        target_tile = self.dungeon.tiles[ny][nx]
+
+        # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
+        if target_tile.tile_type == TileType.DOOR:
+            self.audio.play('stairs')
+            if self.floor >= MAX_FLOOR:
+                self.messages.append((t('victory'), 'good'))
+                self._records = update_records(self.floor, self._run_kills, self.player.gold)
+                delete_save()
+                self.state = 'game_over'
+            else:
+                self.floor += 1
+                self._start_fade(self._load_floor)
+            return True
+
         if not self.dungeon.is_walkable(nx, ny):
             return False
 
@@ -1016,15 +873,6 @@ class Game:
             self.audio.play('shop_open')
             return True
 
-        if (nx, ny) == self.dungeon.stairs_pos:
-            if self.floor >= MAX_FLOOR:
-                self.messages.append((t('victory'), 'good'))
-                self._records = update_records(self.floor, self._run_kills, self.player.gold)
-                delete_save()
-                self.state = 'game_over'
-            else:
-                self.floor += 1
-                self._start_fade(self._load_floor)
         return True
 
     def _player_basic_attack(self):
@@ -1075,6 +923,7 @@ class Game:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
+        self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
@@ -1189,17 +1038,28 @@ class Game:
         tiles = SKILL_UPGRADES['W'][lvl - 1]['tiles']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
         moved = 0
+        hit_enemy = False
         for _ in range(tiles):
             nx, ny = self.player.x + dx, self.player.y + dy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if enemy:
-                self._player_attack(enemy); break
+                self._player_attack(enemy)
+                hit_enemy = True
+                break
             if not self.dungeon.is_walkable(nx, ny): break
             self.player.x, self.player.y = nx, ny; moved += 1
+        self.animator.particles.emit_dash_trail((sx, sy), (self.player.x, self.player.y))
         self._trigger_atk_anim()
         self._gain_skill_xp('W')
-        self.skills.trigger('W')
+
+        # 만렙 + 적 히트 → 쿨다운 리셋 (연속 사용 가능)
+        if lvl >= SKILL_MAX_LEVEL and hit_enemy:
+            self.skills.reset('W')
+        else:
+            self.skills.trigger('W')
+
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
         return True
@@ -1223,10 +1083,12 @@ class Game:
             enemy.take_damage(dmg)
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (255,180,60)))
             self.animator.add(HitFlashAnim(nx, ny, dmg, (255,80,80)))
+            self.animator.particles.emit_basic_hit(nx, ny)
             hits += 1
             if not enemy.is_alive():
                 self._on_enemy_killed(enemy)
         self.animator.add(WhirlAnim(self.player.x, self.player.y))
+        self.animator.particles.emit_whirl(self.player.x, self.player.y)
         if not no_cooldown:
             self._gain_skill_xp('A', hits)
             self.skills.trigger('A')
@@ -1241,6 +1103,7 @@ class Game:
         amt = max(1, int(self.player.max_hp * heal_pct))
         self.player.heal(amt)
         self.animator.add(HealAnim(self.player.x, self.player.y))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
         self._gain_skill_xp('S')
         self.skills.trigger('S')
         self.audio.play('skill_heal')
@@ -1268,6 +1131,7 @@ class Game:
         if crit: dmg = int(dmg * 1.5)
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
+        self.animator.particles.emit_power_hit(tx, ty)
         if crit:
             self.audio.play('crit')
             self.messages.append((t('crit_hit', enemy.name, dmg), 'bad'))
@@ -1327,19 +1191,23 @@ class Game:
         dx, dy = dirs.get(self._facing, (0, 1))
         px, py = self.player.x, self.player.y
         hit = False
+        bolt_end = (px + dx * 5, py + dy * 5)
         for step in range(1, 6):
             tx, ty = px + dx * step, py + dy * step
             if not self.dungeon.is_walkable(tx, ty) and not self.dungeon.get_enemy_at(tx, ty):
+                bolt_end = (tx, ty)
                 self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
                 break
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy:
+                bolt_end = (tx, ty)
                 crit = random.random() < 0.3
                 dmg  = max(1, int(self.player.total_attack * 2.2) - enemy.defense)
                 if crit: dmg = int(dmg * 1.5)
                 enemy.take_damage(dmg)
                 self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 100, 30)))
+                self.animator.particles.emit_fireball_hit(tx, ty)
                 if crit:
                     self.messages.append((t('crit_hit', enemy.name, dmg), 'bad'))
                 else:
@@ -1348,6 +1216,7 @@ class Game:
                     self._on_enemy_killed(enemy)
                 hit = True
                 break
+        self.animator.particles.emit_fireball_trail((px, py), bolt_end)
         if not hit:
             self.messages.append((t('skill_fireball_m'), 'info'))
         self.audio.play('skill_dash')
@@ -1362,6 +1231,7 @@ class Game:
             dmg = max(1, int(self.player.total_attack * 0.85) - enemy.defense)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
+            self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
             hits += 1
             if not enemy.is_alive():
                 self._on_enemy_killed(enemy)
@@ -1384,6 +1254,7 @@ class Game:
                 dmg = max(1, int(self.player.total_attack * 1.3) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
+                self.animator.particles.emit_frost_hit(enemy.x, enemy.y)
                 hits += 1
                 if not enemy.is_alive():
                     self._on_enemy_killed(enemy)
@@ -1401,21 +1272,26 @@ class Game:
         dx, dy = dirs.get(self._facing, (0, 1))
         px, py = self.player.x, self.player.y
         hits = 0
+        end_x, end_y = px, py
         for step in range(1, 7):
             tx, ty = px + dx * step, py + dy * step
             if not (0 <= tx < self.dungeon.width and 0 <= ty < self.dungeon.height):
                 break
             if not self.dungeon.is_walkable(tx, ty) and not self.dungeon.get_enemy_at(tx, ty):
+                end_x, end_y = tx, ty
                 break
+            end_x, end_y = tx, ty
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy and enemy.is_alive():
                 dmg = max(1, int(self.player.total_attack * 1.5) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
+                self.animator.particles.emit_wind_hit(tx, ty, dx, dy)
                 hits += 1
                 if not enemy.is_alive():
                     self._on_enemy_killed(enemy)
+        self.animator.particles.emit_wind_sweep((px, py), (end_x, end_y), dx, dy)
         if hits:
             self.messages.append((t('skill_wind', hits), 'warn'))
         else:
@@ -1431,8 +1307,19 @@ class Game:
                 not self.dungeon.boss.is_alive() and
                 self.dungeon.stairs_pos is None):
             bx, by = self.dungeon.boss.x, self.dungeon.boss.y
-            self.dungeon.tiles[by][bx] = Tile.stairs_down()
-            self.dungeon.stairs_pos = (bx, by)
+            placed = False
+            for ddx, ddy in [(0, -1), (0, 1), (-1, 0), (1, 0),
+                             (0, -2), (0, 2), (-2, 0), (2, 0)]:
+                wx, wy = bx + ddx, by + ddy
+                if (self.dungeon.in_bounds(wx, wy) and
+                        self.dungeon.tiles[wy][wx].tile_type == TileType.WALL):
+                    self.dungeon.tiles[wy][wx] = Tile.door()
+                    self.dungeon.stairs_pos = (wx, wy)
+                    placed = True
+                    break
+            if not placed:
+                self.dungeon.tiles[by][bx] = Tile.door()
+                self.dungeon.stairs_pos = (bx, by)
             self.messages.append((t('boss_clear'), 'good'))
             self.audio.play('stairs')
             self._start_shake(6, 400)
@@ -1556,6 +1443,8 @@ class Game:
                 pygame.draw.line(s,th['wall_top'],(x,y),(x+ts-1,y))
                 pygame.draw.line(s,th['wall_top'],(x,y),(x,y+ts-1))
                 pygame.draw.line(s,th['wall_bot'],(x,y+ts-1),(x+ts-1,y+ts-1))
+        elif tt == TileType.DOOR:
+            self._draw_door(s, x, y, lit, th)
         elif tt == TileType.SHOP:
             col = (25,55,30) if lit else (12,28,15)
             pygame.draw.rect(s, col, (x,y,ts,ts))
@@ -1573,6 +1462,76 @@ class Game:
                 ccx, ccy = x+ts//2, y+ts//2
                 pygame.draw.polygon(s, sc, [(ccx,ccy+7),(ccx-6,ccy-3),(ccx+6,ccy-3)])
                 pygame.draw.line(s, sc, (ccx-4,ccy-3),(ccx+4,ccy-3), 2)
+
+    def _draw_door(self, s, x, y, lit, th):
+        ts = TILE_SIZE
+        # 벽 배경
+        wall_col = th['wall_lit'] if lit else th['wall_dim']
+        pygame.draw.rect(s, wall_col, (x, y, ts, ts))
+        if not lit:
+            # 어두운 상태에서도 희미한 빛 힌트
+            pygame.draw.rect(s, (30, 20, 50), (x + 7, y + 4, 18, 26))
+            return
+
+        T = pygame.time.get_ticks() * 0.001
+        cx, cy = x + ts // 2, y + ts // 2
+
+        # 아치 내부 배경 (깊은 어둠)
+        pygame.draw.rect(s, (10, 5, 20), (x + 7, y + 6, 18, 26))
+
+        # 내부 글로우 레이어 (안쪽에서 빛이 새어나옴)
+        pulse = 1.0 + math.sin(T * 2.2) * 0.18
+        glow_colors = [
+            (60, 20, 100),
+            (90, 40, 150),
+            (120, 60, 200),
+            (160, 90, 255),
+        ]
+        for i, gc in enumerate(glow_colors):
+            r = round((5 - i) * pulse * 1.5)
+            pygame.draw.circle(s, gc, (cx, cy + 4), max(1, r))
+
+        # 아치 프레임 (돌 기둥)
+        stone = th.get('wall_lit', (80, 70, 90))
+        stone_h = tuple(min(255, c + 30) for c in stone)
+        stone_d = tuple(max(0, c - 20) for c in stone)
+        # 왼쪽 기둥
+        pygame.draw.rect(s, stone_d, (x + 5, y + 8, 4, 22))
+        pygame.draw.rect(s, stone_h, (x + 5, y + 8, 2, 22))
+        # 오른쪽 기둥
+        pygame.draw.rect(s, stone_d, (x + 23, y + 8, 4, 22))
+        pygame.draw.rect(s, stone_h, (x + 23, y + 8, 2, 22))
+        # 상단 아치 (반원 모양 파티클)
+        for i in range(7):
+            a = math.pi * i / 6
+            ax = round(cx + math.cos(a) * 9)
+            ay = round(y + 8 - math.sin(a) * 5)
+            pygame.draw.circle(s, stone_d, (ax, ay), 3)
+            pygame.draw.circle(s, stone_h, (ax, ay), 1)
+
+        # 내부 파티클: 아래로 빨려들어가는 빛 조각들
+        for i in range(6):
+            phase = (T * 1.2 + i * 0.28) % 1.0
+            px = cx - 5 + i * 2 + math.sin(T * 2 + i * 1.1) * 2.5
+            py = y + 6 + phase * 22
+            r = max(1, round(2 * (1 - phase * 0.6)))
+            col_p = (
+                min(255, round(160 + 90 * math.sin(T + i))),
+                min(255, round(60 + 40 * math.sin(T * 0.7 + i))),
+                255,
+            )
+            pygame.draw.circle(s, col_p, (round(px), round(py)), r)
+
+        # 아치 상단 윤곽 강조
+        pygame.draw.arc(s, stone_h,
+                        (x + 6, y + 3, 20, 14), 0, math.pi, 2)
+
+        # 바닥 문지방
+        pygame.draw.rect(s, stone_d, (x + 5, y + 28, 22, 3))
+        pygame.draw.rect(s, stone_h, (x + 5, y + 28, 22, 1))
+
+        # 벽 상단 하이라이트 복원
+        pygame.draw.line(s, th['wall_top'], (x, y), (x + ts - 1, y))
 
     def _draw_player_sprite(self, x, y):
         facing = self._facing
@@ -1612,13 +1571,8 @@ class Game:
             draw_player(self._game_surf, x, y, facing, self._walk_frame)
 
     def _draw_enemy(self, enemy, x, y):
-        spr_key = self._ENEMY_SPRITE_KEY.get(enemy.key)
-        spr     = self._sprites.get(spr_key) if spr_key else None
-        if spr:
-            self._game_surf.blit(spr, (x, y))
-        else:
-            fn = _SPRITE_FN.get(enemy.key, draw_generic)
-            fn(self._game_surf, x, y, enemy.color)
+        fn = _SPRITE_FN.get(enemy.key, draw_generic)
+        fn(self._game_surf, x, y, enemy.color, pygame.time.get_ticks())
         draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
 
     def _draw_item(self, item, x, y):

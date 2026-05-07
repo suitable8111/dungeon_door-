@@ -4,6 +4,7 @@ import os
 import random
 import pygame
 from core.constants import TILE_SIZE
+from core.particles import ParticleSystem
 
 
 def _load_font(size):
@@ -29,6 +30,7 @@ class Animator:
         pygame.font.init()
         self._font = _load_font(12)
         self._anims: list[_Anim] = []
+        self.particles = ParticleSystem()
 
     def add(self, anim):
         self._anims.append(anim)
@@ -37,6 +39,7 @@ class Animator:
         for a in self._anims:
             a.update(dt_ms)
         self._anims = [a for a in self._anims if not a.done]
+        self.particles.update(dt_ms)
 
     @property
     def player_offset(self):
@@ -46,6 +49,7 @@ class Animator:
         return (0, 0)
 
     def draw(self, surf, cam_x, cam_y):
+        self.particles.draw(surf, cam_x, cam_y)
         for a in self._anims:
             a.draw(surf, cam_x, cam_y, self._font)
 

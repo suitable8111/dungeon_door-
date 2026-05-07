@@ -19,6 +19,24 @@ class Room:
                 self.y + self.h + pad >= other.y)
 
 
+def _place_door(dungeon, room):
+    cx, cy = room.center
+    candidates = [
+        (cx,           room.y - 1),
+        (cx,           room.y + room.h),
+        (room.x - 1,   cy),
+        (room.x + room.w, cy),
+    ]
+    random.shuffle(candidates)
+    for wx, wy in candidates:
+        if dungeon.in_bounds(wx, wy) and dungeon.tiles[wy][wx].tile_type == TileType.WALL:
+            dungeon.tiles[wy][wx] = Tile.door()
+            dungeon.stairs_pos = (wx, wy)
+            return
+    dungeon.tiles[cy][cx] = Tile.door()
+    dungeon.stairs_pos = (cx, cy)
+
+
 def generate_dungeon(width, height, floor_level, enemy_data, item_data):
     floor_level = min(floor_level, MAX_FLOOR)
     dungeon = Dungeon(width, height)
@@ -53,9 +71,7 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
         boss_cx, boss_cy = rooms[-1].center
         dungeon.boss_room_pos = (boss_cx, boss_cy)
     else:
-        last_cx, last_cy = rooms[-1].center
-        dungeon.tiles[last_cy][last_cx] = Tile.stairs_down()
-        dungeon.stairs_pos = (last_cx, last_cy)
+        _place_door(dungeon, rooms[-1])
 
     if is_shop_floor and len(rooms) >= 3:
         shop_room = rooms[len(rooms) // 2]
@@ -111,7 +127,7 @@ def _scale_enemy(data, floor_level):
 def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
     from entities.enemy import Enemy
 
-    enemy_pool = _enemy_pool(floor_level)
+    enemy_pool = _enemy_pool(floor_level, dungeon.theme_index)
 
     pop_rooms = rooms[1:]
     if is_boss_floor and pop_rooms:
@@ -135,14 +151,18 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
                 dungeon.enemies.append(Enemy(ex, ey, data))
 
     if boss_room is not None:
-        boss_key = 'lich' if (floor_level // 5) % 2 == 0 else 'dark_knight'
+        theme_idx = getattr(dungeon, 'theme_index', 0)
+        boss_candidates = _BOSS_POOLS[min(theme_idx, len(_BOSS_POOLS) - 1)]
+        boss_key = boss_candidates[(floor_level // 5) % len(boss_candidates)]
+        if boss_key not in enemy_data:
+            boss_key = boss_candidates[0]
         bdata = _scale_enemy(enemy_data[boss_key], floor_level)
         bdata['key'] = boss_key
         bcx, bcy = boss_room.center
         boss = Enemy(bcx, bcy, bdata)
         dungeon.enemies.append(boss)
         dungeon.boss = boss
-        guards = _enemy_pool(floor_level)
+        guards = _enemy_pool(floor_level, theme_idx)
         for _ in range(2):
             gx = random.randint(boss_room.x+1, boss_room.x+boss_room.w-2)
             gy = random.randint(boss_room.y+1, boss_room.y+boss_room.h-2)
@@ -232,29 +252,112 @@ def drop_pool(floor_level):
                 ['skillbook_frost'] + ['skillbook_thunder'])
 
 
-def _enemy_pool(floor_level):
-    if floor_level <= 2:
-        return ['rat'] * 4 + ['goblin'] * 2
-    elif floor_level <= 4:
-        return ['rat'] * 2 + ['goblin'] * 3 + ['skeleton'] * 2 + ['wizard']
-    elif floor_level <= 6:
-        return ['goblin'] + ['skeleton'] * 3 + ['orc'] * 2 + ['wizard'] * 2
-    elif floor_level <= 8:
-        return ['skeleton'] * 2 + ['orc'] * 3 + ['troll'] * 2 + ['wizard'] * 2
-    elif floor_level <= 15:
-        return ['orc'] * 2 + ['troll'] * 3 + ['wizard'] * 2 + ['dragon']
-    elif floor_level <= 30:
-        return ['troll'] * 2 + ['wizard'] * 2 + ['dragon'] * 3 + ['orc']
-    elif floor_level <= 50:
-        return ['wizard'] * 2 + ['dragon'] * 3 + ['troll'] * 2
-    elif floor_level <= 100:
-        return ['dragon'] * 3 + ['wizard'] * 2 + ['troll']
-    elif floor_level <= 200:
-        return ['dragon'] * 3 + ['wizard'] * 3
-    elif floor_level <= 400:
-        return ['dragon'] * 4 + ['wizard'] * 2
-    else:
-        return ['dragon'] * 5 + ['wizard']
+# 테마별 몬스터 풀 (theme_index 0-19)
+_THEME_POOLS = [
+    # 0: 버려진 지하 감옥 (01-50F) — 층수 직접 처리
+    None,
+    # 1: 곰팡이 핀 늪지대 (51-100F) — 독성/습지 생물
+    ['zombie'] * 2 + ['ghoul'] * 2 + ['corpse_flower'] * 2 + ['prisoner'] * 2 + ['jar_crawler'] + ['slime'],
+    # 2: 서리 내린 정적의 고성 (101-150F) — 언데드 기사단
+    ['blade_skeleton'] * 2 + ['shield_skeleton'] * 2 + ['archer_skeleton'] * 2 + ['spear_skeleton'] * 2 + ['skeleton'] * 2,
+    # 3: 타오르는 마그마 굴 (151-200F) — 강인한 석조/불 생물
+    ['rock_golem'] * 3 + ['iron_cage'] * 3 + ['chain_beast'] * 2 + ['orc'] * 2,
+    # 4: 기계 장치의 무덤 (201-250F) — 철제 구조물 적
+    ['iron_cage'] * 3 + ['chain_beast'] * 3 + ['rock_golem'] * 2 + ['shield_skeleton'] * 2,
+    # 5: 환각의 보랏빛 숲 (251-300F) — 마법/환술사
+    ['illusionist'] * 3 + ['curse_mage'] * 3 + ['bone_wizard'] * 2 + ['poison_sprite'] * 2,
+    # 6: 몰락한 성기사의 사원 (301-350F) — 집행관 잔당
+    ['executioner_nov'] * 2 + ['brand_man'] * 2 + ['whip_master'] * 2 + ['torturer'] * 2 + ['spear_skeleton'] * 2,
+    # 7: 바람 부는 절벽 요새 (351-400F) — 요새 병사/도적
+    ['bandit'] * 2 + ['thief'] * 2 + ['ambusher'] * 2 + ['shadow_stalker'] * 2 + ['assassin'] * 2,
+    # 8: 저주받은 도서관 (401-450F) — 저주 마법사
+    ['bone_wizard'] * 3 + ['curse_mage'] * 3 + ['illusionist'] * 2 + ['specter'] * 2,
+    # 9: 심해의 가라앉은 도시 (451-500F) — 심해 언데드
+    ['zombie'] * 2 + ['soul_absorber'] * 3 + ['ghost'] * 2 + ['specter'] * 2 + ['blood_bat'],
+    # 10: 전기 회로의 미로 (501-550F) — 강화 기계/구조물
+    ['steel_knight'] * 3 + ['iron_cage'] * 2 + ['rock_golem'] * 2 + ['mimic'] * 2 + ['chain_beast'],
+    # 11: 거대 곤충의 군집 (551-600F) — 거대 절지류
+    ['giant_spider'] * 4 + ['blood_bat'] * 2 + ['centipede'] * 2 + ['corpse_flower'] * 2,
+    # 12: 황량한 붉은 사막 (601-650F) — 사막 약탈자
+    ['bandit'] * 2 + ['assassin'] * 2 + ['ambusher'] * 2 + ['shadow_stalker'] * 2 + ['thief'] * 2,
+    # 13: 연금술사의 실험실 (651-700F) — 돌연변이 실험체
+    ['curse_mage'] * 2 + ['poison_sprite'] * 3 + ['soul_absorber'] * 2 + ['mimic'] * 2 + ['illusionist'],
+    # 14: 천공의 무너진 섬 (701-750F) — 공중 마법 존재
+    ['blood_bat'] * 2 + ['ghost'] * 2 + ['specter'] * 2 + ['death_mage'] * 2 + ['illusionist'] * 2,
+    # 15: 그림자의 영역 (751-800F) — 암흑 존재
+    ['shadow_stalker'] * 3 + ['assassin'] * 2 + ['specter'] * 2 + ['soul_absorber'] * 2 + ['ambusher'],
+    # 16: 핏빛 달의 성소 (801-850F) — 흡혈/거대 전사
+    ['blood_bat'] * 2 + ['ghoul'] * 2 + ['giant_zombie'] * 2 + ['grave_titan'] * 2 + ['assassin'] * 2,
+    # 17: 왜곡된 시공간의 틈 (851-900F) — 차원 술사
+    ['specter'] * 2 + ['death_mage'] * 3 + ['soul_absorber'] * 2 + ['bone_wizard'] * 2 + ['grave_titan'],
+    # 18: 고대 신의 무덤 (901-950F) — 고대 거인/언데드
+    ['grave_titan'] * 3 + ['giant_zombie'] * 2 + ['steel_knight'] * 2 + ['death_mage'] * 3,
+    # 19: 차원의 끝 (951-999F) — 최종 혼돈
+    ['grave_titan'] * 2 + ['death_mage'] * 2 + ['soul_absorber'] * 2 + ['giant_spider'] + ['blood_bat'] + ['assassin'] + ['mimic'],
+]
+
+# 테마별 보스 후보 (5층마다 보스전)
+_BOSS_POOLS = [
+    # 0: 지하 감옥 1-50F
+    ['dark_knight', 'lich'],
+    # 1: 늪지대 51-100F
+    ['giant_zombie', 'giant_spider'],
+    # 2: 고성 101-150F
+    ['steel_knight', 'death_mage'],
+    # 3: 마그마 굴 151-200F
+    ['grave_titan', 'steel_knight'],
+    # 4: 기계 무덤 201-250F
+    ['grave_titan', 'mimic'],
+    # 5: 보랏빛 숲 251-300F
+    ['death_mage', 'mimic'],
+    # 6: 성기사 사원 301-350F
+    ['jail_captain', 'stomp_exec'],
+    # 7: 절벽 요새 351-400F
+    ['jail_captain', 'mace_knight'],
+    # 8: 저주 도서관 401-450F
+    ['mace_knight', 'death_mage'],
+    # 9: 심해 도시 451-500F
+    ['soul_absorber', 'grave_titan'],
+    # 10: 전기 미로 501-550F
+    ['stomp_exec', 'grave_titan'],
+    # 11: 곤충 군집 551-600F
+    ['giant_spider', 'blood_bat'],
+    # 12: 붉은 사막 601-650F
+    ['mace_knight', 'stomp_exec'],
+    # 13: 연금술 실험실 651-700F
+    ['mimic', 'death_mage'],
+    # 14: 천공 섬 701-750F
+    ['death_mage', 'grave_titan'],
+    # 15: 그림자 영역 751-800F
+    ['dark_knight', 'soul_absorber'],
+    # 16: 핏빛 성소 801-850F
+    ['grave_titan', 'giant_zombie'],
+    # 17: 시공간의 틈 851-900F
+    ['lich', 'death_mage'],
+    # 18: 고대 신의 무덤 901-950F
+    ['lich', 'grave_titan'],
+    # 19: 차원의 끝 951-999F
+    ['dark_knight', 'lich'],
+]
+
+
+def _enemy_pool(floor_level, theme_idx=0):
+    # 테마 0 (01-50F): 층수 세분화로 튜토리얼 난이도
+    if theme_idx == 0:
+        if floor_level <= 2:
+            return ['rat'] * 3 + ['bat'] * 2 + ['centipede']
+        elif floor_level <= 5:
+            return ['rat'] * 2 + ['bat'] * 2 + ['centipede'] * 2 + ['spider']
+        elif floor_level <= 10:
+            return ['centipede'] * 2 + ['spider'] * 2 + ['slime'] * 2 + ['blade_skeleton']
+        elif floor_level <= 20:
+            return ['blade_skeleton'] * 2 + ['shield_skeleton'] * 2 + ['skeleton'] * 2 + ['prisoner'] * 2
+        elif floor_level <= 35:
+            return ['skeleton'] * 2 + ['zombie'] * 2 + ['ghost'] + ['ghoul'] * 2 + ['chain_beast']
+        else:
+            return ['ghoul'] * 2 + ['chain_beast'] * 2 + ['iron_cage'] * 2 + ['rock_golem'] * 2 + ['chest_mimic']
+    pool = _THEME_POOLS[min(theme_idx, len(_THEME_POOLS) - 1)]
+    return list(pool) if pool else _THEME_POOLS[19]
 
 
 def _item_pool(floor_level):
