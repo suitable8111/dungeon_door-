@@ -119,6 +119,12 @@ def draw_hp_bar(s, x, y, hp, max_hp):
         _r(s,(200+int(55*(1-ratio)),int(210*ratio),40),x+2,y+2,max(1,int(bw*ratio)),4)
 
 from entities.enemy_sprites import ENEMY_SPRITE_FNS as _SPRITE_FN, draw_generic
+from entities.player_renderer import draw_player_layered
+from core.skill_effect import SkillEffect
+from map.burning_stage import (generate_arena, spawn_wave,
+                                BURNING_DURATION_MS, SPAWN_INTERVAL_MS,
+                                MAX_LIVE_ENEMIES, BURNING_THEME,
+                                ARENA_WIDTH, ARENA_HEIGHT)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -207,6 +213,14 @@ class Game:
         self._inv_sel   = 0
         self._equip_sel = 0
 
+        # 인벤토리 드래그 상태
+        self._inv_drag_idx   = None   # 드래그 중인 슬롯 인덱스
+        self._inv_drag_pos   = (0, 0) # 현재 마우스 위치
+        self._inv_drag_start = (0, 0) # 드래그 시작 위치
+
+        # 버리기 확인 대화상자
+        self._inv_confirm_idx = None  # 버리기 확인 대기 중인 슬롯 인덱스
+
         # 스킬 XP (hit 수 누적 → 자동 레벨업)
         self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
 
@@ -214,6 +228,25 @@ class Game:
         # 조합 스킬 해금 상태
         self._unlocked_combos: set = set()
         self._skill_books: set     = set()   # 스킬북 소지 여부 (레벨 달성 전)
+
+        # 강화술 버프 상태
+        self._fortify_effect: SkillEffect | None = None
+        self._fortify_def_bonus: int   = 0
+        self._fortify_atk_bonus: float = 0.0
+
+        # 버닝 스테이지 상태
+        self._burning_active      = False
+        self._burning_timer_ms    = 0        # 남은 생존 시간
+        self._burning_spawn_timer = 0        # 다음 파도까지 대기
+        self._burning_wave        = 0        # 현재 파도 번호
+        self._burning_floor       = 1        # 복귀용 원래 층
+        self._burning_warned_10s  = False
+
+        # 버닝 HUD 폰트 캐시 (매 프레임 SysFont 생성 방지)
+        self._font_burning_big   = pygame.font.SysFont('Arial', 28, bold=True)
+        self._font_burning_small = pygame.font.SysFont('Arial', 13)
+        # 화염 테두리용 재사용 Surface
+        self._edge_surf = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
 
         # 일시정지
         self._pause_sel = 0
@@ -315,9 +348,12 @@ class Game:
                 self._atk_cd_timer = max(0.0, self._atk_cd_timer - dt)
             # 플레이어 이동속도 → InputHandler 동기화
             if self.player:
-                self.input.set_move_speed(self.player.move_speed)
+                self.input.set_move_speed(self.player.total_move_speed)
             if self.state == 'playing':
                 self.skills.update(dt)
+                self._update_fortify(dt)
+                if self._burning_active:
+                    self._update_burning(dt)
             if self.state == 'playing':
                 self._update_enemies(dt)
             self._update_bgm()
@@ -457,6 +493,12 @@ class Game:
         self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
 
+    def start_burning_mode(self):
+        """python3 test_main.py bunning — 버닝 스테이지 직행."""
+        self.start_test_mode(floor=1)
+        self._enter_burning_stage()
+        self.clock.tick()   # 초기화 누적 시간 소비 — 첫 dt가 타이머를 왜곡하지 않도록
+
     def _continue_game(self):
         data = self._save_data
         if not data:
@@ -512,7 +554,9 @@ class Game:
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
-        if not self._is_test_mode:
+        if self._is_test_mode:
+            self.dungeon.reveal_all()
+        else:
             self.dungeon.update_visibility(self.player.x, self.player.y)
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
@@ -520,15 +564,66 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
+
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-                if self.state == 'menu':
+                # 버리기 확인 대화상자 처리 (최우선)
+                if self._inv_confirm_idx is not None:
+                    _, yes_r, _ = self._inv_confirm_rects()
+                    if yes_r.collidepoint(event.pos):
+                        self._discard_inventory_item(self._inv_confirm_idx)
+                    self._inv_confirm_idx = None
+                elif self.state == 'menu':
                     self._handle_menu_click(event.pos)
+                elif self.state == 'paused':
+                    self._handle_pause_click(event.pos)
+                elif self.state == 'inventory':
+                    # 드래그 시작 — 실제 클릭/버리기 처리는 MOUSEBUTTONUP에서
+                    self._inv_drag_idx   = self._inv_slot_at(event.pos)
+                    self._inv_drag_start = event.pos
+                    self._inv_drag_pos   = event.pos
+                elif self.state == 'equipment':
+                    self._handle_equipment_click(event.pos)
+
+            elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+                if self._inv_confirm_idx is None and \
+                        self.state == 'inventory' and self._inv_drag_idx is not None:
+                    moved = max(abs(event.pos[0] - self._inv_drag_start[0]),
+                                abs(event.pos[1] - self._inv_drag_start[1]))
+                    pw, ph, bx, by = self._inv_layout()
+                    in_panel = pygame.Rect(bx, by, pw, ph).collidepoint(event.pos)
+                    if self._inv_trash_rect().collidepoint(event.pos):
+                        # 버리기 존에 드롭 → 확인 대화상자
+                        self._start_discard_confirm(self._inv_drag_idx)
+                    elif moved >= 20 and not in_panel:
+                        # 패널 밖으로 드래그 → 확인 대화상자
+                        self._start_discard_confirm(self._inv_drag_idx)
+                    elif moved < 8:
+                        # 이동 없음 → 일반 클릭
+                        self._handle_inventory_click(event.pos)
+                    self._inv_drag_idx = None
+
+            elif event.type == pygame.MOUSEMOTION:
+                if self.state == 'inventory' and self._inv_drag_idx is not None:
+                    self._inv_drag_pos = event.pos
+
+            elif event.type == pygame.KEYDOWN:
+                if self._inv_confirm_idx is not None:
+                    if event.key in (pygame.K_y, pygame.K_RETURN):
+                        self._discard_inventory_item(self._inv_confirm_idx)
+                        self._inv_confirm_idx = None
+                    elif event.key in (pygame.K_n, pygame.K_ESCAPE):
+                        self._inv_confirm_idx = None
+                elif self.state == 'inventory' and event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
+                    self._start_discard_confirm(self._inv_sel)
 
         for action in self.input.update(dt):
             t = action['type']
 
             if t == 'escape':
-                if self.state in ('inventory', 'equipment'):
+                if self._inv_confirm_idx is not None:
+                    self._inv_confirm_idx = None
+                elif self.state in ('inventory', 'equipment'):
+                    self._inv_drag_idx = None
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
@@ -669,6 +764,101 @@ class Game:
         elif tag in tag_to_idx:
             self._menu_settings_sel = tag_to_idx[tag]
 
+    def _handle_pause_click(self, pos):
+        bw = 370; bh = 490
+        bx = WINDOW_WIDTH  // 2 - bw // 2
+        by = WINDOW_HEIGHT // 2 - bh // 2
+        for i in range(8):
+            iy = by + 56 + i * 46
+            if pygame.Rect(bx+8, iy-3, bw-16, 32).collidepoint(pos):
+                self._pause_sel = i
+                self._confirm_pause()
+                break
+
+    # ── 인벤토리 레이아웃 헬퍼 ────────────────────────────────────────
+    _INV_COLS = 5; _INV_CELL = 140; _INV_PAD = 6
+
+    def _inv_layout(self):
+        pw = self._INV_COLS * self._INV_CELL + self._INV_PAD * 2
+        ph = 56 + 4 * self._INV_CELL + self._INV_PAD * 2 + 60
+        bx = WINDOW_WIDTH  // 2 - pw // 2
+        by = WINDOW_HEIGHT // 2 - ph // 2
+        return pw, ph, bx, by
+
+    def _inv_slot_at(self, pos):
+        _, _, bx, by = self._inv_layout()
+        gx = bx + self._INV_PAD; gy = by + 56
+        for i in range(self.player.max_inventory if self.player else 20):
+            sx = gx + (i % self._INV_COLS) * self._INV_CELL
+            sy = gy + (i // self._INV_COLS) * self._INV_CELL
+            if pygame.Rect(sx, sy, self._INV_CELL-2, self._INV_CELL-2).collidepoint(pos):
+                return i
+        return None
+
+    def _inv_trash_rect(self):
+        pw, ph, bx, by = self._inv_layout()
+        return pygame.Rect(bx + pw - 130, by + ph - 42, 122, 34)
+
+    def _discard_inventory_item(self, idx):
+        inv = self.player.inventory
+        if not (0 <= idx < len(inv)):
+            return
+        item = inv[idx]
+        for eq in self.player.equipment.values():
+            if eq is item:
+                item.unequip(self.player)
+                break
+        inv.pop(idx)
+        self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
+        self.messages.append((f"[{item.name}] 버림", 'info'))
+        self.audio.play('use_item')
+
+    def _start_discard_confirm(self, idx):
+        if self.player and 0 <= idx < len(self.player.inventory):
+            self._inv_confirm_idx = idx
+
+    def _inv_confirm_rects(self):
+        cw, ch = 300, 112
+        cx = WINDOW_WIDTH  // 2 - cw // 2
+        cy = WINDOW_HEIGHT // 2 - ch // 2
+        yes_rect = pygame.Rect(cx + 20,        cy + ch - 46, 118, 34)
+        no_rect  = pygame.Rect(cx + cw - 138,  cy + ch - 46, 118, 34)
+        panel    = pygame.Rect(cx, cy, cw, ch)
+        return panel, yes_rect, no_rect
+
+    def _handle_inventory_click(self, pos):
+        i = self._inv_slot_at(pos)
+        if i is None:
+            return
+        inv = self.player.inventory
+        if i == self._inv_sel and i < len(inv):
+            self._do_use_inventory_item(inv[i])
+            self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
+        else:
+            self._inv_sel = i
+
+    def _handle_equipment_click(self, pos):
+        SW, SH = 110, 54; pw = 520; ph = 516
+        bx = WINDOW_WIDTH  // 2 - pw // 2
+        by = WINDOW_HEIGHT // 2 - ph // 2
+        char_cx = bx + pw // 2
+        char_cy = by + 218
+        offsets = [(-SW//2, -128), (-SW//2, +48), (+76, -SH//2),
+                   (-186, -SH//2), (-SW//2, +122), (-SW//2, +190)]
+        for i, (dx, dy) in enumerate(offsets):
+            if pygame.Rect(char_cx+dx, char_cy+dy, SW, SH).collidepoint(pos):
+                if i == self._equip_sel:
+                    slot = self._EQUIP_SLOTS[i]
+                    item = self.player.equipment.get(slot)
+                    if item:
+                        msg = item.unequip(self.player)
+                        if msg:
+                            self.messages.append((msg, 'info'))
+                            self.audio.play('use_item')
+                else:
+                    self._equip_sel = i
+                break
+
     def _handle_pause_action(self, action):
         act = action['type']
         if act == 'move':
@@ -778,14 +968,15 @@ class Game:
         self.dungeon.items.append(Item(enemy.x, enemy.y, d))
 
     # 슬롯 순서: head=0, body=1, weapon=2, off_hand=3, accessory=4
-    _EQUIP_SLOTS = ['head', 'body', 'weapon', 'off_hand', 'accessory']
+    _EQUIP_SLOTS = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
     # (up, down, left, right) → 이동할 슬롯 인덱스 (None = 이동 불가)
     _EQUIP_NAV = {
         0: (None, 1,    3,    2),
         1: (0,    4,    3,    2),
         2: (0,    4,    1,    None),
         3: (0,    4,    None, 1),
-        4: (1,    None, 3,    2),
+        4: (1,    5,    3,    2),
+        5: (4,    None, None, None),
     }
 
     def _handle_equipment_action(self, action):
@@ -841,6 +1032,11 @@ class Game:
             self._atk_cd_timer = self.player.atk_cooldown_ms
             return True
         target_tile = self.dungeon.tiles[ny][nx]
+
+        # 버닝 스테이지 문
+        if target_tile.tile_type == TileType.BURNING_DOOR:
+            self._enter_burning_stage()
+            return True
 
         # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
         if target_tile.tile_type == TileType.DOOR:
@@ -929,7 +1125,6 @@ class Game:
             self._on_enemy_killed(enemy)
 
     def _on_enemy_killed(self, enemy):
-        import random
         gold = enemy.gold_drop
         self._run_kills += 1
         if gold:
@@ -1180,7 +1375,7 @@ class Game:
         if not self.skills.ready(combo_id):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(combo_id)), 'info'))
             return False
-        if combo_id == 'WS': return self._skill_fireball()
+        if combo_id == 'WS': return self._skill_fortify()
         if combo_id == 'AD': return self._skill_thunder()
         if combo_id == 'WA': return self._skill_frost()
         if combo_id == 'WD': return self._skill_wind()
@@ -1300,6 +1495,51 @@ class Game:
         self.skills.trigger('WD')
         return True
 
+    # ─────────────── 강화술 ──────────────────────────────────────────
+    def _skill_fortify(self):
+        cdef = COMBO_SKILL_DEFS['WS']
+        dur  = cdef['duration_ms']
+
+        # 이미 활성 상태면 스탯 복원 후 재적용
+        self._remove_fortify_buff()
+
+        self._fortify_def_bonus  = cdef['defense_bonus']
+        self._fortify_atk_bonus  = cdef['atk_speed_bonus']
+        self.player.defense      += self._fortify_def_bonus
+        self.player.attack_speed += self._fortify_atk_bonus
+        self.input.set_move_speed(self.player.total_move_speed)
+
+        self._fortify_effect = SkillEffect(cdef['color'], dur)
+
+        dur_sec = dur // 1000
+        self.messages.append((
+            t('skill_fortify',
+              f'+{self._fortify_atk_bonus:.1f}',
+              f'+{self._fortify_def_bonus}',
+              dur_sec),
+            'good',
+        ))
+        self.audio.play('levelup')
+        self.skills.trigger('WS')
+        return True
+
+    def _update_fortify(self, dt_ms: int):
+        if self._fortify_effect is None:
+            return
+        self._fortify_effect.update(dt_ms)
+        if not self._fortify_effect.alive:
+            self._remove_fortify_buff()
+            self._fortify_effect = None
+            self.messages.append((t('skill_fortify_end'), 'info'))
+
+    def _remove_fortify_buff(self):
+        if self._fortify_def_bonus or self._fortify_atk_bonus:
+            self.player.defense      -= self._fortify_def_bonus
+            self.player.attack_speed -= self._fortify_atk_bonus
+            self.player.attack_speed  = max(0.5, self.player.attack_speed)
+            self._fortify_def_bonus   = 0
+            self._fortify_atk_bonus   = 0.0
+
     # ─────────────── 보스 처치 ────────────────────────────────────────
     def _check_boss_cleared(self):
         if (self.dungeon.is_boss_floor and
@@ -1324,6 +1564,82 @@ class Game:
             self.audio.play('stairs')
             self._start_shake(6, 400)
 
+    # ─────────────── 버닝 스테이지 ──────────────────────────────────
+    def _enter_burning_stage(self):
+        self._burning_floor       = self.floor
+        self._burning_active      = True
+        self._burning_timer_ms    = BURNING_DURATION_MS
+        self._burning_spawn_timer = 500            # 0.5초 후 첫 파도
+        self._burning_wave        = 0
+        self._burning_warned_10s  = False
+
+        dungeon, start = generate_arena()
+        self.dungeon = dungeon
+        self._theme  = BURNING_THEME
+
+        self.player.x, self.player.y = start
+        self.player.hp = self.player.max_hp        # 체력 완전 회복
+
+        self.camera = Camera(ARENA_WIDTH, ARENA_HEIGHT)
+        self.camera.center_on(self.player.x, self.player.y)
+
+        self.messages.clear()
+        self.messages.append((t('burning_enter'), 'bad'))
+        self.audio.play('boss_appear')
+        self._start_shake(6, 500)
+
+    def _update_burning(self, dt_ms: int):
+        dt_ms = min(dt_ms, 200)   # 한 프레임이 타이머를 200ms 이상 삭감하지 않도록
+        self._burning_timer_ms    -= dt_ms
+        self._burning_spawn_timer -= dt_ms
+
+        # 10초 경고
+        if (not self._burning_warned_10s and
+                self._burning_timer_ms <= 10_000):
+            self._burning_warned_10s = True
+            self.messages.append((t('burning_10sec'), 'bad'))
+            self._start_shake(4, 300)
+
+        # 생존 달성
+        if self._burning_timer_ms <= 0:
+            self._exit_burning_stage(survived=True)
+            return
+
+        # 파도 스폰
+        live = sum(1 for e in self.dungeon.enemies if e.is_alive())
+        if self._burning_spawn_timer <= 0 and live < MAX_LIVE_ENEMIES:
+            self._burning_spawn_timer = SPAWN_INTERVAL_MS
+            self._burning_wave       += 1
+            new_enemies = spawn_wave(
+                self.dungeon, self._enemy_data,
+                self._burning_floor, self._burning_wave,
+            )
+            self.dungeon.enemies.extend(new_enemies)
+            self.messages.append((t('burning_wave', self._burning_wave), 'warn'))
+
+        # 오래된 dead 적 정리 (성능)
+        if len(self.dungeon.enemies) > MAX_LIVE_ENEMIES * 2:
+            self.dungeon.enemies = [e for e in self.dungeon.enemies if e.is_alive()]
+
+    def _exit_burning_stage(self, survived: bool):
+        self._burning_active = False
+        self._fortify_effect = None      # 이펙트 초기화
+        self._remove_fortify_buff()
+
+        if survived:
+            self.messages.append((t('burning_survived'), 'good'))
+            self.audio.play('levelup')
+            # 다음 보스 층으로 이동
+            boss_floor = ((self._burning_floor // 5) + 1) * 5
+            self.floor = max(boss_floor, self._burning_floor + 1)
+        else:
+            self.messages.append((t('burning_failed'), 'info'))
+            self.audio.play('death')
+            self.floor = self._burning_floor
+            self.player.hp = max(1, self.player.max_hp // 4)  # 25% 잔여 HP
+
+        self._start_fade(self._load_floor)
+
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
     def _update_enemies(self, dt):
         for enemy in list(self.dungeon.enemies):
@@ -1344,10 +1660,13 @@ class Game:
                                                (100,180,255) if enemy.key=='wizard' else (255,140,0)))
 
         if not self.player.is_alive() and self.state == 'playing':
-            self._records = update_records(self.floor, self._run_kills, self.player.gold)
-            delete_save()
-            self.audio.play('death')
-            self.state = 'dead'
+            if self._burning_active:
+                self._exit_burning_stage(survived=False)
+            else:
+                self._records = update_records(self.floor, self._run_kills, self.player.gold)
+                delete_save()
+                self.audio.play('death')
+                self.state = 'dead'
 
     # ─────────────── 렌더링 ───────────────────────────────────────────
     def _render(self):
@@ -1388,14 +1707,30 @@ class Game:
         if self.state == 'shop':
             self.hud.render_shop(self.screen, self.dungeon.shop_items, self.player.gold)
         elif self.state == 'paused':
-            self.hud.render_paused(self.screen, self._settings, self._pause_sel)
+            self.hud.render_paused(self.screen, self._settings, self._pause_sel,
+                                   mouse_pos=pygame.mouse.get_pos())
         elif self.state == 'dead':
             self.hud.render_game_over(self.screen, self.floor, self._records)
         elif self.state == 'inventory':
-            self.hud.render_inventory(self.screen, self.player, self._inv_sel)
+            self.hud.render_inventory(self.screen, self.player, self._inv_sel,
+                                      mouse_pos=pygame.mouse.get_pos(),
+                                      drag_idx=self._inv_drag_idx,
+                                      drag_pos=self._inv_drag_pos)
+            if self._inv_confirm_idx is not None and \
+                    self._inv_confirm_idx < len(self.player.inventory):
+                item_name = self.player.inventory[self._inv_confirm_idx].name
+                _, yes_r, no_r = self._inv_confirm_rects()
+                self.hud.render_discard_confirm(self.screen, item_name,
+                                                yes_r, no_r,
+                                                mouse_pos=pygame.mouse.get_pos())
         elif self.state == 'equipment':
             self.hud.render_equipment(self.screen, self.player, self._equip_sel,
-                                      self._sprites.get('hero_down'))
+                                      self._sprites.get('hero_down'),
+                                      mouse_pos=pygame.mouse.get_pos())
+
+        # 버닝 스테이지 타이머 오버레이
+        if self._burning_active:
+            self._render_burning_hud()
 
         pygame.display.flip()
 
@@ -1425,7 +1760,16 @@ class Game:
         oy += int(self._move_anim_offset[1])
         px = (self.player.x - cx) * TILE_SIZE + ox
         py = (self.player.y - cy) * TILE_SIZE + oy
+
+        # 강화술 아우라 링 (플레이어 아래)
+        if self._fortify_effect and self._fortify_effect.alive:
+            self._fortify_effect.draw_below(self._game_surf, px, py)
+
         self._draw_player_sprite(px, py)
+
+        # 강화술 상승 파티클 (플레이어 위)
+        if self._fortify_effect and self._fortify_effect.alive:
+            self._fortify_effect.draw_above(self._game_surf, px, py)
 
         self.animator.draw(self._game_surf, cx, cy)
 
@@ -1445,6 +1789,8 @@ class Game:
                 pygame.draw.line(s,th['wall_bot'],(x,y+ts-1),(x+ts-1,y+ts-1))
         elif tt == TileType.DOOR:
             self._draw_door(s, x, y, lit, th)
+        elif tt == TileType.BURNING_DOOR:
+            self._draw_burning_door(s, x, y, lit, th)
         elif tt == TileType.SHOP:
             col = (25,55,30) if lit else (12,28,15)
             pygame.draw.rect(s, col, (x,y,ts,ts))
@@ -1533,6 +1879,116 @@ class Game:
         # 벽 상단 하이라이트 복원
         pygame.draw.line(s, th['wall_top'], (x, y), (x + ts - 1, y))
 
+    def _draw_burning_door(self, s, x, y, lit, th):
+        ts = TILE_SIZE
+        wall_col = th['wall_lit'] if lit else th['wall_dim']
+        pygame.draw.rect(s, wall_col, (x, y, ts, ts))
+        if not lit:
+            pygame.draw.rect(s, (50, 15, 5), (x + 7, y + 4, 18, 26))
+            return
+
+        T  = pygame.time.get_ticks() * 0.001
+        cx, cy = x + ts // 2, y + ts // 2
+
+        # 아치 내부 — 검은 배경
+        pygame.draw.rect(s, (8, 3, 0), (x + 7, y + 6, 18, 26))
+
+        # 화염 코어 글로우 (오렌지-적색)
+        for i, (fc, fr) in enumerate([
+            ((200, 60, 10), 6),
+            ((255, 110, 20), 4),
+            ((255, 200, 60), 2),
+        ]):
+            pulse = 1.0 + math.sin(T * 4.0 + i * 1.1) * 0.2
+            pygame.draw.circle(s, fc, (cx, cy + 4), round(fr * pulse))
+
+        # 위로 타오르는 불꽃 파티클
+        for i in range(7):
+            phase = (T * 1.8 + i * 0.21) % 1.0
+            px_ = cx - 5 + i * 2 + math.sin(T * 3 + i * 0.9) * 2
+            py_ = y + 30 - phase * 26
+            heat = 1.0 - phase
+            fc = (
+                255,
+                round(180 * heat + 30),
+                round(20 * heat),
+            )
+            r = max(1, round(2.5 * heat))
+            pygame.draw.circle(s, fc, (round(px_), round(py_)), r)
+
+        # 불씨 스파크 (작은 점들)
+        for i in range(5):
+            phase = (T * 2.5 + i * 0.4) % 1.0
+            if phase < 0.3:
+                sp_x = cx - 6 + i * 3 + math.sin(T * 5 + i) * 3
+                sp_y = y + 28 - phase * 80
+                a_sp = 1 - phase / 0.3
+                pygame.draw.circle(s, (round(255 * a_sp), round(220 * a_sp), 0),
+                                   (round(sp_x), round(sp_y)), 1)
+
+        # 돌 아치 프레임 (붉은 열기에 물든 석재)
+        stone_h = (150, 55, 20)
+        stone_d = (70,  20, 8)
+        pygame.draw.rect(s, stone_d, (x + 5, y + 8, 4, 22))
+        pygame.draw.rect(s, stone_h, (x + 5, y + 8, 2, 22))
+        pygame.draw.rect(s, stone_d, (x + 23, y + 8, 4, 22))
+        pygame.draw.rect(s, stone_h, (x + 23, y + 8, 2, 22))
+        for i in range(7):
+            a = math.pi * i / 6
+            ax = round(cx + math.cos(a) * 9)
+            ay = round(y + 8 - math.sin(a) * 5)
+            pygame.draw.circle(s, stone_d, (ax, ay), 3)
+            pygame.draw.circle(s, stone_h, (ax, ay), 1)
+        pygame.draw.arc(s, stone_h, (x + 6, y + 3, 20, 14), 0, math.pi, 2)
+        pygame.draw.rect(s, stone_d, (x + 5, y + 28, 22, 3))
+        pygame.draw.rect(s, stone_h, (x + 5, y + 28, 22, 1))
+        pygame.draw.line(s, th['wall_top'], (x, y), (x + ts - 1, y))
+
+    def _render_burning_hud(self):
+        """버닝 스테이지 타이머 + 파도 오버레이."""
+        sec_left  = max(0, self._burning_timer_ms) // 1000
+        ms_frac   = (max(0, self._burning_timer_ms) % 1000) // 10
+        T         = pygame.time.get_ticks() * 0.001
+        live      = sum(1 for e in self.dungeon.enemies if e.is_alive())
+
+        # 상단 타이머 패널 (반투명)
+        panel_w, panel_h = 240, 56
+        panel_x = GAME_X + (GAME_W - panel_w) // 2
+        panel_y = GAME_Y + 8
+        panel   = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+        panel.fill((0, 0, 0, 170))
+        pygame.draw.rect(panel, (200, 60, 10, 200), (0, 0, panel_w, panel_h), 2)
+        self.screen.blit(panel, (panel_x, panel_y))
+
+        # 불꽃 깜빡임 색상
+        flicker = abs(math.sin(T * 6))
+        timer_col = (
+            255,
+            round(180 + 75 * flicker) if sec_left > 10 else round(60 + 60 * flicker),
+            round(30 * flicker)        if sec_left > 10 else 0,
+        )
+
+        # 타이머 텍스트
+        timer_str = f'{sec_left:02d}.{ms_frac:02d}'
+        ts = self._font_burning_big.render(f'* {timer_str}', True, timer_col)
+        self.screen.blit(ts, (panel_x + panel_w // 2 - ts.get_width() // 2,
+                               panel_y + 6))
+
+        # 파도 / 생존 수
+        info_str = f'Wave {self._burning_wave}   Enemies {live}'
+        info_s = self._font_burning_small.render(info_str, True, (220, 160, 80))
+        self.screen.blit(info_s, (panel_x + panel_w // 2 - info_s.get_width() // 2,
+                                   panel_y + 36))
+
+        # 화면 가장자리 화염 테두리 (마지막 10초) — 재사용 Surface로 매 프레임 할당 방지
+        if sec_left <= 10:
+            edge_a = min(255, round(80 + 80 * abs(math.sin(T * 4))))
+            self._edge_surf.fill((0, 0, 0, 0))
+            for thickness, alpha in [(8, edge_a), (4, min(255, edge_a + 60))]:
+                pygame.draw.rect(self._edge_surf, (255, 80, 20, alpha),
+                                 (0, 0, GAME_W, GAME_H), thickness)
+            self.screen.blit(self._edge_surf, (GAME_X, GAME_Y))
+
     def _draw_player_sprite(self, x, y):
         facing = self._facing
         phase  = self._atk_phase
@@ -1565,10 +2021,34 @@ class Game:
             if spr is None:
                 spr = self._sprites.get('hero_down') or self._sprites.get('hero')
 
-        if spr:
+        # Squeeze & Stretch 스케일 (강화술 시전 순간)
+        scale = 1.0
+        if self._fortify_effect and self._fortify_effect.alive:
+            scale = self._fortify_effect.squeeze_scale
+
+        if scale != 1.0:
+            tmp = pygame.Surface((TILE_SIZE, TILE_SIZE))
+            tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
+            if spr:
+                tmp.blit(spr, (0, 0))
+            else:
+                draw_player(tmp, 0, 0, facing, self._walk_frame)
+            w = round(TILE_SIZE * scale)
+            h = round(TILE_SIZE * scale)
+            scaled = pygame.transform.scale(tmp, (w, h))
+            scaled.set_colorkey(_CKEY)
+            off = (TILE_SIZE - w) // 2
+            self._game_surf.blit(scaled, (x + off, y + off))
+        elif spr:
             self._game_surf.blit(spr, (x, y))
         else:
             draw_player(self._game_surf, x, y, facing, self._walk_frame)
+
+        draw_player_layered(
+            self._game_surf, x, y,
+            facing, self._walk_frame, phase,
+            self.player.equipment,
+        )
 
     def _draw_enemy(self, enemy, x, y):
         fn = _SPRITE_FN.get(enemy.key, draw_generic)

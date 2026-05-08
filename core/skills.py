@@ -44,13 +44,16 @@ SKILL_DEFS = [
 # 강화 스킬: combo_id → {name, cooldown_ms, color, level_req, book, desc, keys}
 COMBO_SKILL_DEFS = {
     'WS': {
-        'name': '파이어볼',
-        'cooldown_ms': 6000,
-        'color': (255, 140, 40),
+        'name': '강화술',
+        'cooldown_ms': 15000,
+        'color': (255, 205, 50),
         'level_req': 5,
-        'book': 'skillbook_fireball',
-        'desc': '전방 화염 투사체',
+        'book': 'skillbook_fortify',
+        'desc': '공속·방어력 강화',
         'keys': 'Ctrl+S',
+        'atk_speed_bonus': 0.5,
+        'defense_bonus': 4,
+        'duration_ms': 10000,
     },
     'AD': {
         'name': '천둥격',

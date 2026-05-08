@@ -434,7 +434,7 @@ class HUD:
         screen.blit(label, (bx, by + bh + 3))
 
     # ------------------------------------------------------------------ #
-    def render_paused(self, screen, settings, pause_sel):
+    def render_paused(self, screen, settings, pause_sel, mouse_pos=(0, 0)):
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
@@ -474,10 +474,14 @@ class HUD:
         for i, (text, tag) in enumerate(ITEMS):
             is_sel = (i == pause_sel)
             iy = by + 56 + i * 46
+            is_hov = pygame.Rect(bx+8, iy-3, bw-16, 32).collidepoint(mouse_pos)
 
             if is_sel:
                 pygame.draw.rect(screen, (30, 30, 58), (bx+8, iy-3, bw-16, 32))
                 pygame.draw.rect(screen, (70, 70, 110), (bx+8, iy-3, bw-16, 32), 1)
+            elif is_hov:
+                pygame.draw.rect(screen, (22, 22, 42), (bx+8, iy-3, bw-16, 32))
+                pygame.draw.rect(screen, (55, 55, 88), (bx+8, iy-3, bw-16, 32), 1)
 
             base_col = GOLD_COLOR if is_sel else item_colors.get(tag, LIGHT_GRAY)
             prefix = "▶ " if is_sel else "   "
@@ -620,7 +624,7 @@ class HUD:
         # ── 장착 장비 ───────────────────────────────────────────────
         sec_header('sec_equip', LIGHT_GRAY)
         _SLOT_LABELS = {'head': '투구', 'body': '갑옷', 'weapon': '무기',
-                        'off_hand': '보조', 'accessory': '장신구'}
+                        'off_hand': '보조', 'accessory': '장신구', 'feet': '신발'}
         for slot, item in player.equipment.items():
             lbl_s = self.font_sm.render(_SLOT_LABELS.get(slot, slot), True, (100, 100, 130))
             if item:
@@ -741,15 +745,17 @@ class HUD:
                     continue
                 tt = tile.tile_type
                 if not tile.visible:
-                    if tt == TileType.DOOR: col = (80, 40, 120)
+                    if tt == TileType.DOOR:         col = (80, 40, 120)
+                    elif tt == TileType.BURNING_DOOR: col = (120, 40, 10)
                     elif tt == TileType.WALL: col = (30, 30, 42)
                     else: col = (40, 40, 55)
                 else:
-                    if tt == TileType.WALL:        col = (60,60,80)
-                    elif tt == TileType.STAIRS_DOWN: col = STAIRS_LIT
-                    elif tt == TileType.SHOP:        col = SHOP_COLOR
-                    elif tt == TileType.DOOR:        col = (160, 80, 255)
-                    else:                            col = (75,75,100)
+                    if tt == TileType.WALL:          col = (60,60,80)
+                    elif tt == TileType.STAIRS_DOWN:  col = STAIRS_LIT
+                    elif tt == TileType.SHOP:         col = SHOP_COLOR
+                    elif tt == TileType.DOOR:         col = (160, 80, 255)
+                    elif tt == TileType.BURNING_DOOR: col = (255, 80, 20)
+                    else:                             col = (75,75,100)
                 pygame.draw.rect(screen, col, (ox+mx*scale, oy+my*scale, scale, scale))
 
         for enemy in dungeon.enemies:
@@ -850,7 +856,8 @@ class HUD:
         screen.blit(self.font_sm.render(text, True, color), (x, y))
 
     # ------------------------------------------------------------------ #
-    def render_inventory(self, screen, player, sel):
+    def render_inventory(self, screen, player, sel, mouse_pos=(0, 0),
+                         drag_idx=None, drag_pos=(0, 0)):
         """인벤토리 화면 오버레이."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
@@ -884,9 +891,13 @@ class HUD:
             sy = gy + row_i * cell
 
             is_sel = (i == sel)
+            is_hov = pygame.Rect(sx, sy, cell-2, cell-2).collidepoint(mouse_pos)
             if is_sel:
                 pygame.draw.rect(screen, (50, 50, 90), (sx, sy, cell-2, cell-2), border_radius=4)
                 pygame.draw.rect(screen, GOLD_COLOR,   (sx, sy, cell-2, cell-2), 2, border_radius=4)
+            elif is_hov:
+                pygame.draw.rect(screen, (28, 28, 50), (sx, sy, cell-2, cell-2), border_radius=4)
+                pygame.draw.rect(screen, (75, 75, 108), (sx, sy, cell-2, cell-2), 1, border_radius=4)
             else:
                 pygame.draw.rect(screen, (20, 20, 38), (sx, sy, cell-2, cell-2), border_radius=4)
                 pygame.draw.rect(screen, (45, 45, 70), (sx, sy, cell-2, cell-2), 1, border_radius=4)
@@ -926,7 +937,7 @@ class HUD:
         if sel < len(inv):
             item = inv[sel]
             type_map = {'weapon': '무기', 'armor': '갑옷', 'head': '투구',
-                        'off_hand': '보조무기', 'accessory': '장신구',
+                        'off_hand': '보조무기', 'accessory': '장신구', 'boots': '신발',
                         'consumable': '소비', 'skillbook': '스킬북'}
             tname = type_map.get(item.item_type, item.item_type)
             info = f"{item.name}  [{tname}]"
@@ -942,19 +953,52 @@ class HUD:
             info_s = self.font_sm.render(info, True, item.color)
             screen.blit(info_s, (bx + (pw - info_s.get_width()) // 2, info_y + 6))
 
+        # ── 버리기 존 ────────────────────────────────────────────────
+        trash_rect = pygame.Rect(bx + pw - 130, by + ph - 42, 122, 34)
+        # 패널 밖 드래그 중일 때도 하이라이트
+        drag_outside = (drag_idx is not None and
+                        not pygame.Rect(bx, by, pw, ph).collidepoint(drag_pos))
+        over_trash = (trash_rect.collidepoint(mouse_pos) or
+                      (drag_idx is not None and trash_rect.collidepoint(drag_pos)) or
+                      drag_outside)
+        has_active = (sel < len(player.inventory)) or (drag_idx is not None)
+        if over_trash and has_active:
+            pygame.draw.rect(screen, (80, 18, 18), trash_rect, border_radius=4)
+            pygame.draw.rect(screen, (240, 70, 70), trash_rect, 2, border_radius=4)
+            tc = (255, 110, 110)
+        elif has_active:
+            pygame.draw.rect(screen, (32, 14, 14), trash_rect, border_radius=4)
+            pygame.draw.rect(screen, (110, 44, 44), trash_rect, 1, border_radius=4)
+            tc = (160, 70, 70)
+        else:
+            pygame.draw.rect(screen, (18, 12, 12), trash_rect, border_radius=4)
+            pygame.draw.rect(screen, (55, 35, 35), trash_rect, 1, border_radius=4)
+            tc = (65, 42, 42)
+        trash_lbl = self.font_sm.render("🗑 버리기", True, tc)
+        screen.blit(trash_lbl, (trash_rect.centerx - trash_lbl.get_width() // 2,
+                                trash_rect.centery - trash_lbl.get_height() // 2))
+
+        # ── 드래그 유령 아이템 ───────────────────────────────────────
+        if drag_idx is not None and drag_idx < len(player.inventory):
+            ghost_item = player.inventory[drag_idx]
+            ghost_surf = pygame.Surface((36, 36), pygame.SRCALPHA)
+            ghost_surf.fill((*ghost_item.color, 160))
+            pygame.draw.rect(ghost_surf, (*ghost_item.color, 220), (0, 0, 36, 36), 2, border_radius=3)
+            screen.blit(ghost_surf, (drag_pos[0] - 18, drag_pos[1] - 18))
+
         # 힌트
-        hint_s = self.font_sm.render(t('inv_hint'), True, (80, 80, 110))
-        screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 20))
+        hint_s = self.font_sm.render(t('inv_hint') + "  Del:버리기", True, (65, 65, 95))
+        screen.blit(hint_s, (bx + 10, by + ph - 20))
 
     # ------------------------------------------------------------------ #
-    def render_equipment(self, screen, player, sel, player_spr=None):
+    def render_equipment(self, screen, player, sel, player_spr=None, mouse_pos=(0, 0)):
         """장비 장착 화면 — 페이퍼돌 레이아웃."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 200))
         screen.blit(ov, (0, 0))
 
-        pw, ph = 520, 458
+        pw, ph = 520, 516
         bx = W // 2 - pw // 2
         by = H // 2 - ph // 2
 
@@ -978,6 +1022,7 @@ class HUD:
             ('weapon',    'slot_weapon',    (220, 190, 100), (+76,    -SH//2)),
             ('off_hand',  'slot_off_hand',  (180, 140, 210), (-186,   -SH//2)),
             ('accessory', 'slot_accessory', (140, 210, 165), (-SW//2, +122)),
+            ('feet',      'slot_feet',      (160, 120, 220), (-SW//2, +190)),
         ]
 
         # ── 연결선 ──────────────────────────────────────────────────
@@ -990,6 +1035,9 @@ class HUD:
         # body ↕ accessory
         acc_top = (char_cx, char_cy + 122)
         pygame.draw.line(screen, line_col, (char_cx, char_cy + 48 + SH), acc_top, 1)
+        # accessory ↕ feet
+        feet_top = (char_cx, char_cy + 190)
+        pygame.draw.line(screen, line_col, (char_cx, char_cy + 122 + SH), feet_top, 1)
         # weapon ←→ off_hand (horizontal, through character)
         weap_left  = (char_cx + 76,          char_cy)
         ofhd_right = (char_cx - 186 + SW,    char_cy)
@@ -1015,9 +1063,10 @@ class HUD:
             sy = char_cy + dy
             item   = player.equipment.get(slot_key)
             is_sel = (i == sel)
+            is_hov = pygame.Rect(sx, sy, SW, SH).collidepoint(mouse_pos) and not is_sel
 
-            bg_col = (48, 44, 82) if is_sel else (18, 18, 38)
-            bd_col = GOLD_COLOR   if is_sel else slot_col
+            bg_col = (48, 44, 82) if is_sel else ((28, 26, 52) if is_hov else (18, 18, 38))
+            bd_col = GOLD_COLOR   if is_sel else (WHITE        if is_hov else slot_col)
             bd_w   = 2 if is_sel else 1
             pygame.draw.rect(screen, bg_col, (sx, sy, SW, SH), border_radius=4)
             pygame.draw.rect(screen, bd_col, (sx, sy, SW, SH), bd_w, border_radius=4)
@@ -1048,6 +1097,54 @@ class HUD:
 
         hint_s = self.font_sm.render(t('equip_hint'), True, (80, 80, 110))
         screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 22))
+
+    # ------------------------------------------------------------------ #
+    def render_discard_confirm(self, screen, item_name, yes_rect, no_rect,
+                               mouse_pos=(0, 0)):
+        """아이템 버리기 확인 대화상자."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        cw = no_rect.right - yes_rect.left + 20
+        ch = yes_rect.bottom - (yes_rect.top - 56) + 8
+        cx = W // 2 - cw // 2
+        cy = yes_rect.top - 56
+
+        # 배경 패널 (어두운 반투명 오버레이 없이 패널만)
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 140))
+        screen.blit(ov, (0, 0))
+
+        pygame.draw.rect(screen, (14, 12, 26), (cx, cy, cw, ch), border_radius=6)
+        pygame.draw.rect(screen, (180, 80, 80), (cx, cy, cw, ch), 2, border_radius=6)
+
+        # 아이템명
+        nm_s = self.font_sm.render(f"[{item_name}]", True, GOLD_COLOR)
+        screen.blit(nm_s, (cx + (cw - nm_s.get_width()) // 2, cy + 10))
+
+        # 질문 텍스트
+        q_s = self.font_md.render("버리시겠습니까?", True, WHITE)
+        screen.blit(q_s, (cx + (cw - q_s.get_width()) // 2, cy + 28))
+
+        # 예 버튼
+        yes_hov = yes_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(screen, (50, 120, 50) if yes_hov else (30, 70, 30),
+                         yes_rect, border_radius=4)
+        pygame.draw.rect(screen, (110, 210, 110) if yes_hov else (60, 130, 60),
+                         yes_rect, 1, border_radius=4)
+        yes_s = self.font_md.render("예  [Y]", True,
+                                    (160, 255, 160) if yes_hov else (100, 200, 100))
+        screen.blit(yes_s, (yes_rect.centerx - yes_s.get_width() // 2,
+                            yes_rect.centery - yes_s.get_height() // 2))
+
+        # 아니오 버튼
+        no_hov = no_rect.collidepoint(mouse_pos)
+        pygame.draw.rect(screen, (120, 40, 40) if no_hov else (70, 24, 24),
+                         no_rect, border_radius=4)
+        pygame.draw.rect(screen, (230, 80, 80) if no_hov else (140, 54, 54),
+                         no_rect, 1, border_radius=4)
+        no_s = self.font_md.render("아니오  [N]", True,
+                                   (255, 140, 140) if no_hov else (200, 80, 80))
+        screen.blit(no_s, (no_rect.centerx - no_s.get_width() // 2,
+                           no_rect.centery - no_s.get_height() // 2))
 
 
 # ---- helpers ----

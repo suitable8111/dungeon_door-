@@ -25,7 +25,7 @@ class Player(Entity):
         # 장착 장비 {슬롯: Item | None}
         self.equipment: dict = {
             'head': None, 'body': None, 'weapon': None,
-            'off_hand': None, 'accessory': None,
+            'off_hand': None, 'accessory': None, 'feet': None,
         }
 
     # ── 유효 능력치 (기본 + 전체 장비 보너스) ────────────────────
@@ -45,6 +45,14 @@ class Player(Entity):
         )
         return self.defense + bonus
 
+    @property
+    def total_move_speed(self) -> float:
+        bonus = sum(
+            item.value for item in self.equipment.values()
+            if item and item.effect == 'speed_up'
+        )
+        return self.move_speed + bonus
+
     # ── 쿨다운 / 이동 간격 계산 ────────────────────────────────────
     @property
     def atk_cooldown_ms(self) -> int:
@@ -52,7 +60,7 @@ class Player(Entity):
 
     @property
     def move_repeat_ms(self) -> int:
-        return max(60, int(self.BASE_MOVE_REPEAT_MS / self.move_speed))
+        return max(60, int(self.BASE_MOVE_REPEAT_MS / self.total_move_speed))
 
     # ── XP / 레벨업 ────────────────────────────────────────────────
     def gain_xp(self, amount):
@@ -102,7 +110,7 @@ class Player(Entity):
                 d['key'] = key
                 p.inventory.append(Item(0, 0, d))
 
-        p.equipment = {'head': None, 'body': None, 'weapon': None, 'off_hand': None, 'accessory': None}
+        p.equipment = {'head': None, 'body': None, 'weapon': None, 'off_hand': None, 'accessory': None, 'feet': None}
         _COMPAT = {'armor': 'body'}
         for slot, key in data.get('equipment', {}).items():
             slot = _COMPAT.get(slot, slot)

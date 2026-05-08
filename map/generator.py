@@ -19,6 +19,22 @@ class Room:
                 self.y + self.h + pad >= other.y)
 
 
+def _place_burning_door(dungeon, room):
+    cx, cy = room.center
+    candidates = [
+        (cx,           room.y - 1),
+        (cx,           room.y + room.h),
+        (room.x - 1,   cy),
+        (room.x + room.w, cy),
+    ]
+    random.shuffle(candidates)
+    for wx, wy in candidates:
+        if dungeon.in_bounds(wx, wy) and dungeon.tiles[wy][wx].tile_type == TileType.WALL:
+            dungeon.tiles[wy][wx] = Tile.burning_door()
+            dungeon.burning_door_pos = (wx, wy)
+            return
+
+
 def _place_door(dungeon, room):
     cx, cy = room.center
     candidates = [
@@ -72,6 +88,11 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
         dungeon.boss_room_pos = (boss_cx, boss_cy)
     else:
         _place_door(dungeon, rooms[-1])
+        # 버닝 스테이지 문: 50층 이상, 상점층 아님, 30% 확률
+        if (floor_level >= 50 and not is_shop_floor and
+                random.random() < 0.05 and len(rooms) >= 3):
+            mid_room = rooms[len(rooms) // 3]
+            _place_burning_door(dungeon, mid_room)
 
     if is_shop_floor and len(rooms) >= 3:
         shop_room = rooms[len(rooms) // 2]
@@ -230,26 +251,31 @@ def drop_pool(floor_level):
     """몬스터 처치 시 드랍 아이템 풀 (게임에서 호출)."""
     if floor_level <= 4:
         return (['health_potion'] * 3 + ['dagger'] + ['leather_armor'] +
-                ['leather_helm'] + ['wooden_shield'] + ['silver_ring'])
+                ['leather_helm'] + ['wooden_shield'] + ['silver_ring'] +
+                ['leather_boots'])
     elif floor_level <= 10:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
                 ['sword'] + ['chain_mail'] + ['leather_helm'] + ['iron_helm'] +
-                ['wooden_shield'] + ['silver_ring'] + ['teleport_scroll'])
+                ['wooden_shield'] + ['silver_ring'] + ['teleport_scroll'] +
+                ['leather_boots'] + ['iron_boots'])
     elif floor_level <= 25:
         return (['large_health_potion'] * 2 + ['sword'] * 2 + ['chain_mail'] +
                 ['plate_armor'] + ['iron_helm'] + ['iron_shield'] +
                 ['silver_ring'] + ['war_pendant'] + ['teleport_scroll'] +
-                ['skillbook_wind'] + ['skillbook_fireball'])
+                ['skillbook_wind'] + ['skillbook_fireball'] +
+                ['iron_boots'])
     elif floor_level <= 50:
         return (['large_health_potion'] * 2 + ['broad_sword'] + ['plate_armor'] +
                 ['knight_helm'] + ['iron_shield'] + ['tower_shield'] +
                 ['war_pendant'] + ['magic_stone'] + ['amulet'] +
-                ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'])
+                ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'] +
+                ['iron_boots'] + ['swift_boots'])
     else:
         return (['large_health_potion'] * 2 + ['great_sword'] + ['mythril_armor'] +
                 ['knight_helm'] + ['tower_shield'] + ['magic_stone'] * 2 +
                 ['war_pendant'] + ['amulet'] + ['whirlwind_potion'] +
-                ['skillbook_frost'] + ['skillbook_thunder'])
+                ['skillbook_frost'] + ['skillbook_thunder'] +
+                ['swift_boots'] + ['shadow_boots'])
 
 
 # 테마별 몬스터 풀 (theme_index 0-19)
@@ -362,24 +388,27 @@ def _enemy_pool(floor_level, theme_idx=0):
 
 def _item_pool(floor_level):
     if floor_level <= 2:
-        return ['health_potion'] * 4 + ['dagger'] + ['leather_armor']
+        return ['health_potion'] * 4 + ['dagger'] + ['leather_armor'] + ['leather_boots']
     elif floor_level <= 3:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
-                ['sword'] + ['chain_mail'] + ['teleport_scroll'])
+                ['sword'] + ['chain_mail'] + ['teleport_scroll'] + ['leather_boots'])
     elif floor_level <= 5:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
-                ['sword'] + ['chain_mail'] + ['teleport_scroll'] + ['skillbook_wind'])
+                ['sword'] + ['chain_mail'] + ['teleport_scroll'] + ['skillbook_wind'] +
+                ['leather_boots'] + ['iron_boots'])
     elif floor_level <= 7:
         return (['large_health_potion'] * 2 + ['sword'] * 2 +
                 ['plate_armor'] + ['teleport_scroll'] + ['amulet'] +
-                ['whirlwind_potion'] + ['skillbook_wind'] + ['skillbook_fireball'] + ['skillbook_frost'])
+                ['whirlwind_potion'] + ['skillbook_wind'] + ['skillbook_fireball'] + ['skillbook_frost'] +
+                ['iron_boots'])
     elif floor_level <= 50:
         return (['large_health_potion'] * 2 + ['sword'] * 2 +
                 ['plate_armor'] + ['teleport_scroll'] + ['amulet'] +
-                ['whirlwind_potion'] + ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'])
+                ['whirlwind_potion'] + ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'] +
+                ['iron_boots'] + ['swift_boots'])
     else:
-        # 50층 이상: 고급 아이템 위주 (포션 / 스크롤 / 장비 균형)
         return (['large_health_potion'] * 3 + ['plate_armor'] +
                 ['sword'] * 2 + ['amulet'] * 2 +
                 ['teleport_scroll'] * 2 + ['whirlwind_potion'] +
-                ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'])
+                ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'] +
+                ['swift_boots'] + ['shadow_boots'])

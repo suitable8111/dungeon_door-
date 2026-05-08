@@ -9,7 +9,8 @@ class Dungeon:
         self.rooms = []
         self.enemies = []
         self.items = []
-        self.stairs_pos = None
+        self.stairs_pos      = None
+        self.burning_door_pos = None
 
         # Phase 3: 보스 / 상점
         self.is_boss_floor  = False

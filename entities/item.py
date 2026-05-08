@@ -20,6 +20,7 @@ class Item:
         if self.item_type == 'head':      return 'head'
         if self.item_type == 'off_hand':  return 'off_hand'
         if self.item_type == 'accessory': return 'accessory'
+        if self.item_type == 'boots':     return 'feet'
         return None
 
     # ── 사용 / 장착 ────────────────────────────────────────────────
@@ -45,7 +46,7 @@ class Item:
 
     _SLOT_NAMES = {
         'weapon': '무기', 'body': '갑옷', 'head': '투구',
-        'off_hand': '보조무기', 'accessory': '장신구',
+        'off_hand': '보조무기', 'accessory': '장신구', 'feet': '신발',
     }
 
     def _equip(self, player, slot):

@@ -32,6 +32,7 @@ _T: dict[str, dict[str, str]] = {
     'slot_body':       {'ko': '몸  통',              'en': 'Body'},
     'slot_off_hand':   {'ko': '보조무기',             'en': 'Off-Hand'},
     'slot_accessory':  {'ko': '장신구',              'en': 'Accessory'},
+    'slot_feet':       {'ko': '신  발',              'en': 'Boots'},
     'sec_skills':    {'ko': '스킬  [W/A/S/D]',  'en': 'Skills [W/A/S/D]'},
     'sec_combo':     {'ko': '강화 스킬',          'en': 'Enhanced Skills'},
     'sec_controls':  {'ko': '조작법',            'en': 'Controls'},
@@ -167,6 +168,15 @@ _T: dict[str, dict[str, str]] = {
     'skill_frost_m':    {'ko': '❄ 냉기 폭발! 적 없음',             'en': '❄ Frost! No targets'},
     'skill_wind':       {'ko': '💨 바람 칼날! {}마리 관통',        'en': '💨 Wind! Pierce {}'},
     'skill_wind_m':     {'ko': '💨 바람 칼날! 빗나감',              'en': '💨 Wind Blade! Miss'},
+    'skill_fortify':    {'ko': '✨ 강화술! 공속 +{} 방어 +{} ({}초)', 'en': '✨ Fortify! Spd +{} Def +{} ({}s)'},
+    'skill_fortify_end':{'ko': '강화술 효과가 사라졌다.',             'en': 'Fortify faded.'},
+
+    # ── 버닝 스테이지 ─────────────────────────────────────────────────────
+    'burning_enter':    {'ko': '🔥 버닝 스테이지! 60초를 버텨라!',   'en': '🔥 Burning Stage! Survive 60 seconds!'},
+    'burning_wave':     {'ko': '🔥 파도 {}!',                         'en': '🔥 Wave {}!'},
+    'burning_survived': {'ko': '🏆 생존! 보스 스테이지로 이동!',      'en': '🏆 Survived! Moving to Boss Stage!'},
+    'burning_failed':   {'ko': '💀 쓰러졌다. 현재 층으로 복귀.',      'en': '💀 Defeated. Returning to current floor.'},
+    'burning_10sec':    {'ko': '⚠ 10초 남았다!',                      'en': '⚠ 10 seconds left!'},
 
     # ── 강화 스킬 해금 메시지 ─────────────────────────────────────────────
     'combo_unlock':     {'ko': '★ {} 해금!',                       'en': '★ {} unlocked!'},

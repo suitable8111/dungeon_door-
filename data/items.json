@@ -153,6 +153,34 @@
     "effect": "whirlwind",
     "value": 0
   },
+  "leather_boots": {
+    "name": "가죽 장화",
+    "color": [139, 90, 43],
+    "type": "boots",
+    "effect": "speed_up",
+    "value": 0.15
+  },
+  "iron_boots": {
+    "name": "철제 장화",
+    "color": [155, 155, 175],
+    "type": "boots",
+    "effect": "speed_up",
+    "value": 0.25
+  },
+  "swift_boots": {
+    "name": "질풍 장화",
+    "color": [80, 200, 230],
+    "type": "boots",
+    "effect": "speed_up",
+    "value": 0.40
+  },
+  "shadow_boots": {
+    "name": "그림자 장화",
+    "color": [100, 70, 160],
+    "type": "boots",
+    "effect": "speed_up",
+    "value": 0.35
+  },
   "skillbook_wind": {
     "name": "바람 스킬북",
     "color": [160, 255, 160],

@@ -18,6 +18,8 @@ class Enemy(Entity):
         self.move_ms      = data.get('move_ms',   900)
         self.attack_ms    = data.get('attack_ms', 1500)
         self.attack_range = data.get('attack_range', 1)
+        self.aware_range  = data.get('aware_range',  20 if data.get('is_boss') else 14)
+        self.chase_range  = data.get('chase_range',  18 if data.get('is_boss') else 10)
 
         self._move_t   = random.uniform(0, self.move_ms)
         self._attack_t = random.uniform(0, self.attack_ms)
@@ -25,8 +27,7 @@ class Enemy(Entity):
     # ------------------------------------------------------------------ #
     def update(self, dt_ms, dungeon, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
-        aware_range = 20 if self.is_boss else 14
-        if dist > aware_range:
+        if dist > self.aware_range:
             return
 
         self._move_t   -= dt_ms
@@ -41,9 +42,7 @@ class Enemy(Entity):
                 self._attack_t = self.attack_ms
         else:
             if self._move_t <= 0:
-                chase_range = 18 if self.is_boss else 10
-                # 원거리 유닛은 적정 거리 유지 시도
-                if dist <= chase_range:
+                if dist <= self.chase_range:
                     if dist > max(1, self.attack_range - 1):
                         self._move_toward(player.x, player.y, dungeon, player)
                 elif random.random() < 0.35:

@@ -1,4 +1,6 @@
-"""테스트 실행: python3 test_main.py [층수]  (기본값: 1층)"""
+"""테스트 실행: python3 test_main.py [층수]  (기본값: 1층)
+버닝 스테이지:  python3 test_main.py bunning
+"""
 import sys
 
 try:
@@ -9,10 +11,14 @@ except ImportError:
 
 from core.game import Game
 
-TEST_FLOOR = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-
 pygame.init()
 game = Game()
-game.start_test_mode(TEST_FLOOR)
+
+if len(sys.argv) > 1 and sys.argv[1].lower() == 'bunning':
+    game.start_burning_mode()
+else:
+    TEST_FLOOR = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    game.start_test_mode(TEST_FLOOR)
+
 game.run()
 pygame.quit()
