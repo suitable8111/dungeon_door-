@@ -178,7 +178,8 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
         if boss_key not in enemy_data:
             boss_key = boss_candidates[0]
         bdata = _scale_enemy(enemy_data[boss_key], floor_level)
-        bdata['key'] = boss_key
+        bdata['key']     = boss_key
+        bdata['is_boss'] = True
         bcx, bcy = boss_room.center
         boss = Enemy(bcx, bcy, bdata)
         dungeon.enemies.append(boss)

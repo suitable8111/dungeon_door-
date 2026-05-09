@@ -355,6 +355,8 @@ class Game:
                 if self._burning_active:
                     self._update_burning(dt)
             if self.state == 'playing':
+                if self.player:
+                    self.player.tick_debuffs(dt)
                 self._update_enemies(dt)
             self._update_bgm()
             self._render()
@@ -1110,6 +1112,10 @@ class Game:
             self.audio.play('use_item')
 
     def _player_attack(self, enemy):
+        # 두려움: 명중률 40%
+        if getattr(self.player, 'feared_ms', 0) > 0 and random.random() > 0.4:
+            self.messages.append(("두려움에 공격이 빗나갔습니다!", 'bad'))
+            return
         crit = random.random() < 0.1
         dmg  = max(1, self.player.total_attack - enemy.defense + random.randint(0, 3))
         if crit:
@@ -1641,12 +1647,27 @@ class Game:
         self._start_fade(self._load_floor)
 
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
+    def _spawn_boss_summon(self, key: str, bx: int, by: int):
+        if key not in self._enemy_data:
+            return
+        from entities.enemy import Enemy
+        for dx, dy in [(0,1),(0,-1),(1,0),(-1,0),(1,1),(-1,1),(1,-1),(-1,-1)]:
+            nx, ny = bx + dx, by + dy
+            if (self.dungeon.is_walkable(nx, ny) and
+                    not self.dungeon.get_enemy_at(nx, ny) and
+                    (nx, ny) != (self.player.x, self.player.y)):
+                d = dict(self._enemy_data[key]); d['key'] = key
+                new_e = Enemy(nx, ny, d)
+                self.dungeon.enemies.append(new_e)
+                self.animator.add(HitFlashAnim(nx, ny, 0, (120, 200, 160)))
+                return
+
     def _update_enemies(self, dt):
         for enemy in list(self.dungeon.enemies):
             if not (enemy.is_alive() and self.player.is_alive()):
                 continue
             prev_hp = self.player.hp
-            enemy.update(dt, self.dungeon, self.player, self.messages)
+            result  = enemy.update(dt, self.dungeon, self.player, self.messages)
             if self.player.hp < prev_hp:
                 dmg = prev_hp - self.player.hp
                 self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255,50,50)))
@@ -1658,6 +1679,29 @@ class Game:
                     self.animator.add(BoltAnim(enemy.x, enemy.y,
                                                self.player.x, self.player.y,
                                                (100,180,255) if enemy.key=='wizard' else (255,140,0)))
+            # 보스 스킬 시각 효과
+            if result:
+                skill = result.get('skill')
+                ex, ey = result.get('ex', enemy.x), result.get('ey', enemy.y)
+                if skill == 'whirlwind':
+                    self.animator.add(WhirlAnim(ex, ey))
+                    self.animator.particles.emit_whirl(ex, ey)
+                    self._start_shake(5, 300)
+                elif skill == 'charge':
+                    self.animator.particles.emit_power_hit(ex, ey)
+                    self._start_shake(6, 280)
+                elif skill == 'death_nova':
+                    self.animator.add(WhirlAnim(ex, ey))
+                    self.animator.particles.emit_thunder_hit(ex, ey)
+                    self._start_shake(5, 350)
+                elif skill == 'summon_undead':
+                    self._spawn_boss_summon(result.get('spawn_key','skeleton'), ex, ey)
+                elif skill == 'curse':
+                    self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (160, 50, 220)))
+                elif skill == 'slow':
+                    self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (80, 130, 255)))
+                elif skill == 'fear':
+                    self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (255, 200, 50)))
 
         if not self.player.is_alive() and self.state == 'playing':
             if self._burning_active:
@@ -2052,8 +2096,25 @@ class Game:
 
     def _draw_enemy(self, enemy, x, y):
         fn = _SPRITE_FN.get(enemy.key, draw_generic)
-        fn(self._game_surf, x, y, enemy.color, pygame.time.get_ticks())
-        draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
+        ts = TILE_SIZE
+        if enemy.is_boss:
+            tmp = pygame.Surface((ts, ts))
+            tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
+            fn(tmp, 0, 0, enemy.color, pygame.time.get_ticks())
+            big = pygame.transform.scale(tmp, (ts * 2, ts * 2))
+            big.set_colorkey(_CKEY)
+            blit_x, blit_y = x - ts // 2, y - ts // 2
+            self._game_surf.blit(big, (blit_x, blit_y))
+            # 보스 HP 바 (2배 너비)
+            bw = ts * 2 - 4
+            ratio = max(0.0, enemy.hp / enemy.max_hp)
+            _r(self._game_surf, (70, 20, 20), blit_x + 2, blit_y + 2, bw, 5)
+            if ratio > 0:
+                col = (200 + int(55*(1-ratio)), int(210*ratio), 40)
+                _r(self._game_surf, col, blit_x + 2, blit_y + 2, max(1, int(bw*ratio)), 5)
+        else:
+            fn(self._game_surf, x, y, enemy.color, pygame.time.get_ticks())
+            draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
 
     def _draw_item(self, item, x, y):
         ts=TILE_SIZE; s=self._game_surf

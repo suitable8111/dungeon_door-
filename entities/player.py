@@ -18,6 +18,11 @@ class Player(Entity):
         self.evasion      = 0     # 회피율 (0~100 %)
         self.move_speed   = 1.0   # 높을수록 연속이동 빠름
 
+        # 디버프 (저주/슬로우/두려움)
+        self.cursed_ms  = 0   # 받는 피해 50% 증가
+        self.slowed_ms  = 0   # 이동속도 30% 감소
+        self.feared_ms  = 0   # 명중률 40%로 저하
+
         # 인벤토리 (최대 20칸)
         self.inventory: list    = []
         self.max_inventory: int = 20
@@ -45,13 +50,29 @@ class Player(Entity):
         )
         return self.defense + bonus
 
+    def take_damage(self, amount: int):
+        if self.cursed_ms > 0:
+            amount = int(amount * 1.5)
+        self.hp = max(0, self.hp - amount)
+
+    def tick_debuffs(self, dt_ms: int):
+        if self.cursed_ms > 0:
+            self.cursed_ms = max(0, self.cursed_ms - dt_ms)
+        if self.slowed_ms > 0:
+            self.slowed_ms = max(0, self.slowed_ms - dt_ms)
+        if self.feared_ms > 0:
+            self.feared_ms = max(0, self.feared_ms - dt_ms)
+
     @property
     def total_move_speed(self) -> float:
         bonus = sum(
             item.value for item in self.equipment.values()
             if item and item.effect == 'speed_up'
         )
-        return self.move_speed + bonus
+        spd = self.move_speed + bonus
+        if self.slowed_ms > 0:
+            spd *= 0.7
+        return spd
 
     # ── 쿨다운 / 이동 간격 계산 ────────────────────────────────────
     @property

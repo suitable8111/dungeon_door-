@@ -563,17 +563,41 @@ class HUD:
         screen.blit(xp_txt, (x + xp_bw + 5, cy - xp_txt.get_height() // 2))
         x += xp_bw + xp_txt.get_width() + 16
 
-        # ── 골드 (오른쪽) ──
-        gold_s = self.font_md.render(f"G  {player.gold}", True, GOLD_COLOR)
-        gx = WINDOW_WIDTH - gold_s.get_width() - 16
-        screen.blit(gold_s, (gx, cy - gold_s.get_height() // 2))
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
+
+        # ── 골드 ──
+        gold_label = self.font_sm.render("G", True, GOLD_COLOR)
+        screen.blit(gold_label, (x, cy - gold_label.get_height() // 2))
+        x += gold_label.get_width() + 5
+        gold_val = self.font_md.render(str(player.gold), True, GOLD_COLOR)
+        screen.blit(gold_val, (x, cy - gold_val.get_height() // 2))
+        x += gold_val.get_width() + 16
+
+        # ── 상태이상 배지 ──
+        _debuffs = [
+            ('cursed_ms',  "저주",   (220, 100, 255), (45,  10,  60), (160,  50, 220)),
+            ('slowed_ms',  "슬로우", ( 90, 170, 255), (10,  20,  55), ( 60, 120, 220)),
+            ('feared_ms',  "두려움", (255, 215,  60), (50,  40,   5), (200, 160,  20)),
+        ]
+        ch = TOP_BAR_H - 8; cy2 = 4
+        for attr, label, txt_col, bg_col, border_col in _debuffs:
+            ms = getattr(player, attr, 0)
+            if ms > 0:
+                sec_left = math.ceil(ms / 1000)
+                badge_s = self.font_sm.render(f"{label} {sec_left}s", True, txt_col)
+                cw = badge_s.get_width() + 10
+                pygame.draw.rect(screen, bg_col, (x, cy2, cw, ch))
+                pygame.draw.rect(screen, border_col, (x, cy2, cw, ch), 1)
+                screen.blit(badge_s, (x + 5, cy2 + ch // 2 - badge_s.get_height() // 2))
+                x += cw + 6
 
         # ── TEST 모드 배지 ──
         if is_test_mode:
             badge = self.font_md.render("TEST MODE", True, (20, 20, 20))
             bw = badge.get_width() + 14
             bh = TOP_BAR_H - 8
-            bx = gx - bw - 14
+            bx = WINDOW_WIDTH - bw - 14
             by = 4
             pygame.draw.rect(screen, (255, 80, 0), (bx, by, bw, bh))
             pygame.draw.rect(screen, (255, 160, 60), (bx, by, bw, bh), 1)
@@ -759,9 +783,19 @@ class HUD:
                 pygame.draw.rect(screen, col, (ox+mx*scale, oy+my*scale, scale, scale))
 
         for enemy in dungeon.enemies:
-            if enemy.is_alive() and dungeon.tiles[enemy.y][enemy.x].visible:
-                ec = BOSS_COLOR if enemy.is_boss else (220,60,60)
-                pygame.draw.rect(screen, ec, (ox+enemy.x*scale, oy+enemy.y*scale, scale, scale))
+            if not (enemy.is_alive() and dungeon.tiles[enemy.y][enemy.x].visible):
+                continue
+            ex = ox + enemy.x * scale
+            ey = oy + enemy.y * scale
+            if enemy.is_boss:
+                # 4×4 (scale*2) 크기, 중앙 정렬
+                pygame.draw.rect(screen, BOSS_COLOR,
+                                 (ex - scale // 2, ey - scale // 2, scale * 2, scale * 2))
+                # 밝은 테두리
+                pygame.draw.rect(screen, (255, 180, 255),
+                                 (ex - scale // 2, ey - scale // 2, scale * 2, scale * 2), 1)
+            else:
+                pygame.draw.rect(screen, (220, 60, 60), (ex, ey, scale, scale))
 
         pygame.draw.rect(screen, WHITE, (ox+player.x*scale-1, oy+player.y*scale-1, scale+1, scale+1))
         pygame.draw.rect(screen, UI_BORDER, (ox, oy, dungeon.width*scale, dungeon.height*scale), 1)

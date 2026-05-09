@@ -61,6 +61,6 @@
   "stomp_exec":   { "name": "사형집행인", "hp": 460, "attack": 40, "defense": 14, "xp": 570, "gold_drop": 198, "color": [138, 78, 48], "move_ms":  900, "attack_ms": 2100 },
 
   "dragon":       { "name": "드래곤",     "hp":  90, "attack": 16, "defense":  6, "xp": 140, "gold_drop":  70, "color": [180, 60, 20], "move_ms": 1100, "attack_ms": 1900 },
-  "dark_knight":  { "name": "어둠의 기사","hp": 130, "attack": 18, "defense":  8, "xp": 220, "gold_drop": 150, "color": [ 80, 60,120], "move_ms":  900, "attack_ms": 1400, "is_boss": true },
-  "lich":         { "name": "리치",       "hp": 110, "attack": 24, "defense":  5, "xp": 280, "gold_drop": 200, "color": [120,200,160], "move_ms": 1000, "attack_ms": 1100, "is_boss": true, "attack_range": 4 }
+  "dark_knight":  { "name": "어둠의 기사","hp": 260, "attack": 22, "defense": 10, "xp": 220, "gold_drop": 150, "color": [ 80, 60,120], "move_ms":  900, "attack_ms": 1400, "is_boss": true, "boss_skills": ["charge", "whirlwind", "fear"], "skill_cd_ms": 4000 },
+  "lich":         { "name": "리치",       "hp": 220, "attack": 28, "defense":  6, "xp": 280, "gold_drop": 200, "color": [120,200,160], "move_ms": 1000, "attack_ms": 1100, "is_boss": true, "attack_range": 4, "boss_skills": ["death_nova", "summon_undead", "curse", "slow"], "skill_cd_ms": 5000 }
 }
