@@ -1,29 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller 6.x spec for DungeonDoor → game.exe
 
-from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_all
+
+# pygame-ce 전체 수집 (DLL 포함)
+pg_datas, pg_binaries, pg_hiddenimports = collect_all('pygame')
 
 added_datas = [
     ('assets/fonts',   'assets/fonts'),
     ('assets/sprites', 'assets/sprites'),
     ('assets/ui',      'assets/ui'),
     ('data',           'data'),
-]
-
-try:
-    added_datas += collect_data_files('pygame')
-except Exception:
-    pass
+] + pg_datas
 
 a = Analysis(
     ['main.py'],
     pathex=['.'],
-    binaries=[],
+    binaries=pg_binaries,
     datas=added_datas,
-    hiddenimports=[
+    hiddenimports=pg_hiddenimports + [
         'pygame',
-        'pygame.mixer',
         'pygame.font',
+        'pygame.freetype',
+        'pygame.mixer',
         'pygame.image',
         'pygame.transform',
         'core.game',
