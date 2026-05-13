@@ -35,18 +35,24 @@ SKILL_UPGRADES = {
 }
 
 SKILL_DEFS = [
-    {'key': 'W', 'name': '섬광 돌진',   'cooldown_ms': 3000,  'color': (100, 180, 255), 'desc': '3칸 전진, 경로상 적 경직'},
-    {'key': 'A', 'name': '강철 회오리', 'cooldown_ms': 5000,  'color': (255, 180, 60),  'desc': '주변 8방향 휩쓸기'},
-    {'key': 'S', 'name': '재생의 숨결', 'cooldown_ms': 10000, 'color': (80, 220, 130),  'desc': 'HP 25% 회복 + 방어력 상승'},
-    {'key': 'D', 'name': '심판의 일격', 'cooldown_ms': 4000,  'color': (255, 100, 80),  'desc': '전방 2.5배 강타'},
+    {'key': 'W', 'name': '섬광 돌진',   'cooldown_ms': 3000,  'level_req': 5,  'color': (100, 180, 255), 'desc': '3칸 전진, 경로상 적 경직'},
+    {'key': 'A', 'name': '강철 회오리', 'cooldown_ms': 5000,  'level_req': 10, 'color': (255, 180, 60),  'desc': '주변 8방향 휩쓸기'},
+    {'key': 'S', 'name': '재생의 숨결', 'cooldown_ms': 10000, 'level_req': 6,  'color': (80, 220, 130),  'desc': 'HP 25% 회복 + 방어력 상승'},
+    {'key': 'D', 'name': '심판의 일격', 'cooldown_ms': 4000,  'level_req': 1,  'color': (255, 100, 80),  'desc': '전방 2.5배 강타'},
 ]
 
+# 기본스킬 해금 레벨 빠른 참조용
+SKILL_LEVEL_REQS: dict[str, int] = {s['key']: s['level_req'] for s in SKILL_DEFS}
+
 COMBO_SKILL_DEFS = {
+    # level_req = max(구성 기본스킬 해금 레벨) + 10
+    # skill_level_req = 구성 기본스킬이 모두 이 스킬레벨 이상이어야 해금
     'WS': {
         'name': '성역의 가호',
         'cooldown_ms': 20000,
         'color': (255, 205, 50),
-        'level_req': 5,
+        'level_req': 16,       # max(W:5, S:6) + 10
+        'skill_level_req': 3,
         'book': 'skillbook_fortify',
         'desc': '공속 +50%  피해감소 20% (10초)',
         'keys': 'Ctrl+S',
@@ -58,7 +64,8 @@ COMBO_SKILL_DEFS = {
         'name': '뇌신검',
         'cooldown_ms': 12000,
         'color': (200, 160, 255),
-        'level_req': 12,
+        'level_req': 20,       # max(A:10, D:1) + 10
+        'skill_level_req': 3,
         'book': 'skillbook_thunder',
         'desc': '무작위 적 5명에게 낙뢰',
         'keys': 'Ctrl+A',
@@ -67,7 +74,8 @@ COMBO_SKILL_DEFS = {
         'name': '서리 폭발',
         'cooldown_ms': 8000,
         'color': (100, 220, 255),
-        'level_req': 8,
+        'level_req': 20,       # max(W:5, A:10) + 10
+        'skill_level_req': 3,
         'book': 'skillbook_frost',
         'desc': '반경 3칸 빙결+냉기 피해',
         'keys': 'Ctrl+W',
@@ -76,7 +84,8 @@ COMBO_SKILL_DEFS = {
         'name': '차원참',
         'cooldown_ms': 6000,
         'color': (160, 255, 160),
-        'level_req': 10,
+        'level_req': 15,       # max(W:5, D:1) + 10
+        'skill_level_req': 3,
         'book': 'skillbook_wind',
         'desc': '전방 8칸 관통, 궤적 폭발',
         'keys': 'Ctrl+D',

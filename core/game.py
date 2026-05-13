@@ -1144,9 +1144,11 @@ class Game:
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.audio.play('levelup')
             for cid, cdef in COMBO_SKILL_DEFS.items():
+                slv_req = cdef.get('skill_level_req', 1)
                 if (cid in self._skill_books and
                         cid not in self._unlocked_combos and
-                        self.player.level >= cdef['level_req']):
+                        self.player.level >= cdef['level_req'] and
+                        all(self._skill_levels.get(k, 1) >= slv_req for k in cid)):
                     self._unlocked_combos.add(cid)
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
         self.dungeon.enemies.remove(enemy)
@@ -1162,11 +1164,16 @@ class Game:
             self.audio.play('pickup')
             if cdef:
                 self._skill_books.add(combo_id)
-                if self.player.level >= cdef['level_req']:
+                slv_req = cdef.get('skill_level_req', 1)
+                level_ok = self.player.level >= cdef['level_req']
+                skill_ok = all(self._skill_levels.get(k, 1) >= slv_req for k in combo_id)
+                if level_ok and skill_ok:
                     self._unlocked_combos.add(combo_id)
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
-                else:
+                elif not level_ok:
                     self.messages.append((t('combo_need_level', item.name, cdef['level_req']), 'warn'))
+                else:
+                    self.messages.append((t('combo_need_skill_level', item.name, slv_req), 'warn'))
             return
         if len(self.player.inventory) < self.player.max_inventory:
             self.player.inventory.append(item)
@@ -1227,6 +1234,10 @@ class Game:
 
     # ─────────────── 스킬 ─────────────────────────────────────────────
     def _use_skill(self, key):
+        sdef = next((s for s in SKILL_DEFS if s['key'] == key), None)
+        if sdef and self.player.level < sdef['level_req']:
+            self.messages.append((t('skill_need_level', sdef['name'], sdef['level_req']), 'warn'))
+            return False
         if not self.skills.ready(key):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
             return False

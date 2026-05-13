@@ -182,6 +182,10 @@ _T: dict[str, dict[str, str]] = {
     'combo_unlock':     {'ko': '★ {} 해금!',                       'en': '★ {} unlocked!'},
     'combo_need_level': {'ko': '{} 스킬북 획득! (Lv.{} 달성 시 해금)',
                          'en': '{} skill book! (Unlock at Lv.{})'},
+    'combo_need_skill_level': {'ko': '{} 스킬북 획득! (W/A/S/D 스킬 Lv.{} 달성 시 해금)',
+                                'en': '{} skill book! (Unlock when skills reach Lv.{})'},
+    'skill_need_level': {'ko': '{} 사용 불가 — Lv.{} 필요',
+                         'en': '{} unavailable — requires Lv.{}'},
     'combo_no_book':    {'ko': '{} — 스킬북을 찾으세요',           'en': '{} — find the skill book'},
     'combo_no_unlock':  {'ko': '{} — 스킬북 + Lv.{} 필요',        'en': '{} — need book + Lv.{}'},
 
