@@ -42,8 +42,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=['runtime_hook.py'],
     excludes=[
-        'tkinter', 'unittest', 'email', 'html', 'http',
-        'pydoc', 'doctest', 'difflib',
+        'tkinter',
         'make_capsules', 'build_assets', 'test_main',
     ],
     noarchive=False,
