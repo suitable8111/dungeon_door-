@@ -27,9 +27,11 @@ jobs:
         run: |
           python -c "
           from PIL import Image
-          img = Image.open('assets/steam/icon_512.png').convert('RGBA')
-          img.save('assets/steam/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
-          print('icon.ico 생성 완료')
+          sizes = [256, 128, 64, 48, 32, 16]
+          src = Image.open('assets/steam/icon_512.png').convert('RGBA')
+          imgs = [src.resize((s, s), Image.LANCZOS) for s in sizes]
+          imgs[0].save('assets/steam/icon.ico', format='ICO', append_images=imgs[1:])
+          print('icon.ico generated')
           "
 
       - name: Build with PyInstaller
