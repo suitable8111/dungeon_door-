@@ -43,7 +43,7 @@ a = Analysis(
     runtime_hooks=['runtime_hook.py'],
     excludes=[
         'tkinter', 'unittest', 'email', 'html', 'http',
-        'xml', 'pydoc', 'doctest', 'difflib',
+        'pydoc', 'doctest', 'difflib',
         'make_capsules', 'build_assets', 'test_main',
     ],
     noarchive=False,
