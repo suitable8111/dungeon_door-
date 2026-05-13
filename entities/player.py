@@ -23,6 +23,11 @@ class Player(Entity):
         self.slowed_ms  = 0   # 이동속도 30% 감소
         self.feared_ms  = 0   # 명중률 40%로 저하
 
+        # 버프
+        self.invincible_ms    = 0   # 무적 (궁극기)
+        self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가
+        self.heal_def_ms      = 0   # 버프 잔여 시간
+
         # 인벤토리 (최대 20칸)
         self.inventory: list    = []
         self.max_inventory: int = 20
@@ -48,9 +53,12 @@ class Player(Entity):
             item.value for item in self.equipment.values()
             if item and item.effect in ('defense_up', 'stat_up_all')
         )
-        return self.defense + bonus
+        heal_buf = self.heal_def_bonus if self.heal_def_ms > 0 else 0
+        return self.defense + bonus + heal_buf
 
     def take_damage(self, amount: int):
+        if self.invincible_ms > 0:
+            return
         if self.cursed_ms > 0:
             amount = int(amount * 1.5)
         self.hp = max(0, self.hp - amount)
@@ -62,6 +70,12 @@ class Player(Entity):
             self.slowed_ms = max(0, self.slowed_ms - dt_ms)
         if self.feared_ms > 0:
             self.feared_ms = max(0, self.feared_ms - dt_ms)
+        if self.invincible_ms > 0:
+            self.invincible_ms = max(0, self.invincible_ms - dt_ms)
+        if self.heal_def_ms > 0:
+            self.heal_def_ms = max(0, self.heal_def_ms - dt_ms)
+            if self.heal_def_ms == 0:
+                self.heal_def_bonus = 0
 
     @property
     def total_move_speed(self) -> float:

@@ -71,7 +71,10 @@ class InputHandler:
             elif k in self._ITEM:
                 actions.append({'type': 'use_item', 'slot': self._ITEM[k]})
             elif k == pygame.K_r:
-                actions.append({'type': 'restart'})
+                if ctrl:
+                    actions.append({'type': 'ultimate', 'key': 'Ctrl_R'})
+                else:
+                    actions.append({'type': 'ultimate', 'key': 'R'})
             elif k == pygame.K_l:
                 actions.append({'type': 'load'})
             elif k == pygame.K_i:

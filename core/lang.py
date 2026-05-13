@@ -58,14 +58,14 @@ _T: dict[str, dict[str, str]] = {
     'ctrl_esc_d':  {'ko': '저장/메뉴',    'en': 'Save/Menu'},
 
     # ── 단일 스킬 이름 / 설명 ─────────────────────────────────────────────
-    'skill_w_name': {'ko': '돌진',      'en': 'Dash'},
-    'skill_w_desc': {'ko': '3칸 전진',  'en': '3-tile dash'},
-    'skill_a_name': {'ko': '회오리',    'en': 'Whirl'},
-    'skill_a_desc': {'ko': '8방향 공격','en': '8-dir atk'},
-    'skill_s_name': {'ko': '치유',      'en': 'Heal'},
-    'skill_s_desc': {'ko': 'HP 30%',    'en': '+30% HP'},
-    'skill_d_name': {'ko': '파워어택',  'en': 'Power Atk'},
-    'skill_d_desc': {'ko': '강타 2배',  'en': '200% ATK'},
+    'skill_w_name': {'ko': '섬광 돌진',    'en': 'Flash Dash'},
+    'skill_w_desc': {'ko': '3칸+경직',     'en': '3-tile dash+stagger'},
+    'skill_a_name': {'ko': '강철 회오리',  'en': 'Steel Whirl'},
+    'skill_a_desc': {'ko': '8방향 휩쓸기', 'en': '8-dir sweep'},
+    'skill_s_name': {'ko': '재생의 숨결',  'en': 'Regen Breath'},
+    'skill_s_desc': {'ko': 'HP25%+방어',   'en': '+25% HP+DEF'},
+    'skill_d_name': {'ko': '심판의 일격',  'en': 'Judgment Strike'},
+    'skill_d_desc': {'ko': '2.5배 강타',   'en': '250% ATK'},
     # 이전 키 유지 (하위 호환)
     'skill_q_name': {'ko': '돌진',      'en': 'Dash'},
     'skill_q_desc': {'ko': '3칸 전진',  'en': '3-tile dash'},

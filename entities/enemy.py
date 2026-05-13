@@ -25,6 +25,8 @@ class Enemy(Entity):
         self._skill_cd_ms = data.get('skill_cd_ms', 5000)
         self._skill_t     = random.uniform(3000, 6000)
 
+        self.staggered_ms = 0
+
         self._move_t   = random.uniform(0, self.move_ms)
         self._attack_t = random.uniform(0, self.attack_ms)
 
@@ -32,6 +34,10 @@ class Enemy(Entity):
     def update(self, dt_ms, dungeon, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist > self.aware_range:
+            return None
+
+        if self.staggered_ms > 0:
+            self.staggered_ms = max(0, self.staggered_ms - dt_ms)
             return None
 
         self._move_t   -= dt_ms

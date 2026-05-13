@@ -1,0 +1,61 @@
+name: Build Windows (game.exe)
+
+on:
+  push:
+    tags:
+      - 'v*'          # v1.0.0 같은 태그를 push할 때 자동 빌드
+  workflow_dispatch:  # 수동 실행도 가능
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install pygame-ce pyinstaller pillow
+
+      - name: Convert PNG icon to ICO
+        run: |
+          python -c "
+          from PIL import Image
+          img = Image.open('assets/steam/icon_512.png').convert('RGBA')
+          img.save('assets/steam/icon.ico', format='ICO', sizes=[(256,256),(128,128),(64,64),(48,48),(32,32),(16,16)])
+          print('icon.ico 생성 완료')
+          "
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller game.spec --clean --noconfirm
+
+      - name: Verify build
+        run: |
+          dir dist\DungeonDoor
+          if exist dist\DungeonDoor\game.exe (echo "game.exe OK") else (echo "FAIL" & exit 1)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DungeonDoor-Windows
+          path: dist/DungeonDoor/
+          retention-days: 30
+
+      - name: Zip for Release
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          Compress-Archive -Path dist\DungeonDoor\* -DestinationPath DungeonDoor-${{ github.ref_name }}.zip
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DungeonDoor-${{ github.ref_name }}.zip
+          generate_release_notes: true

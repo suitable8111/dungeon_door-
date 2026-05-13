@@ -522,13 +522,298 @@ def make_vertical(rng):
     return surf
 
 
+def make_icon(rng):
+    """512 × 512  바로가기 아이콘"""
+    W = H = 512
+    surf = pygame.Surface((W, H))
+
+    # 배경 - 어두운 원형 배경
+    surf.fill((4, 3, 10))
+    ts = 24
+    for row in range(H // ts + 2):
+        for col in range(W // ts + 2):
+            v = rng.randint(-2, 2)
+            fc = tuple(max(0, min(255, c + v)) for c in (11, 10, 20))
+            R(surf, fc, col * ts, row * ts, ts - 1, ts - 1)
+
+    # 중앙 원형 마스크 (아이콘 느낌)
+    cx, cy = W // 2, H // 2
+    for r in range(220, 0, -1):
+        frac = r / 220
+        alpha_fade = int(255 * (1 - frac ** 3))
+        dark = tuple(max(0, int(c * frac * 0.4)) for c in (40, 35, 80))
+        C(surf, dark, cx, cy, r)
+
+    # 횃불 (좌상 / 우상)
+    draw_torch(surf,  80,  90, 1.2)
+    draw_torch(surf, W - 80, 90, 1.2)
+
+    # 중앙 빛 아우라
+    glow(surf, cx, cy + 30, 200, (50, 40, 110), 14)
+    glow(surf, cx, cy + 30, 100, (80, 70, 180),  8)
+    glow(surf, cx, cy + 30,  50, (120, 110, 220), 5)
+
+    # 로고 (상단 - 먼저 그려 위치 확보)
+    f1 = px(22); f2 = px(34)
+    lh = f1.get_height() + 6 + f2.get_height()
+    ly = 28
+    txt_glow(surf, "DUNGEON", f1, GOLD_L, GOLD_D,
+             cx - f1.render("DUNGEON", True, GOLD).get_width() // 2, ly)
+    txt_glow(surf, "DOOR",    f2, GOLD,   GOLD_D,
+             cx - f2.render("DOOR", True, GOLD).get_width() // 2,
+             ly + f1.get_height() + 6)
+
+    # 영웅 중앙 (hero_down)
+    TH = 350
+    hw, _ = hero_size(TH, 'down')
+    hx = cx - hw // 2
+    hy = ly + lh + 14
+    draw_hero(surf, hx, hy, TH, 'down')
+
+    # 발 아래 그림자 광원
+    glow(surf, cx, hy + TH - 20, 90, (60, 80, 200), 9)
+    glow(surf, cx, hy + TH - 20, 40, (140, 150, 255), 5)
+
+    # 파티클
+    scatter_particles(surf, rng, 60, 100, W - 120, H - 160, 60,
+                      [(235, 185, 60), (180, 140, 40), (200, 160, 255), (150, 200, 255)])
+
+    # 비네팅 (강하게 - 원형 아이콘 느낌)
+    draw_vignette(surf, W, H, 230, 0.42)
+    return surf
+
+
+def make_library_capsule(rng):
+    """600 × 900  라이브러리 캡슐"""
+    W, H = 600, 900
+    surf = pygame.Surface((W, H))
+    draw_bg(surf, W, H, rng, wall_frac=0.10)
+
+    cx = W // 2
+
+    # 횃불 (좌우 상단)
+    draw_torch(surf, 55,  110, 1.2)
+    draw_torch(surf, W - 55, 110, 1.2)
+
+    # 중앙 아우라
+    glow(surf, cx, H // 2 + 60, 260, (38, 30, 80), 14)
+    glow(surf, cx, H // 2 + 60, 130, (65, 55, 150),  8)
+
+    # 로고 (상단 — 먼저 레이아웃 확정)
+    f1 = px(28); f2 = px(44)
+    logo_h = f1.get_height() + 8 + f2.get_height()
+    ly = 44
+    txt_glow(surf, "DUNGEON", f1, GOLD_L, GOLD_D,
+             cx - f1.render("DUNGEON", True, GOLD).get_width() // 2, ly)
+    txt_glow(surf, "DOOR",    f2, GOLD,   GOLD_D,
+             cx - f2.render("DOOR",    True, GOLD).get_width() // 2, ly + f1.get_height() + 8)
+
+    # 영웅 중앙 크게
+    TH = 480
+    hw, _ = hero_size(TH, 'down')
+    hx = cx - hw // 2
+    hy = ly + logo_h + 24
+    draw_hero(surf, hx, hy, TH, 'down')
+
+    # 발 바닥 광원
+    glow(surf, cx, hy + TH - 30, 110, (55, 80, 200), 10)
+    glow(surf, cx, hy + TH - 30,  50, (130, 150, 255),  5)
+
+    # 적들 (하단 좌우)
+    enemy_y = hy + TH - 40
+    draw_skeleton(surf,  90, enemy_y, 3)
+    draw_slime(surf,    W - 90, enemy_y - 20, 2, (45, 165, 70))
+
+    # 다크나이트 (우하단)
+    draw_dark_knight(surf, W - 80, H - 100, 3)
+
+    # 파티클
+    scatter_particles(surf, rng, 40, 160, W - 80, H - 180, 70,
+                      [(235, 185, 60), (180, 140, 40), (200, 160, 255), (150, 200, 255)])
+
+    draw_vignette(surf, W, H, 230, 0.38)
+    return surf
+
+
+def make_library_header(rng):
+    """920 × 430  라이브러리 헤더 (header_capsule과 별도 구성)"""
+    W, H = 920, 430
+    surf = pygame.Surface((W, H))
+    draw_bg(surf, W, H, rng, wall_frac=0.22)
+
+    # 횃불
+    draw_torch(surf,  70, 85, 1.3)
+    draw_torch(surf, W - 70, 85, 1.3)
+
+    # 분위기 조명
+    glow(surf, W // 2, H // 3, 220, (35, 28, 65), 11)
+
+    # 영웅 (좌측)
+    TH = 380
+    hw, _ = hero_size(TH, 'right')
+    hx = 24
+    hy = H - TH + 15
+    draw_hero(surf, hx, hy, TH, 'right')
+    glow(surf, hx + hw // 2, hy + TH // 2, 90, (80, 100, 210), 9)
+
+    # 적들 (중앙~우측)
+    draw_skeleton(surf,    500, H - 155, 3)
+    draw_dark_knight(surf, 670, H - 195, 3)
+    draw_slime(surf,       380, H - 115, 2, (45, 165, 70))
+
+    # 파티클
+    scatter_particles(surf, rng, 180, 60, 580, H - 90, 55,
+                      [(235, 185, 60), (180, 140, 40), (220, 220, 255), (150, 185, 255)])
+
+    # 로고 (우측 정렬)
+    draw_logo(surf, 0, H // 2 - 70, 30, 46, right_align_x=W - 22)
+
+    draw_vignette(surf, W, H, 215, 0.30)
+    return surf
+
+
+def make_library_hero(rng):
+    """3840 × 1240  라이브러리 히어로 — 텍스트/로고 없음"""
+    W, H = 3840, 1240
+    surf = pygame.Surface((W, H))
+
+    # 배경 타일 (더 촘촘하게)
+    surf.fill((4, 3, 10))
+    ts = 36
+    for row in range(H // ts + 2):
+        for col in range(W // ts + 2):
+            v = rng.randint(-3, 3)
+            fc = tuple(max(0, min(255, c + v)) for c in (10, 9, 18))
+            R(surf, fc, col * ts, row * ts, ts - 1, ts - 1)
+
+    # 벽 (상단)
+    wh = int(H * 0.16)
+    for col in range(W // ts + 2):
+        v = rng.randint(-4, 4)
+        wc = tuple(max(0, min(255, c + v)) for c in (22, 20, 36))
+        R(surf, wc, col * ts, 0, ts - 1, wh)
+    ov = pygame.Surface((W, 28), pygame.SRCALPHA)
+    for y in range(28):
+        a = int(180 * (1 - y / 28) ** 2)
+        pygame.draw.line(ov, (0, 0, 0, a), (0, y), (W, y))
+    surf.blit(ov, (0, wh - 6))
+
+    # 횃불 — 넓은 화면에 균등 배치
+    torch_xs = [120, 600, 1200, W // 2 - 200, W // 2 + 200,
+                W - 1200, W - 600, W - 120]
+    for tx in torch_xs:
+        draw_torch(surf, tx, int(H * 0.14), 1.8)
+
+    # 분위기 천장 광원
+    for gx in [W // 4, W // 2, W * 3 // 4]:
+        glow(surf, gx, H // 3, 400, (30, 25, 60), 13)
+
+    # 바닥 어두운 그라데이션
+    fg = pygame.Surface((W, 120), pygame.SRCALPHA)
+    for y in range(120):
+        a = int(160 * (y / 120) ** 1.5)
+        pygame.draw.line(fg, (0, 0, 0, a), (0, y), (W, y))
+    surf.blit(fg, (0, H - 120))
+
+    # ── 캐릭터 배치 (안전 영역 중앙 860×380 고려) ──────────────────
+    # 영웅 — 화면 중앙보다 약간 왼쪽
+    TH = 900
+    hw, _ = hero_size(TH, 'right')
+    hx = W // 2 - hw - 80
+    hy = H - TH + 40
+    draw_hero(surf, hx, hy, TH, 'right')
+    glow(surf, hx + hw // 2, hy + TH // 2, 180, (70, 90, 200), 12)
+    glow(surf, hx + hw // 2, hy + TH // 2,  80, (140, 160, 255),  6)
+
+    # 다크나이트 보스 — 중앙 오른쪽
+    draw_dark_knight(surf, W // 2 + 300, H - 320, 8)
+    glow(surf, W // 2 + 300, H - 200, 200, (80, 18, 130), 10)
+
+    # 리치 — 우측
+    draw_reaper(surf, W * 3 // 4, H - 280, 7)
+
+    # 스켈레톤들 — 산발적으로
+    draw_skeleton(surf, W // 2 - 350, H - 220, 5)
+    draw_skeleton(surf, W * 3 // 4 + 280, H - 195, 4)
+
+    # 슬라임들
+    draw_slime(surf, W // 4, H - 160, 4, (45, 165, 70))
+    draw_slime(surf, W // 4 + 300, H - 140, 3, (45, 165, 70))
+    draw_slime(surf, W - 300, H - 145, 3, (45, 165, 70))
+
+    # 좌우 원경 적들 (멀리, 작게)
+    draw_skeleton(surf, 220, H - 170, 3)
+    draw_dark_knight(surf, W - 250, H - 240, 4)
+
+    # 파티클 (넓게)
+    scatter_particles(surf, rng, 100, 100, W - 200, H - 150, 300,
+                      [(235, 185, 60), (180, 140, 40), (255, 220, 100),
+                       (200, 160, 255), (150, 190, 255), (200, 100, 215)])
+
+    draw_vignette(surf, W, H, 220, 0.30)
+    return surf
+
+
+def make_library_logo(rng):
+    """1280 × 720  라이브러리 로고 — 투명 배경"""
+    W, H = 1280, 720
+    surf = pygame.Surface((W, H), pygame.SRCALPHA)
+    surf.fill((0, 0, 0, 0))
+
+    cx, cy = W // 2, H // 2
+
+    # 배경 글로우 (반투명)
+    for r in range(180, 0, -4):
+        frac = r / 180
+        a = int(110 * (1 - frac) ** 1.5)
+        col = (int(30 * frac), int(20 * frac), int(60 * frac), a)
+        gs = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+        pygame.draw.ellipse(gs, col, (0, 0, r * 2, r * 2))
+        surf.blit(gs, (cx - r, cy - r))
+
+    # 로고 텍스트 — 크게
+    f1 = px(90); f2 = px(140)
+    w1 = f1.render("DUNGEON", True, GOLD).get_width()
+    w2 = f2.render("DOOR",    True, GOLD).get_width()
+    logo_h = f1.get_height() + 12 + f2.get_height()
+    ly = cy - logo_h // 2 - 10
+
+    # 그림자 레이어 (SRCALPHA surface에서 직접)
+    for d in range(4, 0, -1):
+        gs1 = f1.render("DUNGEON", True, GOLD_D)
+        gs2 = f2.render("DOOR",    True, GOLD_D)
+        gs1.set_alpha(max(1, 50 // d))
+        gs2.set_alpha(max(1, 50 // d))
+        import math
+        for i in range(8):
+            a = math.pi * 2 * i / 8
+            ox = round(math.cos(a) * d * 2)
+            oy = round(math.sin(a) * d * 2)
+            surf.blit(gs1, (cx - w1 // 2 + ox, ly + oy))
+            surf.blit(gs2, (cx - w2 // 2 + ox, ly + f1.get_height() + 12 + oy))
+
+    # 메인 텍스트
+    surf.blit(f1.render("DUNGEON", True, (30, 30, 30)), (cx - w1 // 2 + 4, ly + 4))
+    surf.blit(f2.render("DOOR",    True, (30, 30, 30)), (cx - w2 // 2 + 4, ly + f1.get_height() + 12 + 4))
+    surf.blit(f1.render("DUNGEON", True, GOLD_L), (cx - w1 // 2, ly))
+    surf.blit(f2.render("DOOR",    True, GOLD),   (cx - w2 // 2, ly + f1.get_height() + 12))
+
+    return surf
+
+
 # ─── 메인 ─────────────────────────────────────────────────────────────
 def main():
     specs = [
-        ('header_capsule.png',   920,  430, make_header),
-        ('small_capsule.png',    462,  174, make_small),
-        ('main_capsule.png',    1232,  706, make_main),
-        ('vertical_capsule.png', 748,  896, make_vertical),
+        ('header_capsule.png',      920,  430,  make_header),
+        ('small_capsule.png',       462,  174,  make_small),
+        ('main_capsule.png',       1232,  706,  make_main),
+        ('vertical_capsule.png',    748,  896,  make_vertical),
+        ('icon_512.png',            512,  512,  make_icon),
+        # 라이브러리 에셋
+        ('library_capsule.png',     600,  900,  make_library_capsule),
+        ('library_header.png',      920,  430,  make_library_header),
+        ('library_hero.png',       3840, 1240,  make_library_hero),
+        ('library_logo.png',       1280,  720,  make_library_logo),
     ]
 
     rng = random.Random(42)

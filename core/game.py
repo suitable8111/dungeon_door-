@@ -10,7 +10,8 @@ from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
 from core.audio import AudioManager
-from core.skills import SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES, SKILL_MAX_LEVEL, SKILL_XP_REQ
+from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
+                         SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS)
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -660,10 +661,10 @@ class Game:
                 elif t == 'equipment':
                     self._equip_sel = 0
                     self.state = 'equipment'
-                elif t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill'):
+                elif t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill', 'ultimate'):
                     self._process(action)
             elif self.state == 'dead':
-                if t == 'restart':
+                if t == 'ultimate' and action.get('key') == 'R':
                     self._new_game()
 
     def _handle_menu_action(self, action):
@@ -1012,6 +1013,7 @@ class Game:
         elif action['type'] == 'use_item': acted = self._use_item(action['slot'])
         elif action['type'] == 'skill':       acted = self._use_skill(action['skill'])
         elif action['type'] == 'combo_skill': acted = self._use_combo_skill(action['combo'])
+        elif action['type'] == 'ultimate':    acted = self._use_ultimate(action['key'])
         if acted:
             if not self._is_test_mode:
                 self.dungeon.update_visibility(self.player.x, self.player.y)
@@ -1239,6 +1241,7 @@ class Game:
         tiles = SKILL_UPGRADES['W'][lvl - 1]['tiles']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
+        stagger_ms = SKILL_UPGRADES['W'][lvl - 1]['stagger_ms']
         sx, sy = self.player.x, self.player.y
         moved = 0
         hit_enemy = False
@@ -1247,6 +1250,8 @@ class Game:
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if enemy:
                 self._player_attack(enemy)
+                enemy.staggered_ms = stagger_ms
+                self.animator.add(HitFlashAnim(nx, ny, 0, (100, 180, 255)))
                 hit_enemy = True
                 break
             if not self.dungeon.is_walkable(nx, ny): break
@@ -1255,7 +1260,6 @@ class Game:
         self._trigger_atk_anim()
         self._gain_skill_xp('W')
 
-        # 만렙 + 적 히트 → 쿨다운 리셋 (연속 사용 가능)
         if lvl >= SKILL_MAX_LEVEL and hit_enemy:
             self.skills.reset('W')
         else:
@@ -1299,16 +1303,19 @@ class Game:
         return True
 
     def _skill_heal(self):
-        lvl      = self._skill_levels['S']
-        heal_pct = SKILL_UPGRADES['S'][lvl - 1]['heal_pct']
-        amt = max(1, int(self.player.max_hp * heal_pct))
+        lvl   = self._skill_levels['S']
+        stats = SKILL_UPGRADES['S'][lvl - 1]
+        amt   = max(1, int(self.player.max_hp * stats['heal_pct']))
         self.player.heal(amt)
+        self.player.heal_def_bonus = stats['def_bonus']
+        self.player.heal_def_ms   = stats['def_ms']
         self.animator.add(HealAnim(self.player.x, self.player.y))
         self.animator.particles.emit_heal(self.player.x, self.player.y)
         self._gain_skill_xp('S')
         self.skills.trigger('S')
         self.audio.play('skill_heal')
         self.messages.append((t('skill_heal', amt), 'good'))
+        self.messages.append((f"방어력 +{stats['def_bonus']} ({stats['def_ms']//1000}초)", 'good'))
         return True
 
     def _skill_power_attack(self):
@@ -1425,11 +1432,13 @@ class Game:
         return True
 
     def _skill_thunder(self):
+        targets = [e for e in self.dungeon.enemies
+                   if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
+        random.shuffle(targets)
+        targets = targets[:5]
         hits = 0
-        for enemy in list(self.dungeon.enemies):
-            if not (enemy.is_alive() and self.dungeon.tiles[enemy.y][enemy.x].visible):
-                continue
-            dmg = max(1, int(self.player.total_attack * 0.85) - enemy.defense)
+        for enemy in targets:
+            dmg = max(1, int(self.player.total_attack * 1.2) - enemy.defense)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
             self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
@@ -1451,7 +1460,7 @@ class Game:
         for enemy in list(self.dungeon.enemies):
             if not enemy.is_alive():
                 continue
-            if max(abs(enemy.x - px), abs(enemy.y - py)) <= 2:
+            if max(abs(enemy.x - px), abs(enemy.y - py)) <= 3:
                 dmg = max(1, int(self.player.total_attack * 1.3) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
@@ -1474,7 +1483,7 @@ class Game:
         px, py = self.player.x, self.player.y
         hits = 0
         end_x, end_y = px, py
-        for step in range(1, 7):
+        for step in range(1, 9):
             tx, ty = px + dx * step, py + dy * step
             if not (0 <= tx < self.dungeon.width and 0 <= ty < self.dungeon.height):
                 break
@@ -1484,7 +1493,7 @@ class Game:
             end_x, end_y = tx, ty
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy and enemy.is_alive():
-                dmg = max(1, int(self.player.total_attack * 1.5) - enemy.defense)
+                dmg = max(1, int(self.player.total_attack * 1.8) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
@@ -1545,6 +1554,74 @@ class Game:
             self.player.attack_speed  = max(0.5, self.player.attack_speed)
             self._fortify_def_bonus   = 0
             self._fortify_atk_bonus   = 0.0
+
+    # ─────────────── 궁극기 ─────────────────────────────────────────────
+    def _use_ultimate(self, key: str):
+        udef = ULTIMATE_SKILL_DEFS.get(key)
+        if not udef:
+            return False
+        if self.player.level < udef['level_req']:
+            self.messages.append((
+                f"{udef['name']}: Lv.{udef['level_req']} 필요 (현재 Lv.{self.player.level})", 'warn'))
+            return False
+        if not self.skills.ready(key):
+            self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
+            return False
+        if key == 'R':
+            return self._skill_ultimate_breaker()
+        if key == 'Ctrl_R':
+            return self._skill_ultimate_slash()
+        return False
+
+    def _skill_ultimate_breaker(self):
+        """던전 브레이커: 화면 내 모든 적에게 공격력 3배 일격 + 대규모 이펙트."""
+        targets = [e for e in self.dungeon.enemies
+                   if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
+        hits = 0
+        for enemy in targets:
+            dmg = max(1, int(self.player.total_attack * 3.0) - enemy.defense + random.randint(0, 5))
+            enemy.take_damage(dmg)
+            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
+            self.animator.particles.emit_power_hit(enemy.x, enemy.y)
+            hits += 1
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        # 여러 방향으로 슬래시 이펙트
+        px, py = self.player.x, self.player.y
+        for facing in ('right', 'left', 'up', 'down'):
+            self.animator.add(SlashAnim(px, py, px, py, (255, 120, 60)))
+        self._start_shake(8, 500)
+        self.skills.trigger('R')
+        self.audio.play('skill_whirl')
+        if hits:
+            self.messages.append((f"⚔ 던전 브레이커! {hits}마리 초토화!", 'bad'))
+        else:
+            self.messages.append(("⚔ 던전 브레이커! 적 없음", 'info'))
+        return True
+
+    def _skill_ultimate_slash(self):
+        """진(眞) 일도양단: 2초 무적 + 화면 내 모든 적에게 공격력 10배."""
+        self.player.invincible_ms = 2000
+        targets = [e for e in self.dungeon.enemies
+                   if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
+        hits = 0
+        for enemy in targets:
+            dmg = max(1, int(self.player.total_attack * 10) - enemy.defense)
+            enemy.take_damage(dmg)
+            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 255, 255)))
+            self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
+            hits += 1
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        px, py = self.player.x, self.player.y
+        self.animator.add(WhirlAnim(px, py))
+        self.animator.add(SlashAnim(px, py, px, py, (255, 255, 255)))
+        self._start_shake(10, 600)
+        self.skills.trigger('Ctrl_R')
+        self.audio.play('crit')
+        msg = f"真 일도양단! 무적 2초 + {hits}마리 섬멸!" if hits else "真 일도양단! (적 없음)"
+        self.messages.append((msg, 'warn'))
+        return True
 
     # ─────────────── 보스 처치 ────────────────────────────────────────
     def _check_boss_cleared(self):

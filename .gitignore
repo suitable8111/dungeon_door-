@@ -25,6 +25,7 @@ dist/
 build/
 *.egg-info/
 *.spec
+!game.spec
 
 # ── PyInstaller 출력 ─────────────────────────────────────────────────────────
 *.exe
