@@ -8,7 +8,6 @@ added_datas = [
     ('assets/sprites', 'assets/sprites'),
     ('assets/ui',      'assets/ui'),
     ('data',           'data'),
-    ('settings.json',  '.'),
 ]
 
 try:
@@ -31,6 +30,7 @@ a = Analysis(
         'core.skills',
         'core.input_handler',
         'core.lang',
+        'core.save_load',
         'entities.player',
         'entities.enemy',
         'entities.item',
@@ -41,7 +41,7 @@ a = Analysis(
     ],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=['runtime_hook.py'],
     excludes=[
         'tkinter', 'unittest', 'email', 'html', 'http',
         'xml', 'pydoc', 'doctest', 'difflib',

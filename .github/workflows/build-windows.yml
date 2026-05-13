@@ -3,8 +3,8 @@ name: Build Windows (game.exe)
 on:
   push:
     tags:
-      - 'v*'          # v1.0.0 같은 태그를 push할 때 자동 빌드
-  workflow_dispatch:  # 수동 실행도 가능
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-windows:
@@ -23,6 +23,12 @@ jobs:
         run: |
           pip install pygame-ce pyinstaller pillow
 
+      - name: Show environment info
+        run: |
+          python --version
+          pip show pyinstaller pygame-ce pillow
+          dir assets\steam
+
       - name: Convert PNG icon to ICO
         run: |
           python -c "
@@ -31,12 +37,12 @@ jobs:
           src = Image.open('assets/steam/icon_512.png').convert('RGBA')
           imgs = [src.resize((s, s), Image.LANCZOS) for s in sizes]
           imgs[0].save('assets/steam/icon.ico', format='ICO', append_images=imgs[1:])
-          print('icon.ico generated')
+          print('icon.ico generated OK')
           "
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller game.spec --clean --noconfirm --log-level INFO
+          pyinstaller game.spec --clean --noconfirm --log-level WARN
 
       - name: Verify build
         run: |
