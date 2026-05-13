@@ -36,7 +36,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller game.spec --clean --noconfirm
+          pyinstaller game.spec --clean --noconfirm --log-level INFO
 
       - name: Verify build
         run: |

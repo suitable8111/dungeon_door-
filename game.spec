@@ -1,13 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller spec for DungeonDoor → game.exe
-# Run on Windows: pyinstaller game.spec
+# PyInstaller 6.x spec for DungeonDoor → game.exe
 
-import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files
 
-block_cipher = None
-
-# ── 포함할 데이터 파일 (src, dest_in_bundle) ─────────────────────────────
 added_datas = [
     ('assets/fonts',   'assets/fonts'),
     ('assets/sprites', 'assets/sprites'),
@@ -16,8 +11,10 @@ added_datas = [
     ('settings.json',  '.'),
 ]
 
-# pygame-ce 데이터 파일 자동 수집
-added_datas += collect_data_files('pygame')
+try:
+    added_datas += collect_data_files('pygame')
+except Exception:
+    pass
 
 a = Analysis(
     ['main.py'],
@@ -47,28 +44,25 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[
         'tkinter', 'unittest', 'email', 'html', 'http',
-        'xml', 'pydoc', 'doctest', 'difflib', 'pickle',
+        'xml', 'pydoc', 'doctest', 'difflib',
         'make_capsules', 'build_assets', 'test_main',
     ],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
     noarchive=False,
 )
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+pyz = PYZ(a.pure)
 
 exe = EXE(
     pyz,
     a.scripts,
     [],
     exclude_binaries=True,
-    name='game',           # → game.exe
+    name='game',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,         # 창 없는 GUI 모드 (콘솔 숨김)
+    console=False,
     icon='assets/steam/icon.ico',
 )
 
@@ -80,5 +74,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='DungeonDoor',    # 출력 폴더명 → dist/DungeonDoor/
+    name='DungeonDoor',
 )
