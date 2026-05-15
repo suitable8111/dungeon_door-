@@ -801,6 +801,132 @@ def make_library_logo(rng):
     return surf
 
 
+def make_trailer_thumbnail(rng):
+    """1920 × 1080  예고편 섬네일 (YouTube 16:9)"""
+    W, H = 1920, 1080
+    surf = pygame.Surface((W, H))
+
+    # ── 배경 ─────────────────────────────────────────────────────────
+    surf.fill((3, 2, 8))
+    ts = 38
+    wh = int(H * 0.20)
+    for row in range(H // ts + 2):
+        for col in range(W // ts + 2):
+            v = rng.randint(-3, 3)
+            is_wall = row * ts < wh
+            base = (20, 18, 35) if is_wall else (10, 9, 18)
+            fc = tuple(max(0, min(255, c + v)) for c in base)
+            R(surf, fc, col * ts, row * ts, ts - 1, ts - 1)
+
+    # 벽 하단 그림자
+    ov = pygame.Surface((W, 30), pygame.SRCALPHA)
+    for yi in range(30):
+        a = int(200 * (1 - yi / 30) ** 2)
+        pygame.draw.line(ov, (0, 0, 0, a), (0, yi), (W, yi))
+    surf.blit(ov, (0, wh - 6))
+
+    # 균열 / 벽 디테일
+    for _ in range(rng.randint(60, 100)):
+        br = rng.randint(40, 110)
+        R(surf, (br, br, min(255, br + 20)),
+          rng.randint(0, W), rng.randint(0, wh - 2), 1, 1)
+
+    # ── 분위기 조명 ────────────────────────────────────────────────
+    # 중앙 천장 보랏빛
+    glow(surf, W // 2, H // 3, 500, (28, 20, 65), 16)
+    glow(surf, W // 2, H // 3, 250, (45, 30, 95), 10)
+
+    # 영웅 쪽 파란 빛
+    glow(surf, W // 4, H // 2, 300, (25, 40, 110), 12)
+
+    # 보스 쪽 붉은/보라 빛
+    glow(surf, W * 3 // 4, H // 2, 320, (80, 15, 110), 12)
+
+    # ── 횃불 ────────────────────────────────────────────────────────
+    for tx, ts2 in [(80, 1.6), (380, 1.3), (W // 2 - 60, 1.5),
+                    (W // 2 + 60, 1.5), (W - 380, 1.3), (W - 80, 1.6)]:
+        draw_torch(surf, tx, int(H * 0.17), ts2)
+
+    # ── 바닥 안개 ───────────────────────────────────────────────────
+    fg = pygame.Surface((W, 160), pygame.SRCALPHA)
+    for yi in range(160):
+        a = int(140 * (yi / 160) ** 1.8)
+        pygame.draw.line(fg, (0, 0, 0, a), (0, yi), (W, yi))
+    surf.blit(fg, (0, H - 160))
+
+    # ── 캐릭터 ──────────────────────────────────────────────────────
+    # 영웅 (좌측, 크게)
+    TH = 780
+    hw, _ = hero_size(TH, 'right')
+    hx = int(W * 0.06)
+    hy = H - TH + 40
+    draw_hero(surf, hx, hy, TH, 'right')
+    hcx, hcy = hx + hw // 2, hy + TH // 2
+    glow(surf, hcx, hcy, 200, (60, 85, 210), 13)
+    glow(surf, hcx, hcy,  90, (130, 150, 255),  6)
+    glow(surf, hcx, H - 30, 140, (50, 70, 190), 9)   # 발 아래 광원
+
+    # 다크나이트 보스 (우측, 매우 크게)
+    bkx = int(W * 0.78)
+    draw_dark_knight(surf, bkx, H - 330, 9)
+    glow(surf, bkx, H - 200, 260, (90, 16, 140), 12)
+    glow(surf, bkx, H - 200, 110, (160, 40, 210),  6)
+
+    # 리퍼 (중앙 오른쪽)
+    draw_reaper(surf, int(W * 0.60), H - 270, 6)
+
+    # 스켈레톤 (중앙 왼쪽)
+    draw_skeleton(surf, int(W * 0.42), H - 220, 5)
+
+    # 배경 소적들 (작게, 분위기)
+    draw_slime(surf, int(W * 0.32), H - 135, 3, (40, 155, 65))
+    draw_slime(surf, int(W * 0.87), H - 130, 3, (40, 155, 65))
+    draw_skeleton(surf, int(W * 0.18), H - 180, 3)
+    draw_dark_knight(surf, int(W * 0.93), H - 200, 4)
+
+    # ── 파티클 ─────────────────────────────────────────────────────
+    scatter_particles(surf, rng, 100, 100, W - 200, H - 160, 220,
+                      [(235, 185, 60), (180, 140, 40), (255, 220, 100),
+                       (200, 160, 255), (150, 185, 255), (200, 100, 215),
+                       (255, 80, 80)])
+
+    # ── 로고 ────────────────────────────────────────────────────────
+    f1 = px(72); f2 = px(108)
+    w1 = f1.render("DUNGEON", True, GOLD).get_width()
+    w2 = f2.render("DOOR",    True, GOLD).get_width()
+    logo_cx = W // 2
+    ly = 32
+    txt_glow(surf, "DUNGEON", f1, GOLD_L, GOLD_D, logo_cx - w1 // 2, ly)
+    ly2 = ly + f1.get_height() + 10
+    txt_glow(surf, "DOOR",    f2, GOLD,   GOLD_D, logo_cx - w2 // 2, ly2)
+
+    # 부제
+    fs = ko(34)
+    sub = "로그라이크 던전 탐험"
+    sw = fs.render(sub, True, (200, 205, 240)).get_width()
+    txt_outline(surf, sub, fs, (200, 205, 240), (8, 6, 20),
+                logo_cx - sw // 2, ly2 + f2.get_height() + 14)
+
+    # ── 예고편 배지 ─────────────────────────────────────────────────
+    badge_f  = ko(30)
+    badge_s  = badge_f.render("▶  예 고 편", True, (255, 255, 255))
+    bw2, bh2 = badge_s.get_width() + 36, badge_s.get_height() + 16
+    bx2 = logo_cx - bw2 // 2
+    by2 = ly2 + f2.get_height() + 14 + fs.get_height() + 22
+    pygame.draw.rect(surf, (160, 30, 30), (bx2, by2, bw2, bh2), border_radius=6)
+    pygame.draw.rect(surf, (220, 60, 60), (bx2, by2, bw2, bh2), 2, border_radius=6)
+    surf.blit(badge_s, (bx2 + 18, by2 + 8))
+
+    # ── 시네마틱 레터박스 (위아래 얇은 검은 띠) ────────────────────
+    bar_h = 38
+    R(surf, (0, 0, 0), 0,      0,     W, bar_h)
+    R(surf, (0, 0, 0), 0, H - bar_h, W, bar_h)
+
+    # ── 비네팅 ──────────────────────────────────────────────────────
+    draw_vignette(surf, W, H, 230, 0.38)
+    return surf
+
+
 # ─── 메인 ─────────────────────────────────────────────────────────────
 def main():
     specs = [
@@ -814,6 +940,7 @@ def main():
         ('library_header.png',      920,  430,  make_library_header),
         ('library_hero.png',       3840, 1240,  make_library_hero),
         ('library_logo.png',       1280,  720,  make_library_logo),
+        ('trailer_thumbnail.png',  1920, 1080,  make_trailer_thumbnail),
     ]
 
     rng = random.Random(42)
