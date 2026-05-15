@@ -81,6 +81,8 @@ class InputHandler:
                 actions.append({'type': 'inventory'})
             elif k == pygame.K_o:
                 actions.append({'type': 'equipment'})
+            elif k == pygame.K_p:
+                actions.append({'type': 'enhance'})
             elif k == pygame.K_ESCAPE:
                 actions.append({'type': 'escape'})
 

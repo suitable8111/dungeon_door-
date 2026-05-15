@@ -35,6 +35,7 @@ _T: dict[str, dict[str, str]] = {
     'slot_feet':       {'ko': '신  발',              'en': 'Boots'},
     'sec_skills':    {'ko': '스킬  [W/A/S/D]',  'en': 'Skills [W/A/S/D]'},
     'sec_combo':     {'ko': '강화 스킬',          'en': 'Enhanced Skills'},
+    'sec_ultimate':  {'ko': '궁극기  [R]',        'en': 'Ultimate [R]'},
     'sec_controls':  {'ko': '조작법',            'en': 'Controls'},
     'sec_minimap':   {'ko': '미니맵',            'en': 'Minimap'},
     'inv_empty':     {'ko': '---',              'en': '---'},
@@ -186,6 +187,14 @@ _T: dict[str, dict[str, str]] = {
                                 'en': '{} skill book! (Unlock when skills reach Lv.{})'},
     'skill_need_level': {'ko': '{} 사용 불가 — Lv.{} 필요',
                          'en': '{} unavailable — requires Lv.{}'},
+
+    # ── 장비 강화 ──────────────────────────────────────────────────────────
+    'enhance_stone_pickup': {'ko': '강화석 획득! (보유: {}개)',   'en': 'Enhancement Stone! (Have: {})'},
+    'enhance_success':      {'ko': '✦ {} 강화 성공! [+{}]',      'en': '✦ {} enhanced! [+{}]'},
+    'enhance_fail':         {'ko': '▲ {} 강화 실패... [+{}] 유지', 'en': '▲ {} failed... stays [+{}]'},
+    'enhance_no_item':      {'ko': '강화할 장비가 없습니다.',      'en': 'No item equipped in this slot.'},
+    'enhance_no_stone':     {'ko': '강화석이 없습니다!',           'en': 'No enhancement stones!'},
+    'enhance_max':          {'ko': '{} 최대 강화 달성! (+18)',     'en': '{} is at max enhancement! (+18)'},
     'combo_no_book':    {'ko': '{} — 스킬북을 찾으세요',           'en': '{} — find the skill book'},
     'combo_no_unlock':  {'ko': '{} — 스킬북 + Lv.{} 필요',        'en': '{} — need book + Lv.{}'},
 

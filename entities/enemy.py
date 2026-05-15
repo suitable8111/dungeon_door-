@@ -102,7 +102,7 @@ class Enemy(Entity):
                     (nx, ny) != (px, py)):
                 self.x, self.y = nx, ny
         if abs(px - self.x) + abs(py - self.y) <= 1:
-            if random.random() < player.evasion / 100:
+            if random.random() < player.total_evasion / 100:
                 messages.append((f"{self.name}의 돌진을 회피했습니다!", 'good'))
             else:
                 dmg = max(1, int(self.attack * 1.7) - player.total_defense + random.randint(0, 3))
@@ -115,7 +115,7 @@ class Enemy(Entity):
     def _skill_whirlwind(self, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist <= 3:
-            if random.random() < player.evasion / 100:
+            if random.random() < player.total_evasion / 100:
                 messages.append((f"{self.name}의 회전베기를 회피했습니다!", 'good'))
             else:
                 dmg = max(1, int(self.attack * 1.3) - player.total_defense + random.randint(0, 2))
@@ -128,7 +128,7 @@ class Enemy(Entity):
     def _skill_death_nova(self, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist <= 5:
-            if random.random() < player.evasion / 100:
+            if random.random() < player.total_evasion / 100:
                 messages.append((f"{self.name}의 죽음의 파동을 회피했습니다!", 'good'))
             else:
                 dmg = max(1, int(self.attack * 1.4) - player.total_defense + random.randint(0, 3))
@@ -160,7 +160,7 @@ class Enemy(Entity):
     # ------------------------------------------------------------------ #
     def _do_attack(self, player, messages):
         # 회피 판정
-        if random.random() < player.evasion / 100:
+        if random.random() < player.total_evasion / 100:
             messages.append((f"{self.name}의 공격을 회피했습니다!", 'good'))
             return
         dmg = max(1, self.attack - player.total_defense + random.randint(0, 2))

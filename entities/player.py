@@ -12,6 +12,7 @@ class Player(Entity):
         self.xp = 0
         self.xp_next = 15
         self.gold = 0
+        self.enhance_stones = 0  # 강화석 보유 수량
 
         # 신규 능력치
         self.attack_speed = 1.0   # 높을수록 공격 쿨다운 단축
@@ -45,7 +46,11 @@ class Player(Entity):
             item.value for item in self.equipment.values()
             if item and item.effect in ('attack_up', 'stat_up_all')
         )
-        return self.attack + bonus
+        enhance = sum(
+            item.enhance_level for item in self.equipment.values()
+            if item and item.item_type == 'weapon'
+        )
+        return self.attack + bonus + enhance
 
     @property
     def total_defense(self) -> int:
@@ -53,8 +58,30 @@ class Player(Entity):
             item.value for item in self.equipment.values()
             if item and item.effect in ('defense_up', 'stat_up_all')
         )
+        enhance = sum(
+            item.enhance_level for item in self.equipment.values()
+            if item and item.item_type in ('armor', 'off_hand')
+        )
         heal_buf = self.heal_def_bonus if self.heal_def_ms > 0 else 0
-        return self.defense + bonus + heal_buf
+        return self.defense + bonus + enhance + heal_buf
+
+    @property
+    def total_evasion(self) -> int:
+        """투구 강화 포함 총 회피율 (0~80%)."""
+        enhance = sum(
+            item.enhance_level for item in self.equipment.values()
+            if item and item.item_type == 'head'
+        )
+        return min(80, self.evasion + enhance)
+
+    @property
+    def skill_damage_mul(self) -> float:
+        """장신구 강화로 증가하는 스킬 데미지 배율."""
+        enhance = sum(
+            item.enhance_level for item in self.equipment.values()
+            if item and item.item_type == 'accessory'
+        )
+        return 1.0 + enhance * 0.05
 
     def take_damage(self, amount: int):
         if self.invincible_ms > 0:
@@ -83,7 +110,11 @@ class Player(Entity):
             item.value for item in self.equipment.values()
             if item and item.effect == 'speed_up'
         )
-        spd = self.move_speed + bonus
+        enhance = sum(
+            item.enhance_level * 0.05 for item in self.equipment.values()
+            if item and item.item_type == 'boots'
+        )
+        spd = self.move_speed + bonus + enhance
         if self.slowed_ms > 0:
             spd *= 0.7
         return spd
@@ -133,25 +164,38 @@ class Player(Entity):
         p.level        = data['level']
         p.xp           = data['xp']
         p.xp_next      = data['xp_next']
-        p.gold         = data.get('gold', 0)
-        p.attack_speed = data.get('attack_speed', 1.0)
-        p.evasion      = data.get('evasion', 0)
-        p.move_speed   = data.get('move_speed', 1.0)
+        p.gold          = data.get('gold', 0)
+        p.enhance_stones = data.get('enhance_stones', 0)
+        p.attack_speed  = data.get('attack_speed', 1.0)
+        p.evasion       = data.get('evasion', 0)
+        p.move_speed    = data.get('move_speed', 1.0)
+
+        def _make_item(entry, idd):
+            # entry: 구 포맷 str or 신 포맷 {'key':..,'enhance_level':..}
+            if isinstance(entry, str):
+                key, enh = entry, 0
+            else:
+                key, enh = entry.get('key', ''), entry.get('enhance_level', 0)
+            if key not in idd:
+                return None
+            d = dict(idd[key])
+            d['key'] = key
+            d['enhance_level'] = enh
+            return Item(0, 0, d)
 
         p.inventory = []
-        for key in data.get('inventory', []):
-            if key in item_data_dict:
-                d = dict(item_data_dict[key])
-                d['key'] = key
-                p.inventory.append(Item(0, 0, d))
+        for entry in data.get('inventory', []):
+            item = _make_item(entry, item_data_dict)
+            if item:
+                p.inventory.append(item)
 
         p.equipment = {'head': None, 'body': None, 'weapon': None, 'off_hand': None, 'accessory': None, 'feet': None}
         _COMPAT = {'armor': 'body'}
-        for slot, key in data.get('equipment', {}).items():
+        for slot, entry in data.get('equipment', {}).items():
             slot = _COMPAT.get(slot, slot)
-            if slot in p.equipment and key and key in item_data_dict:
-                d = dict(item_data_dict[key])
-                d['key'] = key
-                p.equipment[slot] = Item(0, 0, d)
+            if slot in p.equipment and entry:
+                item = _make_item(entry, item_data_dict)
+                if item:
+                    p.equipment[slot] = item
 
         return p

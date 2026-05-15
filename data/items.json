@@ -1,212 +1,344 @@
 {
-  "health_potion": {
-    "name": "체력 물약",
-    "color": [210, 60, 60],
-    "type": "consumable",
-    "effect": "heal",
-    "value": 20
-  },
-  "large_health_potion": {
-    "name": "대형 체력 물약",
-    "color": [230, 80, 80],
-    "type": "consumable",
-    "effect": "heal",
-    "value": 45
-  },
-  "dagger": {
-    "name": "단검",
-    "color": [180, 185, 205],
-    "type": "weapon",
-    "effect": "attack_up",
-    "value": 2
-  },
-  "sword": {
-    "name": "장검",
-    "color": [205, 210, 230],
-    "type": "weapon",
-    "effect": "attack_up",
-    "value": 5
-  },
-  "broad_sword": {
-    "name": "브로드소드",
-    "color": [220, 225, 245],
-    "type": "weapon",
-    "effect": "attack_up",
-    "value": 9
-  },
-  "great_sword": {
-    "name": "대검",
-    "color": [240, 240, 255],
-    "type": "weapon",
-    "effect": "attack_up",
-    "value": 14
-  },
-  "leather_armor": {
-    "name": "가죽 갑옷",
-    "color": [160, 120, 70],
-    "type": "armor",
-    "effect": "defense_up",
-    "value": 1
-  },
-  "chain_mail": {
-    "name": "사슬 갑옷",
-    "color": [160, 165, 185],
-    "type": "armor",
-    "effect": "defense_up",
-    "value": 3
-  },
-  "plate_armor": {
-    "name": "플레이트 갑옷",
-    "color": [200, 205, 215],
-    "type": "armor",
-    "effect": "defense_up",
-    "value": 5
-  },
-  "mythril_armor": {
-    "name": "미스릴 갑옷",
-    "color": [160, 210, 230],
-    "type": "armor",
-    "effect": "defense_up",
-    "value": 8
-  },
-  "leather_helm": {
-    "name": "가죽 투구",
-    "color": [170, 130, 75],
-    "type": "head",
-    "effect": "defense_up",
-    "value": 1
-  },
-  "iron_helm": {
-    "name": "철 투구",
-    "color": [150, 155, 175],
-    "type": "head",
-    "effect": "defense_up",
-    "value": 2
-  },
-  "knight_helm": {
-    "name": "기사 투구",
-    "color": [195, 200, 220],
-    "type": "head",
-    "effect": "defense_up",
-    "value": 4
-  },
-  "wooden_shield": {
-    "name": "나무 방패",
-    "color": [160, 110, 60],
-    "type": "off_hand",
-    "effect": "defense_up",
-    "value": 1
-  },
-  "iron_shield": {
-    "name": "철 방패",
-    "color": [145, 150, 170],
-    "type": "off_hand",
-    "effect": "defense_up",
-    "value": 3
-  },
-  "tower_shield": {
-    "name": "타워 방패",
-    "color": [180, 185, 205],
-    "type": "off_hand",
-    "effect": "defense_up",
-    "value": 5
-  },
-  "silver_ring": {
-    "name": "은반지",
-    "color": [200, 200, 225],
-    "type": "accessory",
-    "effect": "stat_up_all",
-    "value": 1
-  },
-  "war_pendant": {
-    "name": "전투 목걸이",
-    "color": [225, 135, 50],
-    "type": "accessory",
-    "effect": "attack_up",
-    "value": 3
-  },
-  "magic_stone": {
-    "name": "마법석",
-    "color": [130, 80, 225],
-    "type": "accessory",
-    "effect": "stat_up_all",
-    "value": 3
-  },
-  "teleport_scroll": {
-    "name": "텔레포트 두루마리",
-    "color": [180, 100, 220],
-    "type": "consumable",
-    "effect": "teleport",
-    "value": 0
-  },
-  "amulet": {
-    "name": "부적",
-    "color": [220, 180, 50],
-    "type": "consumable",
-    "effect": "stat_up_all",
-    "value": 1
-  },
-  "whirlwind_potion": {
-    "name": "회오리 물약",
-    "color": [255, 200, 50],
-    "type": "consumable",
-    "effect": "whirlwind",
-    "value": 0
-  },
-  "leather_boots": {
-    "name": "가죽 장화",
-    "color": [139, 90, 43],
-    "type": "boots",
-    "effect": "speed_up",
-    "value": 0.15
-  },
-  "iron_boots": {
-    "name": "철제 장화",
-    "color": [155, 155, 175],
-    "type": "boots",
-    "effect": "speed_up",
-    "value": 0.25
-  },
-  "swift_boots": {
-    "name": "질풍 장화",
-    "color": [80, 200, 230],
-    "type": "boots",
-    "effect": "speed_up",
-    "value": 0.40
-  },
-  "shadow_boots": {
-    "name": "그림자 장화",
-    "color": [100, 70, 160],
-    "type": "boots",
-    "effect": "speed_up",
-    "value": 0.35
-  },
-  "skillbook_wind": {
-    "name": "바람 스킬북",
-    "color": [160, 255, 160],
-    "type": "skillbook",
-    "effect": "unlock_combo",
-    "value": "WD"
-  },
-  "skillbook_fireball": {
-    "name": "파이어볼 스킬북",
-    "color": [255, 120, 40],
-    "type": "skillbook",
-    "effect": "unlock_combo",
-    "value": "WS"
-  },
-  "skillbook_frost": {
-    "name": "냉기 스킬북",
-    "color": [100, 220, 255],
-    "type": "skillbook",
-    "effect": "unlock_combo",
-    "value": "WA"
-  },
-  "skillbook_thunder": {
-    "name": "천둥 스킬북",
-    "color": [200, 160, 255],
-    "type": "skillbook",
-    "effect": "unlock_combo",
-    "value": "AD"
-  }
+    "health_potion": {
+        "name": "체력 물약",
+        "color": [
+            210,
+            60,
+            60
+        ],
+        "type": "consumable",
+        "effect": "heal",
+        "value": 20
+    },
+    "large_health_potion": {
+        "name": "대형 체력 물약",
+        "color": [
+            230,
+            80,
+            80
+        ],
+        "type": "consumable",
+        "effect": "heal",
+        "value": 45
+    },
+    "dagger": {
+        "name": "단검",
+        "color": [
+            180,
+            185,
+            205
+        ],
+        "type": "weapon",
+        "effect": "attack_up",
+        "value": 2
+    },
+    "sword": {
+        "name": "장검",
+        "color": [
+            205,
+            210,
+            230
+        ],
+        "type": "weapon",
+        "effect": "attack_up",
+        "value": 5
+    },
+    "broad_sword": {
+        "name": "브로드소드",
+        "color": [
+            220,
+            225,
+            245
+        ],
+        "type": "weapon",
+        "effect": "attack_up",
+        "value": 9
+    },
+    "great_sword": {
+        "name": "대검",
+        "color": [
+            240,
+            240,
+            255
+        ],
+        "type": "weapon",
+        "effect": "attack_up",
+        "value": 14
+    },
+    "leather_armor": {
+        "name": "가죽 갑옷",
+        "color": [
+            160,
+            120,
+            70
+        ],
+        "type": "armor",
+        "effect": "defense_up",
+        "value": 1
+    },
+    "chain_mail": {
+        "name": "사슬 갑옷",
+        "color": [
+            160,
+            165,
+            185
+        ],
+        "type": "armor",
+        "effect": "defense_up",
+        "value": 3
+    },
+    "plate_armor": {
+        "name": "플레이트 갑옷",
+        "color": [
+            200,
+            205,
+            215
+        ],
+        "type": "armor",
+        "effect": "defense_up",
+        "value": 5
+    },
+    "mythril_armor": {
+        "name": "미스릴 갑옷",
+        "color": [
+            160,
+            210,
+            230
+        ],
+        "type": "armor",
+        "effect": "defense_up",
+        "value": 8
+    },
+    "leather_helm": {
+        "name": "가죽 투구",
+        "color": [
+            170,
+            130,
+            75
+        ],
+        "type": "head",
+        "effect": "defense_up",
+        "value": 1
+    },
+    "iron_helm": {
+        "name": "철 투구",
+        "color": [
+            150,
+            155,
+            175
+        ],
+        "type": "head",
+        "effect": "defense_up",
+        "value": 2
+    },
+    "knight_helm": {
+        "name": "기사 투구",
+        "color": [
+            195,
+            200,
+            220
+        ],
+        "type": "head",
+        "effect": "defense_up",
+        "value": 4
+    },
+    "wooden_shield": {
+        "name": "나무 방패",
+        "color": [
+            160,
+            110,
+            60
+        ],
+        "type": "off_hand",
+        "effect": "defense_up",
+        "value": 1
+    },
+    "iron_shield": {
+        "name": "철 방패",
+        "color": [
+            145,
+            150,
+            170
+        ],
+        "type": "off_hand",
+        "effect": "defense_up",
+        "value": 3
+    },
+    "tower_shield": {
+        "name": "타워 방패",
+        "color": [
+            180,
+            185,
+            205
+        ],
+        "type": "off_hand",
+        "effect": "defense_up",
+        "value": 5
+    },
+    "silver_ring": {
+        "name": "은반지",
+        "color": [
+            200,
+            200,
+            225
+        ],
+        "type": "accessory",
+        "effect": "stat_up_all",
+        "value": 1
+    },
+    "war_pendant": {
+        "name": "전투 목걸이",
+        "color": [
+            225,
+            135,
+            50
+        ],
+        "type": "accessory",
+        "effect": "attack_up",
+        "value": 3
+    },
+    "magic_stone": {
+        "name": "마법석",
+        "color": [
+            130,
+            80,
+            225
+        ],
+        "type": "accessory",
+        "effect": "stat_up_all",
+        "value": 3
+    },
+    "teleport_scroll": {
+        "name": "텔레포트 두루마리",
+        "color": [
+            180,
+            100,
+            220
+        ],
+        "type": "consumable",
+        "effect": "teleport",
+        "value": 0
+    },
+    "amulet": {
+        "name": "부적",
+        "color": [
+            220,
+            180,
+            50
+        ],
+        "type": "consumable",
+        "effect": "stat_up_all",
+        "value": 1
+    },
+    "whirlwind_potion": {
+        "name": "회오리 물약",
+        "color": [
+            255,
+            200,
+            50
+        ],
+        "type": "consumable",
+        "effect": "whirlwind",
+        "value": 0
+    },
+    "leather_boots": {
+        "name": "가죽 장화",
+        "color": [
+            139,
+            90,
+            43
+        ],
+        "type": "boots",
+        "effect": "speed_up",
+        "value": 0.15
+    },
+    "iron_boots": {
+        "name": "철제 장화",
+        "color": [
+            155,
+            155,
+            175
+        ],
+        "type": "boots",
+        "effect": "speed_up",
+        "value": 0.25
+    },
+    "swift_boots": {
+        "name": "질풍 장화",
+        "color": [
+            80,
+            200,
+            230
+        ],
+        "type": "boots",
+        "effect": "speed_up",
+        "value": 0.4
+    },
+    "shadow_boots": {
+        "name": "그림자 장화",
+        "color": [
+            100,
+            70,
+            160
+        ],
+        "type": "boots",
+        "effect": "speed_up",
+        "value": 0.35
+    },
+    "skillbook_wind": {
+        "name": "바람 스킬북",
+        "color": [
+            160,
+            255,
+            160
+        ],
+        "type": "skillbook",
+        "effect": "unlock_combo",
+        "value": "WD"
+    },
+    "skillbook_fireball": {
+        "name": "파이어볼 스킬북",
+        "color": [
+            255,
+            120,
+            40
+        ],
+        "type": "skillbook",
+        "effect": "unlock_combo",
+        "value": "WS"
+    },
+    "skillbook_frost": {
+        "name": "냉기 스킬북",
+        "color": [
+            100,
+            220,
+            255
+        ],
+        "type": "skillbook",
+        "effect": "unlock_combo",
+        "value": "WA"
+    },
+    "skillbook_thunder": {
+        "name": "천둥 스킬북",
+        "color": [
+            200,
+            160,
+            255
+        ],
+        "type": "skillbook",
+        "effect": "unlock_combo",
+        "value": "AD"
+    },
+    "enhance_stone": {
+        "name": "강화석",
+        "color": [
+            160,
+            210,
+            255
+        ],
+        "type": "enhance_stone",
+        "effect": "enhance_stone",
+        "value": 1,
+        "desc": "장비 강화에 사용하는 신비한 돌"
+    }
 }

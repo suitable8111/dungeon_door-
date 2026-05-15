@@ -250,33 +250,34 @@ def _make_shop_items(floor_level, item_data):
 
 def drop_pool(floor_level):
     """몬스터 처치 시 드랍 아이템 풀 (게임에서 호출)."""
+    stones = ['enhance_stone'] * 2
     if floor_level <= 4:
         return (['health_potion'] * 3 + ['dagger'] + ['leather_armor'] +
                 ['leather_helm'] + ['wooden_shield'] + ['silver_ring'] +
-                ['leather_boots'])
+                ['leather_boots'] + stones)
     elif floor_level <= 10:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
                 ['sword'] + ['chain_mail'] + ['leather_helm'] + ['iron_helm'] +
                 ['wooden_shield'] + ['silver_ring'] + ['teleport_scroll'] +
-                ['leather_boots'] + ['iron_boots'])
+                ['leather_boots'] + ['iron_boots'] + stones * 2)
     elif floor_level <= 25:
         return (['large_health_potion'] * 2 + ['sword'] * 2 + ['chain_mail'] +
                 ['plate_armor'] + ['iron_helm'] + ['iron_shield'] +
                 ['silver_ring'] + ['war_pendant'] + ['teleport_scroll'] +
                 ['skillbook_wind'] + ['skillbook_fireball'] +
-                ['iron_boots'])
+                ['iron_boots'] + stones * 2)
     elif floor_level <= 50:
         return (['large_health_potion'] * 2 + ['broad_sword'] + ['plate_armor'] +
                 ['knight_helm'] + ['iron_shield'] + ['tower_shield'] +
                 ['war_pendant'] + ['magic_stone'] + ['amulet'] +
                 ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'] +
-                ['iron_boots'] + ['swift_boots'])
+                ['iron_boots'] + ['swift_boots'] + stones * 3)
     else:
         return (['large_health_potion'] * 2 + ['great_sword'] + ['mythril_armor'] +
                 ['knight_helm'] + ['tower_shield'] + ['magic_stone'] * 2 +
                 ['war_pendant'] + ['amulet'] + ['whirlwind_potion'] +
                 ['skillbook_frost'] + ['skillbook_thunder'] +
-                ['swift_boots'] + ['shadow_boots'])
+                ['swift_boots'] + ['shadow_boots'] + stones * 3)
 
 
 # 테마별 몬스터 풀 (theme_index 0-19)

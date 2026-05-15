@@ -5,12 +5,13 @@ class Item:
     def __init__(self, x, y, data):
         self.x = x
         self.y = y
-        self.key       = data.get('key', '')
-        self.name      = data['name']
-        self.color     = tuple(data['color'])
-        self.item_type = data['type']
-        self.effect    = data.get('effect', '')
-        self.value     = data.get('value', 0)
+        self.key          = data.get('key', '')
+        self.name         = data['name']
+        self.color        = tuple(data['color'])
+        self.item_type    = data['type']
+        self.effect       = data.get('effect', '')
+        self.value        = data.get('value', 0)
+        self.enhance_level = data.get('enhance_level', 0)  # 0~18
 
     # ── 장비 슬롯 이름 반환 (장비 아이템이 아니면 None) ───────────
     @property
@@ -70,7 +71,8 @@ class Item:
             player.inventory.remove(self)
         player.equipment[slot] = self
 
-        return f"{self.name} {slot_name} 장착! (+{self.value})"
+        enh = f" [+{self.enhance_level}]" if self.enhance_level > 0 else ""
+        return f"{self.name}{enh} {slot_name} 장착! (+{self.value})"
 
     def unequip(self, player) -> str:
         slot = self.equip_slot

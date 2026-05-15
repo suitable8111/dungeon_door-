@@ -222,6 +222,10 @@ class Game:
         # 버리기 확인 대화상자
         self._inv_confirm_idx = None  # 버리기 확인 대기 중인 슬롯 인덱스
 
+        # 장비 강화 창
+        self._enhance_open   = False
+        self._enhance_cursor = 0     # 선택 슬롯 인덱스 (0~5)
+
         # 스킬 XP (hit 수 누적 → 자동 레벨업)
         self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
 
@@ -610,7 +614,9 @@ class Game:
                     self._inv_drag_pos = event.pos
 
             elif event.type == pygame.KEYDOWN:
-                if self._inv_confirm_idx is not None:
+                if self._enhance_open:
+                    self._handle_enhance_key(event.key)
+                elif self._inv_confirm_idx is not None:
                     if event.key in (pygame.K_y, pygame.K_RETURN):
                         self._discard_inventory_item(self._inv_confirm_idx)
                         self._inv_confirm_idx = None
@@ -623,6 +629,9 @@ class Game:
             t = action['type']
 
             if t == 'escape':
+                if self._enhance_open:
+                    self._enhance_open = False
+                    continue
                 if self._inv_confirm_idx is not None:
                     self._inv_confirm_idx = None
                 elif self.state in ('inventory', 'equipment'):
@@ -661,6 +670,9 @@ class Game:
                 elif t == 'equipment':
                     self._equip_sel = 0
                     self.state = 'equipment'
+                elif t == 'enhance':
+                    self._enhance_open = True
+                    self._enhance_cursor = 0
                 elif t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill', 'ultimate'):
                     self._process(action)
             elif self.state == 'dead':
@@ -1157,6 +1169,12 @@ class Game:
         self._try_enemy_drop(enemy)
 
     def _pickup(self, item):
+        if item.effect == 'enhance_stone':
+            self.player.enhance_stones += 1
+            self.dungeon.remove_item(item)
+            self.messages.append((t('enhance_stone_pickup', self.player.enhance_stones), 'good'))
+            self.audio.play('pickup')
+            return
         if item.effect == 'unlock_combo':
             combo_id = str(item.value)
             cdef = COMBO_SKILL_DEFS.get(combo_id)
@@ -1233,6 +1251,11 @@ class Game:
             self._start_shake(3, 150)
 
     # ─────────────── 스킬 ─────────────────────────────────────────────
+    @property
+    def _skill_atk(self) -> int:
+        """스킬 데미지 기준 공격력 (장신구 강화 보너스 포함)."""
+        return int(self.player.total_attack * self.player.skill_damage_mul)
+
     def _use_skill(self, key):
         sdef = next((s for s in SKILL_DEFS if s['key'] == key), None)
         if sdef and self.player.level < sdef['level_req']:
@@ -1294,7 +1317,7 @@ class Game:
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
             crit = random.random() < 0.1
-            dmg  = max(1, int(self.player.total_attack * mul) - enemy.defense + random.randint(0,3))
+            dmg  = max(1, int(self._skill_atk * mul) - enemy.defense + random.randint(0,3))
             if crit: dmg *= 2
             enemy.take_damage(dmg)
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (255,180,60)))
@@ -1346,7 +1369,7 @@ class Game:
             self.messages.append((t('skill_power_miss'), 'info'))
             return True
         crit = random.random() < crit_chance
-        dmg  = max(1, int(self.player.total_attack * mul) - enemy.defense)
+        dmg  = max(1, int(self._skill_atk * mul) - enemy.defense)
         if crit: dmg = int(dmg * 1.5)
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
@@ -1421,7 +1444,7 @@ class Game:
             if enemy:
                 bolt_end = (tx, ty)
                 crit = random.random() < 0.3
-                dmg  = max(1, int(self.player.total_attack * 2.2) - enemy.defense)
+                dmg  = max(1, int(self._skill_atk * 2.2) - enemy.defense)
                 if crit: dmg = int(dmg * 1.5)
                 enemy.take_damage(dmg)
                 self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
@@ -1449,7 +1472,7 @@ class Game:
         targets = targets[:5]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self.player.total_attack * 1.2) - enemy.defense)
+            dmg = max(1, int(self._skill_atk * 1.2) - enemy.defense)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
             self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
@@ -1472,7 +1495,7 @@ class Game:
             if not enemy.is_alive():
                 continue
             if max(abs(enemy.x - px), abs(enemy.y - py)) <= 3:
-                dmg = max(1, int(self.player.total_attack * 1.3) - enemy.defense)
+                dmg = max(1, int(self._skill_atk * 1.3) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
                 self.animator.particles.emit_frost_hit(enemy.x, enemy.y)
@@ -1504,7 +1527,7 @@ class Game:
             end_x, end_y = tx, ty
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy and enemy.is_alive():
-                dmg = max(1, int(self.player.total_attack * 1.8) - enemy.defense)
+                dmg = max(1, int(self._skill_atk * 1.8) - enemy.defense)
                 enemy.take_damage(dmg)
                 self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
@@ -1558,6 +1581,57 @@ class Game:
             self._fortify_effect = None
             self.messages.append((t('skill_fortify_end'), 'info'))
 
+    # ── 장비 강화 ───────────────────────────────────────────────────────────
+    _ENHANCE_SLOTS  = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
+    _ENHANCE_MAX    = 18
+    _ENHANCE_RATES  = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0,   # +0→+5
+                       0.8, 0.8, 0.8,                    # +6→+8
+                       0.6, 0.6, 0.6,                    # +9→+11
+                       0.4, 0.4, 0.4,                    # +12→+14
+                       0.2, 0.2, 0.2]                    # +15→+17
+
+    _ENHANCE_STAT = {
+        'weapon':    '공격력 +1',
+        'body':      '방어력 +1',
+        'off_hand':  '방어력 +1',
+        'head':      '회피율 +1%',
+        'feet':      '이동속도 +0.05',
+        'accessory': '스킬 데미지 +5%',
+    }
+
+    def _handle_enhance_key(self, key):
+        import pygame
+        slots = self._ENHANCE_SLOTS
+        if key in (pygame.K_UP, pygame.K_w):
+            self._enhance_cursor = (self._enhance_cursor - 1) % len(slots)
+        elif key in (pygame.K_DOWN, pygame.K_s):
+            self._enhance_cursor = (self._enhance_cursor + 1) % len(slots)
+        elif key in (pygame.K_RETURN, pygame.K_SPACE):
+            self._do_enhance(slots[self._enhance_cursor])
+        elif key in (pygame.K_ESCAPE, pygame.K_p):
+            self._enhance_open = False
+
+    def _do_enhance(self, slot: str):
+        import random
+        item = self.player.equipment.get(slot)
+        if not item:
+            self.messages.append((t('enhance_no_item'), 'warn'))
+            return
+        if item.enhance_level >= self._ENHANCE_MAX:
+            self.messages.append((t('enhance_max', item.name), 'warn'))
+            return
+        if self.player.enhance_stones < 1:
+            self.messages.append((t('enhance_no_stone'), 'warn'))
+            return
+        self.player.enhance_stones -= 1
+        rate = self._ENHANCE_RATES[item.enhance_level]
+        if random.random() < rate:
+            item.enhance_level += 1
+            self.messages.append((t('enhance_success', item.name, item.enhance_level), 'good'))
+            self.audio.play('levelup')
+        else:
+            self.messages.append((t('enhance_fail', item.name, item.enhance_level), 'warn'))
+
     def _remove_fortify_buff(self):
         if self._fortify_def_bonus or self._fortify_atk_bonus:
             self.player.defense      -= self._fortify_def_bonus
@@ -1590,7 +1664,7 @@ class Game:
                    if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self.player.total_attack * 3.0) - enemy.defense + random.randint(0, 5))
+            dmg = max(1, int(self._skill_atk * 3.0) - enemy.defense + random.randint(0, 5))
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
             self.animator.particles.emit_power_hit(enemy.x, enemy.y)
@@ -1617,7 +1691,7 @@ class Game:
                    if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self.player.total_attack * 10) - enemy.defense)
+            dmg = max(1, int(self._skill_atk * 10) - enemy.defense)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 255, 255)))
             self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
@@ -1859,6 +1933,9 @@ class Game:
             self.hud.render_equipment(self.screen, self.player, self._equip_sel,
                                       self._sprites.get('hero_down'),
                                       mouse_pos=pygame.mouse.get_pos())
+
+        if self._enhance_open and self.state == 'playing':
+            self.hud.render_enhance(self.screen, self.player, self._enhance_cursor)
 
         # 버닝 스테이지 타이머 오버레이
         if self._burning_active:

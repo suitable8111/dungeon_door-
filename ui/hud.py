@@ -753,6 +753,36 @@ class HUD:
             y += 13
         y += 2
 
+        # ── 궁극기 ──────────────────────────────────────────────────
+        from core.skills import ULTIMATE_SKILL_DEFS
+        sec_header('sec_ultimate', (255, 120, 50))
+        for uid, udef in ULTIMATE_SKILL_DEFS.items():
+            unlocked_ult = player and player.level >= udef['level_req']
+            ready_ult    = skill_mgr.ready(uid) if (skill_mgr and unlocked_ult) else False
+            rem_ult      = skill_mgr.remaining_sec(uid) if (skill_mgr and unlocked_ult) else 0.0
+            frac_ult     = skill_mgr.cooldown_frac(uid) if (skill_mgr and unlocked_ult) else 0.0
+            col = udef['color'] if (unlocked_ult and ready_ult) else (70, 60, 60)
+            if unlocked_ult:
+                pygame.draw.rect(screen, (30, 14, 14), (rx+6, y-1, pw-12, 24))
+            ks = self.font_sm.render(f"[{udef['keys']}]", True, col)
+            ns = self.font_sm.render(udef['name'], True, col)
+            screen.blit(ks, (rx+8, y))
+            screen.blit(ns, (rx+8 + ks.get_width() + 4, y))
+            if unlocked_ult and not ready_ult:
+                rs = self.font_sm.render(f"{rem_ult:.0f}s", True, (120, 80, 80))
+                screen.blit(rs, (rx + pw - rs.get_width() - 8, y))
+            elif not unlocked_ult:
+                ls = self.font_sm.render(f"Lv.{udef['level_req']}", True, (55, 45, 45))
+                screen.blit(ls, (rx + pw - ls.get_width() - 8, y))
+            y += 13
+            if unlocked_ult:
+                _bar(screen, rx+8, y, bw, 5,
+                     int(bw * (1 - frac_ult)), bw,
+                     udef['color'] if ready_ult else (60, 30, 30), (18, 10, 10))
+                y += 6
+            y += 2
+        y += 2
+
         # ── 미니맵 ──────────────────────────────────────────────────
         sec_header('sec_minimap', LIGHT_GRAY)
         if dungeon:
@@ -1025,6 +1055,73 @@ class HUD:
         screen.blit(hint_s, (bx + 10, by + ph - 20))
 
     # ------------------------------------------------------------------ #
+    def render_enhance(self, screen, player, cursor):
+        """장비 강화 오버레이 (P키)."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 210))
+        screen.blit(ov, (0, 0))
+
+        pw, ph = 460, 380
+        bx = W // 2 - pw // 2
+        by = H // 2 - ph // 2
+
+        pygame.draw.rect(screen, (10, 14, 28), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (80, 120, 180), (bx, by, pw, ph), 2, border_radius=6)
+
+        title = self.font_lg.render('장비 강화', True, (160, 210, 255))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
+
+        stone_s = self.font_sm.render(f'강화석: {player.enhance_stones}개', True, (160, 210, 255))
+        screen.blit(stone_s, (bx + pw - stone_s.get_width() - 14, by + 14))
+
+        pygame.draw.line(screen, (50, 80, 120), (bx+12, by+42), (bx+pw-12, by+42))
+
+        _SLOT_ORDER = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
+        _SLOT_NAMES = {'head':'투구','body':'갑옷','weapon':'무기',
+                       'off_hand':'보조무기','accessory':'장신구','feet':'신발'}
+        _STAT_LABEL = {'head':'회피율 +1%','body':'방어력 +1','weapon':'공격력 +1',
+                       'off_hand':'방어력 +1','accessory':'스킬 데미지 +5%','feet':'이동속도 +0.05'}
+        _RATES = [100,100,100,100,100,100,80,80,80,60,60,60,40,40,40,20,20,20]
+
+        y = by + 52
+        for i, slot in enumerate(_SLOT_ORDER):
+            item = player.equipment.get(slot)
+            selected = (i == cursor)
+            row_bg = (18, 30, 55) if selected else (10, 14, 28)
+            pygame.draw.rect(screen, row_bg, (bx+8, y-2, pw-16, 34), border_radius=3)
+            if selected:
+                pygame.draw.rect(screen, (80, 130, 200), (bx+8, y-2, pw-16, 34), 1, border_radius=3)
+
+            slot_s = self.font_sm.render(_SLOT_NAMES[slot], True, (100, 130, 170))
+            screen.blit(slot_s, (bx+14, y+2))
+
+            if item:
+                enh = item.enhance_level
+                enh_col = (255, 220, 80) if enh >= 10 else (120, 200, 255) if enh > 0 else (200, 200, 220)
+                name_s = self.font_sm.render(f"{item.name}  [+{enh}]", True, enh_col)
+                screen.blit(name_s, (bx+80, y+2))
+                stat_s = self.font_sm.render(_STAT_LABEL.get(slot, ''), True, (90, 160, 90))
+                screen.blit(stat_s, (bx+80, y+16))
+                if enh < 18:
+                    rate = _RATES[enh]
+                    rate_col = (80, 220, 80) if rate == 100 else (220, 180, 60) if rate >= 60 else (220, 80, 80)
+                    rate_s = self.font_sm.render(f"성공률 {rate}%", True, rate_col)
+                    screen.blit(rate_s, (bx + pw - rate_s.get_width() - 14, y+2))
+                    cost_s = self.font_sm.render("강화석 1개", True, (140, 170, 220))
+                    screen.blit(cost_s, (bx + pw - cost_s.get_width() - 14, y+16))
+                else:
+                    max_s = self.font_sm.render("MAX", True, (255, 200, 50))
+                    screen.blit(max_s, (bx + pw - max_s.get_width() - 14, y+8))
+            else:
+                empty_s = self.font_sm.render('--- 비어있음 ---', True, (50, 55, 75))
+                screen.blit(empty_s, (bx+80, y+9))
+
+            y += 38
+
+        guide_s = self.font_sm.render('↑↓ 선택   Enter 강화   P/ESC 닫기', True, (70, 90, 130))
+        screen.blit(guide_s, (bx + (pw - guide_s.get_width()) // 2, by + ph - 24))
+
     def render_equipment(self, screen, player, sel, player_spr=None, mouse_pos=(0, 0)):
         """장비 장착 화면 — 페이퍼돌 레이아웃."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT

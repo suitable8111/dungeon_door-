@@ -23,12 +23,16 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack': player.attack, 'defense': player.defense,
             'level': player.level, 'xp': player.xp, 'xp_next': player.xp_next,
             'gold': player.gold,
+            'enhance_stones': player.enhance_stones,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
-            'inventory': [item.key for item in player.inventory],
+            'inventory': [
+                {'key': item.key, 'enhance_level': item.enhance_level}
+                for item in player.inventory
+            ],
             'equipment': {
-                slot: (item.key if item else None)
+                slot: ({'key': item.key, 'enhance_level': item.enhance_level} if item else None)
                 for slot, item in player.equipment.items()
             },
         },
