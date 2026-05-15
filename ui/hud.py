@@ -1055,7 +1055,7 @@ class HUD:
         screen.blit(hint_s, (bx + 10, by + ph - 20))
 
     # ------------------------------------------------------------------ #
-    def render_enhance(self, screen, player, cursor):
+    def render_enhance(self, screen, player, cursor, flash_result=None):
         """장비 강화 오버레이 (P키)."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
@@ -1066,8 +1066,20 @@ class HUD:
         bx = W // 2 - pw // 2
         by = H // 2 - ph // 2
 
+        # 창 테두리 플래시 (성공=금색, 실패=빨강)
+        now_ms = pygame.time.get_ticks()
+        border_col = (80, 120, 180)
+        if flash_result is not None:
+            elapsed = now_ms - flash_result[1]
+            fade = max(0.0, 1.0 - elapsed / 500)
+            if fade > 0:
+                if flash_result[0] == 'success':
+                    border_col = (int(80 + 175 * fade), int(120 + 95 * fade), int(180 - 130 * fade))
+                else:
+                    border_col = (int(80 + 175 * fade), int(120 - 100 * fade), int(180 - 150 * fade))
+
         pygame.draw.rect(screen, (10, 14, 28), (bx, by, pw, ph), border_radius=6)
-        pygame.draw.rect(screen, (80, 120, 180), (bx, by, pw, ph), 2, border_radius=6)
+        pygame.draw.rect(screen, border_col, (bx, by, pw, ph), 2, border_radius=6)
 
         title = self.font_lg.render('장비 강화', True, (160, 210, 255))
         screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
@@ -1088,10 +1100,34 @@ class HUD:
         for i, slot in enumerate(_SLOT_ORDER):
             item = player.equipment.get(slot)
             selected = (i == cursor)
-            row_bg = (18, 30, 55) if selected else (10, 14, 28)
+
+            # 행 플래시 계산
+            row_flash_type = None
+            row_fade = 0.0
+            if flash_result is not None and flash_result[2] == i:
+                elapsed = now_ms - flash_result[1]
+                row_fade = max(0.0, 1.0 - elapsed / 500)
+                if row_fade > 0:
+                    row_flash_type = flash_result[0]
+
+            if row_flash_type == 'success':
+                f = row_fade
+                row_bg = (int(18 + 50 * f), int(30 + 80 * f), int(55 - 20 * f))
+                edge_col = (int(255 * f), int(215 * f), 0)
+            elif row_flash_type == 'fail':
+                f = row_fade
+                row_bg = (int(10 + 80 * f), int(14 - 5 * f), int(28 - 10 * f))
+                edge_col = (int(220 * f), int(30 * f), int(30 * f))
+            elif selected:
+                row_bg = (18, 30, 55)
+                edge_col = (80, 130, 200)
+            else:
+                row_bg = (10, 14, 28)
+                edge_col = None
+
             pygame.draw.rect(screen, row_bg, (bx+8, y-2, pw-16, 34), border_radius=3)
-            if selected:
-                pygame.draw.rect(screen, (80, 130, 200), (bx+8, y-2, pw-16, 34), 1, border_radius=3)
+            if edge_col:
+                pygame.draw.rect(screen, edge_col, (bx+8, y-2, pw-16, 34), 1, border_radius=3)
 
             slot_s = self.font_sm.render(_SLOT_NAMES[slot], True, (100, 130, 170))
             screen.blit(slot_s, (bx+14, y+2))

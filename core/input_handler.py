@@ -23,7 +23,7 @@ class InputHandler:
         pygame.K_SPACE, pygame.K_PERIOD, pygame.K_KP5,
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_r, pygame.K_ESCAPE, pygame.K_RETURN,
-        pygame.K_l, pygame.K_i, pygame.K_o,
+        pygame.K_l, pygame.K_i, pygame.K_o, pygame.K_p,
     }
     # WASD → 스킬 키 문자
     _WASD = {

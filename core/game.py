@@ -225,6 +225,12 @@ class Game:
         # 장비 강화 창
         self._enhance_open   = False
         self._enhance_cursor = 0     # 선택 슬롯 인덱스 (0~5)
+        self._enhance_result = None  # ('success'/'fail', time_ms, cursor_idx)
+
+        # 몬스터 리스폰
+        self._respawn_max      = 0      # 이 층의 일반 몬스터 최대 수
+        self._respawn_timer_ms = 0      # 다음 리스폰까지 남은 시간
+        self._RESPAWN_INTERVAL = 10000  # 리스폰 주기 (ms)
 
         # 스킬 XP (hit 수 누적 → 자동 레벨업)
         self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
@@ -495,6 +501,13 @@ class Game:
         p.move_speed   = 5.0    # 이동 간격 60ms (최소)
         p.evasion      = 40     # 회피율 최대
         p.gold         = 99999
+        # 강화 시스템 테스트용 아이템
+        from entities.item import Item as _Item
+        p.enhance_stones = 100
+        _sword_data = dict(self._item_data['sword']); _sword_data['key'] = 'sword'
+        p.inventory.append(_Item(0, 0, _sword_data))
+        _armor_data = dict(self._item_data['leather_armor']); _armor_data['key'] = 'leather_armor'
+        p.inventory.append(_Item(0, 0, _armor_data))
         self.dungeon.reveal_all()
         self.state = 'playing'
         self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
@@ -565,6 +578,10 @@ class Game:
             self.dungeon.reveal_all()
         else:
             self.dungeon.update_visibility(self.player.x, self.player.y)
+
+        # 리스폰 설정: 보스 제외 초기 몬스터 수를 최대치로 고정
+        self._respawn_max      = sum(1 for e in self.dungeon.enemies if not e.is_boss)
+        self._respawn_timer_ms = self._RESPAWN_INTERVAL
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
@@ -1613,6 +1630,7 @@ class Game:
 
     def _do_enhance(self, slot: str):
         import random
+        import pygame as _pg
         item = self.player.equipment.get(slot)
         if not item:
             self.messages.append((t('enhance_no_item'), 'warn'))
@@ -1629,8 +1647,58 @@ class Game:
             item.enhance_level += 1
             self.messages.append((t('enhance_success', item.name, item.enhance_level), 'good'))
             self.audio.play('levelup')
+            self._start_shake(3, 200)
+            self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (255, 215, 0)))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self._enhance_result = ('success', _pg.time.get_ticks(), self._enhance_cursor)
         else:
             self.messages.append((t('enhance_fail', item.name, item.enhance_level), 'warn'))
+            self._start_shake(7, 380)
+            self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (200, 40, 40)))
+            self.audio.play('player_hit')
+            self._enhance_result = ('fail', _pg.time.get_ticks(), self._enhance_cursor)
+
+    def _do_respawn(self):
+        """보스·버닝 스테이지를 제외한 일반 층에서 몬스터 1마리 리스폰."""
+        import random as _rnd
+        from map.generator import _enemy_pool, _scale_enemy
+        from entities.enemy import Enemy
+
+        # 플레이어 시야 밖의 빈 바닥 타일 후보 수집 (거리 5 이상, 시야 밖 우선)
+        candidates = []
+        fallback   = []
+        for y in range(self.dungeon.height):
+            for x in range(self.dungeon.width):
+                tile = self.dungeon.tiles[y][x]
+                if tile.blocked:
+                    continue
+                if self.dungeon.get_enemy_at(x, y):
+                    continue
+                dist = abs(x - self.player.x) + abs(y - self.player.y)
+                if dist < 5:
+                    continue
+                if not tile.visible:
+                    candidates.append((x, y))
+                else:
+                    fallback.append((x, y))   # 시야 안이지만 거리는 충분
+
+        spawn_list = candidates if candidates else fallback
+        if not spawn_list:
+            return
+
+        sx, sy = _rnd.choice(spawn_list)
+        pool = _enemy_pool(self.floor, getattr(self.dungeon, 'theme_index', 0))
+        if not pool:
+            return
+
+        key  = _rnd.choice(pool)
+        if key not in self._enemy_data:
+            return
+        data = _scale_enemy(self._enemy_data[key], self.floor)
+        data['key'] = key
+        enemy = Enemy(sx, sy, data)
+        self.dungeon.enemies.append(enemy)
+        self.messages.append(('몬스터가 나타났다!', 'warn'))
 
     def _remove_fortify_buff(self):
         if self._fortify_def_bonus or self._fortify_atk_bonus:
@@ -1874,6 +1942,20 @@ class Game:
                 self.audio.play('death')
                 self.state = 'dead'
 
+        # ── 몬스터 리스폰 ────────────────────────────────────────────
+        if (not self._burning_active and
+                not self.dungeon.is_boss_floor and
+                self._respawn_max > 0):
+            live_normal = sum(1 for e in self.dungeon.enemies
+                              if e.is_alive() and not e.is_boss)
+            if live_normal < self._respawn_max:
+                self._respawn_timer_ms -= dt
+                if self._respawn_timer_ms <= 0:
+                    self._do_respawn()
+                    self._respawn_timer_ms = self._RESPAWN_INTERVAL
+            else:
+                self._respawn_timer_ms = self._RESPAWN_INTERVAL
+
     # ─────────────── 렌더링 ───────────────────────────────────────────
     def _render(self):
         self.screen.fill(BLACK)
@@ -1935,7 +2017,7 @@ class Game:
                                       mouse_pos=pygame.mouse.get_pos())
 
         if self._enhance_open and self.state == 'playing':
-            self.hud.render_enhance(self.screen, self.player, self._enhance_cursor)
+            self.hud.render_enhance(self.screen, self.player, self._enhance_cursor, self._enhance_result)
 
         # 버닝 스테이지 타이머 오버레이
         if self._burning_active:
