@@ -759,6 +759,19 @@ class HUD:
             y += 13
         y += 2
 
+        # ── 오의 SP 바 ──────────────────────────────────────────────
+        arcane_sp     = getattr(player, 'arcane_sp', 0)
+        arcane_sp_max = getattr(player, 'arcane_sp_max', 100)
+        if arcane_sp_max > 0:
+            sec_header('sec_arcane_sp', (200, 100, 255))
+            frac_asp = arcane_sp / arcane_sp_max
+            arc_col  = (200, 100, 255) if frac_asp < 1.0 else (255, 200, 80)
+            _bar(screen, rx+8, y, bw, 7, int(bw * frac_asp), bw, arc_col, (20, 10, 35))
+            y += 9
+            asp_s = self.font_sm.render(f'{arcane_sp}/{arcane_sp_max}', True, arc_col)
+            screen.blit(asp_s, (rx + pw - asp_s.get_width() - 8, y - 9))
+            y += 2
+
         # ── 궁극기 ──────────────────────────────────────────────────
         from core.skills import ULTIMATE_SKILL_DEFS
         sec_header('sec_ultimate', (255, 120, 50))
@@ -1170,7 +1183,8 @@ class HUD:
                          player_level: int,
                          equipped_skills=None,
                          equip_mode=False, equip_target_slot=None,
-                         equip_skill_id=None, equip_cursor=0):
+                         equip_skill_id=None, equip_cursor=0,
+                         skill_enchants=None, arcane_window=False):
         """스킬 도감 오버레이 (K키)."""
         # lazy import to avoid circular imports
         try:
@@ -1184,6 +1198,13 @@ class HUD:
             from core.skills import SKILL_SP_COST
         except ImportError:
             SKILL_SP_COST = {'W': [5, 10], 'A': [5, 10], 'S': [5, 10], 'D': [5, 10]}
+
+        try:
+            from core.skills import ENCHANT_DEFS as _ENCHANT_DEFS, ENCHANT_TYPES as _ENCHANT_TYPES, ENCHANT_MAX_LEVEL as _ENCHANT_MAX
+        except ImportError:
+            _ENCHANT_DEFS = {}; _ENCHANT_TYPES = (); _ENCHANT_MAX = 3
+
+        _enc = skill_enchants or {}
 
         _eq = equipped_skills or _DEFAULT_EQUIPPED
 
@@ -1235,9 +1256,16 @@ class HUD:
         footer_y = by + bh - FOOTER_H
         pygame.draw.line(screen, DIVIDER_COL, (bx, footer_y), (bx + bw, footer_y))
         pygame.draw.rect(screen, (10, 15, 28), (bx, footer_y, bw, FOOTER_H))
-        _hint_key = 'sb_equip_hint' if equip_mode else 'sb_hint'
-        _hint_col = (200, 140, 50) if equip_mode else (70, 90, 120)
-        hint_s = self.font_sm.render(t(_hint_key), True, _hint_col)
+        if arcane_window:
+            _hint_text = '★ 오의 발동 가능! R키를 누르세요'
+            _hint_col  = (255, 200, 80)
+        elif equip_mode:
+            _hint_text = t('sb_equip_hint')
+            _hint_col  = (200, 140, 50)
+        else:
+            _hint_text = t('sb_hint')
+            _hint_col  = (70, 90, 120)
+        hint_s = self.font_sm.render(_hint_text, True, _hint_col)
         screen.blit(hint_s, (bx + (bw - hint_s.get_width()) // 2,
                               footer_y + (FOOTER_H - hint_s.get_height()) // 2))
 
@@ -1507,6 +1535,40 @@ class HUD:
                 screen.blit(max_s, (rx, ry))
                 ry += max_s.get_height() + 4
 
+        # Helper: render enchant panel for a skill
+        def _render_enchants(sid):
+            nonlocal ry
+            if not _ENCHANT_DEFS or not _ENCHANT_TYPES:
+                return
+            enc = _enc.get(sid, {})
+            pygame.draw.line(screen, DIVIDER_COL, (rx, ry), (rx + rw - 4, ry))
+            ry += 4
+            hdr_s = self.font_sm.render('인챈트  (1위력  2신속  3절약  4오의)', True, (100, 120, 150))
+            screen.blit(hdr_s, (rx, ry)); ry += hdr_s.get_height() + 3
+
+            for ei, etype in enumerate(_ENCHANT_TYPES):
+                edef  = _ENCHANT_DEFS.get(etype, {})
+                ename = edef.get('name_ko', etype)
+                ecol  = edef.get('color', WHITE)
+                cur   = enc.get(etype, 0)
+                costs = edef.get('sp_cost', [5, 10, 20])
+                if cur < _ENCHANT_MAX:
+                    cost  = costs[cur] if cur < len(costs) else 20
+                    canup = skill_points >= cost
+                    lv_s  = self.font_sm.render(
+                        f'[{ei+1}] {ename}  Lv{cur}/{_ENCHANT_MAX}', True,
+                        ecol if cur > 0 else (80, 80, 100))
+                    cost_s = self.font_sm.render(
+                        f'SP {cost}', True,
+                        (100, 220, 100) if canup else (160, 80, 80))
+                    screen.blit(lv_s,  (rx, ry))
+                    screen.blit(cost_s, (rx + rw - cost_s.get_width() - 4, ry))
+                else:
+                    lv_s = self.font_sm.render(
+                        f'[{ei+1}] {ename}  MAX', True, ecol)
+                    screen.blit(lv_s, (rx, ry))
+                ry += lv_s.get_height() + 2
+
         # Determine which skill to show in the right panel
         if equip_mode:
             if equip_skill_id:
@@ -1528,6 +1590,7 @@ class HUD:
             if _e_sid and (_ALL_SKILL_DEFS.get(_e_sid) or True):
                 if _ALL_SKILL_DEFS.get(_e_sid):
                     _render_all_skill_detail(_e_sid, slot_label=sel_slot)
+                    _render_enchants(_e_sid)
                 else:
                     # legacy fallback for basic skills
                     legacy = next((s for s in SKILL_DEFS if s['key'] == sel_slot), None)
@@ -1585,6 +1648,7 @@ class HUD:
             # cursor on an available skill
             if sel_skill_id:
                 _render_all_skill_detail(sel_skill_id)
+                _render_enchants(sel_skill_id)
 
     # ------------------------------------------------------------------ #
     def render_equipment(self, screen, player, sel, player_spr=None, mouse_pos=(0, 0)):

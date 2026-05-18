@@ -12,7 +12,8 @@ from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAni
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
-                         SKILL_SP_COST, ALL_SKILL_DEFS, DEFAULT_EQUIPPED)
+                         SKILL_SP_COST, ALL_SKILL_DEFS, DEFAULT_EQUIPPED,
+                         ENCHANT_DEFS, ENCHANT_TYPES, ENCHANT_MAX_LEVEL)
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -239,6 +240,17 @@ class Game:
         self._skill_points: int = 0
         self._equipped_skills: dict[str, str] = DEFAULT_EQUIPPED.copy()
 
+        # 스킬 인챈트 (power/haste/efficiency/arcane 레벨)
+        self._skill_enchants: dict[str, dict] = {
+            sid: {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0}
+            for sid in ALL_SKILL_DEFS
+        }
+        self._enchant_dmg_mul: float = 1.0   # _use_skill 중 임시 적용
+
+        # 오의 시스템
+        self._arcane_window_ms:  int      = 0     # R키 오의 발동 가능 창
+        self._arcane_last_skill: str|None = None  # 직전 사용 스킬 id
+
         # 스킬 도감 (K키)
         self._skillbook_open:           bool     = False
         self._skillbook_cursor:         int      = 0
@@ -375,6 +387,10 @@ class Game:
             if self.state == 'playing':
                 self.skills.update(dt)
                 self._update_fortify(dt)
+                if self._arcane_window_ms > 0:
+                    self._arcane_window_ms = max(0, self._arcane_window_ms - dt)
+                    if self._arcane_window_ms == 0:
+                        self._arcane_last_skill = None
                 if self._burning_active:
                     self._update_burning(dt)
             if self.state == 'playing':
@@ -482,6 +498,12 @@ class Game:
         self._skill_levels    = {sid: 1 for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
         self._equipped_skills = DEFAULT_EQUIPPED.copy()
+        self._skill_enchants  = {
+            sid: {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0}
+            for sid in ALL_SKILL_DEFS
+        }
+        self._arcane_window_ms  = 0
+        self._arcane_last_skill = None
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -500,6 +522,11 @@ class Game:
         self._skill_levels    = {sid: SKILL_MAX_LEVEL for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
         self._equipped_skills = DEFAULT_EQUIPPED.copy()
+        self._skill_enchants  = {
+            sid: {'power': ENCHANT_MAX_LEVEL, 'haste': ENCHANT_MAX_LEVEL,
+                  'efficiency': ENCHANT_MAX_LEVEL, 'arcane': ENCHANT_MAX_LEVEL}
+            for sid in ALL_SKILL_DEFS
+        }
         self._unlocked_combos = set(COMBO_SKILL_DEFS.keys())
         self._skill_books     = set(COMBO_SKILL_DEFS.keys())
         self._load_floor(is_new_game=True)
@@ -562,6 +589,13 @@ class Game:
             self._skill_xp = {sid: _raw_xp.get(sid, 0) for sid in ALL_SKILL_DEFS}
         self._skill_points    = data.get('skill_points', 0)
         self._equipped_skills = data.get('equipped_skills', DEFAULT_EQUIPPED.copy())
+        _raw_enc = data.get('skill_enchants', {})
+        self._skill_enchants = {}
+        for sid in ALL_SKILL_DEFS:
+            enc = dict(_raw_enc.get(sid, {}))
+            for etype in ENCHANT_TYPES:
+                enc.setdefault(etype, 0)
+            self._skill_enchants[sid] = enc
         self._apply_skill_level_cds()
         self._run_kills       = 0
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
@@ -599,7 +633,7 @@ class Game:
             if not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                               self._skill_levels, self._skill_xp, self._skill_points,
-                              self._equipped_skills)
+                              self._equipped_skills, self._skill_enchants)
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -969,7 +1003,7 @@ class Game:
             if self.player and not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                           self._skill_levels, self._skill_xp, self._skill_points,
-                          self._equipped_skills)
+                          self._equipped_skills, self._skill_enchants)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -1202,6 +1236,7 @@ class Game:
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
         self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
+        self.player.arcane_sp = min(self.player.arcane_sp_max, self.player.arcane_sp + 3)
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
 
@@ -1316,8 +1351,8 @@ class Game:
     # ─────────────── 스킬 ─────────────────────────────────────────────
     @property
     def _skill_atk(self) -> int:
-        """스킬 데미지 기준 공격력 (장신구 강화 보너스 포함)."""
-        return int(self.player.total_attack * self.player.skill_damage_mul)
+        """스킬 데미지 기준 공격력 (장신구 강화 + 위력 인챈트 포함)."""
+        return int(self.player.total_attack * self.player.skill_damage_mul * self._enchant_dmg_mul)
 
     def _use_skill(self, slot):
         skill_id = self._equipped_skills.get(slot)
@@ -1345,7 +1380,22 @@ class Game:
             'dark_pulse':  self._exec_dark_pulse,
         }
         fn = _exec_map.get(skill_id)
-        return fn(slot) if fn else False
+        if not fn:
+            return False
+
+        final = self._get_skill_final_stats(skill_id)
+        self._enchant_dmg_mul = final['dmg_mul']
+        result = fn(slot)
+        self._enchant_dmg_mul = 1.0
+
+        if result:
+            self.player.arcane_sp = min(
+                self.player.arcane_sp_max, self.player.arcane_sp + 10)
+            if final['arcane_eligible']:
+                self._arcane_window_ms = 2000
+                self._arcane_last_skill = skill_id
+
+        return result
 
     # ── 기본 장착 스킬 실행 ──────────────────────────────────────────────
 
@@ -1635,12 +1685,32 @@ class Game:
             skill_id = self._equipped_skills.get(slot)
             if not skill_id:
                 continue
-            lvl = self._skill_levels.get(skill_id, 1)
-            sdef = ALL_SKILL_DEFS.get(skill_id)
-            if not sdef:
-                continue
-            cd_ms = sdef['upgrades'][min(lvl - 1, len(sdef['upgrades']) - 1)]['cd_ms']
-            self.skills.set_cd_override(slot, cd_ms)
+            stats = self._get_skill_final_stats(skill_id)
+            self.skills.set_cd_override(slot, stats['cd_ms'])
+
+    def _get_skill_final_stats(self, skill_id: str) -> dict:
+        """인챈트 반영 최종 스킬 스탯을 반환."""
+        sdef = ALL_SKILL_DEFS.get(skill_id)
+        if not sdef:
+            return {'dmg_mul': 1.0, 'cd_ms': 0, 'sp_threshold': 100, 'arcane_eligible': False}
+        lvl = self._skill_levels.get(skill_id, 1)
+        upgrades = sdef['upgrades']
+        udata = upgrades[min(lvl - 1, len(upgrades) - 1)]
+        base_cd = udata['cd_ms']
+        enc = self._skill_enchants.get(skill_id, {})
+        power_lvl = enc.get('power', 0)
+        haste_lvl = enc.get('haste', 0)
+        effi_lvl  = enc.get('efficiency', 0)
+        arcane_lvl = enc.get('arcane', 0)
+        dmg_mul      = 1.0 + power_lvl * 0.15
+        cd_ms        = max(500, int(base_cd * (1.0 - haste_lvl * 0.10)))
+        sp_threshold = max(40, 100 - effi_lvl * 15)
+        return {
+            'dmg_mul':        dmg_mul,
+            'cd_ms':          cd_ms,
+            'sp_threshold':   sp_threshold,
+            'arcane_eligible': arcane_lvl >= 1,
+        }
 
     def _gain_skill_xp(self, skill_id: str, amount: int = 1):
         """스킬 적중 → 5회 누적마다 SP +1."""
@@ -1651,7 +1721,7 @@ class Game:
             self._skill_points += gained
 
     def _do_skill_upgrade(self, skill_id: str):
-        """스킬 도감에서 Enter 시 호출 — SP를 소모해 스킬 레벨업."""
+        """스킬 도감에서 U 시 호출 — SP를 소모해 스킬 레벨업."""
         lvl = self._skill_levels.get(skill_id, 1)
         sname = ALL_SKILL_DEFS.get(skill_id, {}).get('name', skill_id)
         if lvl >= SKILL_MAX_LEVEL:
@@ -1666,6 +1736,51 @@ class Game:
         self._apply_skill_level_cds()
         self.messages.append((t('upg_done', sname, self._skill_levels[skill_id]), 'good'))
         self.audio.play('levelup')
+
+    def _do_enchant_upgrade(self, skill_id: str, etype: str):
+        """스킬 도감에서 1-4 키 시 호출 — SP를 소모해 인챈트 레벨업."""
+        if etype not in ENCHANT_TYPES:
+            return
+        enc = self._skill_enchants.setdefault(
+            skill_id, {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0})
+        cur = enc.get(etype, 0)
+        if cur >= ENCHANT_MAX_LEVEL:
+            self.messages.append(('이미 최대 레벨입니다.', 'warn'))
+            return
+        edef = ENCHANT_DEFS.get(etype, {})
+        sp_costs = edef.get('sp_cost', [5, 10, 20])
+        cost = sp_costs[cur] if cur < len(sp_costs) else 20
+        if self._skill_points < cost:
+            self.messages.append((f'SP 부족 (필요: {cost}, 보유: {self._skill_points})', 'warn'))
+            return
+        self._skill_points -= cost
+        enc[etype] = cur + 1
+        self._apply_skill_level_cds()
+        sname = ALL_SKILL_DEFS.get(skill_id, {}).get('name', skill_id)
+        ename = edef.get('name_ko', etype)
+        self.messages.append((f'[{sname}] {ename} Lv.{cur + 1}!', 'good'))
+        self.audio.play('levelup')
+
+    def _try_arcane_art(self) -> bool:
+        """오의 연계 시도 — SP가 임계치 이상이고 오의 스킬이 사용된 직후여야 함."""
+        skill_id = self._arcane_last_skill
+        if not skill_id:
+            self.messages.append(('오의: 먼저 오의 스킬을 사용하세요.', 'warn'))
+            return False
+        stats = self._get_skill_final_stats(skill_id)
+        if not stats['arcane_eligible']:
+            self.messages.append(('오의: 오의 인챈트가 해금되지 않았습니다.', 'warn'))
+            return False
+        threshold = stats['sp_threshold']
+        if self.player.arcane_sp < threshold:
+            self.messages.append((
+                f'오의: SP 부족 ({self.player.arcane_sp}/{threshold})', 'warn'))
+            return False
+        self.player.arcane_sp = 0
+        self._arcane_window_ms = 0
+        self._arcane_last_skill = None
+        self.messages.append(('★ 오의 발동!', 'warn'))
+        return self._skill_ultimate_slash()
 
 
     # ─────────────── 조합 스킬 ───────────────────────────────────────
@@ -1932,11 +2047,29 @@ class Game:
                         self._skillbook_target_slot = None
                         self._skillbook_equip_cursor = 0
             elif key == pygame.K_u:
-                # U 키: SP 소모 업그레이드
-                if self._skillbook_cursor >= 4:
+                # U 키: SP 소모 스킬 레벨업
+                if self._skillbook_cursor < 4:
+                    slot = SLOTS[self._skillbook_cursor]
+                    sid = self._equipped_skills.get(slot)
+                    if sid:
+                        self._do_skill_upgrade(sid)
+                else:
                     avail_idx = self._skillbook_cursor - 4
                     if avail_idx < len(avail):
                         self._do_skill_upgrade(avail[avail_idx])
+            elif key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4):
+                # 1-4 키: 인챈트 업그레이드 (위력/신속/절약/오의)
+                etype_idx = key - pygame.K_1
+                etype = ENCHANT_TYPES[etype_idx]
+                if self._skillbook_cursor < 4:
+                    slot = SLOTS[self._skillbook_cursor]
+                    sid = self._equipped_skills.get(slot)
+                    if sid:
+                        self._do_enchant_upgrade(sid, etype)
+                else:
+                    avail_idx = self._skillbook_cursor - 4
+                    if avail_idx < len(avail):
+                        self._do_enchant_upgrade(avail[avail_idx], etype)
             elif key in (pygame.K_ESCAPE, pygame.K_k):
                 self._skillbook_open = False
 
@@ -2034,6 +2167,10 @@ class Game:
 
     # ─────────────── 궁극기 ─────────────────────────────────────────────
     def _use_ultimate(self, key: str):
+        # 오의 창이 열려 있으면 R키를 오의 발동으로 우선 처리
+        if key == 'R' and self._arcane_window_ms > 0:
+            return self._try_arcane_art()
+
         udef = ULTIMATE_SKILL_DEFS.get(key)
         if not udef:
             return False
@@ -2355,6 +2492,8 @@ class Game:
                 equip_target_slot=self._skillbook_target_slot,
                 equip_skill_id=self._skillbook_equip_skill_id,
                 equip_cursor=self._skillbook_equip_cursor,
+                skill_enchants=self._skill_enchants,
+                arcane_window=self._arcane_window_ms > 0,
             )
         if self._enhance_open and self.state == 'playing':
             self.hud.render_enhance(self.screen, self.player, self._enhance_cursor, self._enhance_result)

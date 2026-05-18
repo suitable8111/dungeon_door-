@@ -24,6 +24,10 @@ class Player(Entity):
         self.slowed_ms  = 0   # 이동속도 30% 감소
         self.feared_ms  = 0   # 명중률 40%로 저하
 
+        # 오의 SP
+        self.arcane_sp:     int = 0
+        self.arcane_sp_max: int = 100
+
         # 버프
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가
@@ -186,6 +190,7 @@ class Player(Entity):
         p.attack_speed  = data.get('attack_speed', 1.0)
         p.evasion       = data.get('evasion', 0)
         p.move_speed    = data.get('move_speed', 1.0)
+        p.arcane_sp     = data.get('arcane_sp', 0)
 
         def _make_item(entry, idd):
             # entry: 구 포맷 str or 신 포맷 {'key':..,'enhance_level':..}

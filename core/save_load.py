@@ -15,7 +15,8 @@ _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_ru
 
 # ── 세이브 ──────────────────────────────────────────────────────────
 def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
-              skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None):
+              skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None,
+              skill_enchants=None):
     data = {
         'floor': floor,
         'player': {
@@ -27,6 +28,7 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
+            'arcane_sp':    getattr(player, 'arcane_sp', 0),
             'inventory': [
                 {'key': item.key, 'enhance_level': item.enhance_level}
                 for item in player.inventory
@@ -43,6 +45,7 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'skill_xp':      skill_xp      or {},
         'skill_points':  skill_points,
         'equipped_skills': equipped_skills or {},
+        'skill_enchants':  skill_enchants  or {},
     }
     try:
         with open(SAVE_PATH, 'w', encoding='utf-8') as f:

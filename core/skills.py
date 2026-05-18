@@ -295,6 +295,37 @@ ULTIMATE_SKILL_DEFS = {
 }
 
 
+ENCHANT_TYPES = ('power', 'haste', 'efficiency', 'arcane')
+ENCHANT_MAX_LEVEL = 3
+
+ENCHANT_DEFS = {
+    'power': {
+        'name_ko': '위력',
+        'color': (255, 140, 60),
+        'sp_cost': [3, 5, 8],
+        'desc': '스킬 피해 +15%/레벨',
+    },
+    'haste': {
+        'name_ko': '신속',
+        'color': (100, 200, 255),
+        'sp_cost': [3, 5, 8],
+        'desc': '쿨타임 -10%/레벨',
+    },
+    'efficiency': {
+        'name_ko': '절약',
+        'color': (80, 220, 130),
+        'sp_cost': [3, 5, 8],
+        'desc': '오의 SP 임계값 -15/레벨',
+    },
+    'arcane': {
+        'name_ko': '오의',
+        'color': (200, 100, 255),
+        'sp_cost': [5, 10, 20],
+        'desc': '오의 연계 개방 (R키)',
+    },
+}
+
+
 class SkillManager:
     def __init__(self):
         self._cd: dict[str, int] = {sid: 0 for sid in ALL_SKILL_DEFS}

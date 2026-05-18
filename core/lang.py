@@ -35,6 +35,7 @@ _T: dict[str, dict[str, str]] = {
     'slot_feet':       {'ko': '신  발',              'en': 'Boots'},
     'sec_skills':    {'ko': '스킬  [W/A/S/D]',  'en': 'Skills [W/A/S/D]'},
     'sec_combo':     {'ko': '강화 스킬',          'en': 'Enhanced Skills'},
+    'sec_arcane_sp': {'ko': '오의 SP',            'en': 'Arcane SP'},
     'sec_ultimate':  {'ko': '궁극기  [R]',        'en': 'Ultimate [R]'},
     'sec_controls':  {'ko': '조작법',            'en': 'Controls'},
     'sec_minimap':   {'ko': '미니맵',            'en': 'Minimap'},
@@ -213,8 +214,8 @@ _T: dict[str, dict[str, str]] = {
     # ── 스킬 도감 (K키) ──────────────────────────────────────────────────
     'sb_title':          {'ko': '스킬 도감',                        'en': 'Skill Book'},
     'sb_sp':             {'ko': 'SP: {}포인트',                     'en': 'SP: {}'},
-    'sb_hint':           {'ko': '↑↓ 선택   슬롯: Enter 스킬변경   스킬: Enter 슬롯선택   U 업그레이드   K/ESC 닫기',
-                          'en': '↑↓ Select   Slot: Enter Change   Skill: Enter Equip   U Upgrade   K/ESC Close'},
+    'sb_hint':           {'ko': '↑↓ 선택   Enter 장착변경   U 스킬업   1위력 2신속 3절약 4오의 인챈트   K/ESC 닫기',
+                          'en': '↑↓ Select   Enter Equip   U SkillUp   1-4 Enchant   K/ESC Close'},
     'sb_equip_hint':     {'ko': '↑↓ 선택   Enter 장착 확정   ESC 취소',
                           'en': '↑↓ Select   Enter Equip   ESC Cancel'},
     'sb_basic':          {'ko': '[ 기본 스킬 ]',                    'en': '[ Basic Skills ]'},
