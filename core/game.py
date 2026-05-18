@@ -11,7 +11,8 @@ from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAni
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
-                         SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS)
+                         SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
+                         SKILL_SP_COST, ALL_SKILL_DEFS, DEFAULT_EQUIPPED)
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
@@ -232,8 +233,19 @@ class Game:
         self._respawn_timer_ms = 0      # 다음 리스폰까지 남은 시간
         self._RESPAWN_INTERVAL = 10000  # 리스폰 주기 (ms)
 
-        # 스킬 XP (hit 수 누적 → 자동 레벨업)
-        self._skill_xp: dict[str, int] = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+        # 스킬 레벨 / XP (skill_id 키)
+        self._skill_levels: dict[str, int] = {sid: 1 for sid in ALL_SKILL_DEFS}
+        self._skill_xp:     dict[str, int] = {sid: 0 for sid in ALL_SKILL_DEFS}
+        self._skill_points: int = 0
+        self._equipped_skills: dict[str, str] = DEFAULT_EQUIPPED.copy()
+
+        # 스킬 도감 (K키)
+        self._skillbook_open:           bool     = False
+        self._skillbook_cursor:         int      = 0
+        self._skillbook_equip_mode:     bool     = False
+        self._skillbook_target_slot:    str|None = None   # pick_skill 모드: 변경할 슬롯
+        self._skillbook_equip_skill_id: str|None = None   # pick_slot 모드: 장착할 스킬
+        self._skillbook_equip_cursor:   int      = 0
 
 
         # 조합 스킬 해금 상태
@@ -467,8 +479,9 @@ class Game:
         self._run_kills       = 0
         self._unlocked_combos = set()
         self._skill_books     = set()
-        self._skill_levels    = {'W': 1, 'A': 1, 'S': 1, 'D': 1}
-        self._skill_xp        = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+        self._skill_levels    = {sid: 1 for sid in ALL_SKILL_DEFS}
+        self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
+        self._equipped_skills = DEFAULT_EQUIPPED.copy()
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -484,8 +497,9 @@ class Game:
         self.skills           = SkillManager()
         self._run_kills       = 0
         # 모든 스킬 최대 레벨, 조합 스킬 전체 해금
-        self._skill_levels    = {k: SKILL_MAX_LEVEL for k in ('W', 'A', 'S', 'D')}
-        self._skill_xp        = {'W': 0, 'A': 0, 'S': 0, 'D': 0}
+        self._skill_levels    = {sid: SKILL_MAX_LEVEL for sid in ALL_SKILL_DEFS}
+        self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
+        self._equipped_skills = DEFAULT_EQUIPPED.copy()
         self._unlocked_combos = set(COMBO_SKILL_DEFS.keys())
         self._skill_books     = set(COMBO_SKILL_DEFS.keys())
         self._load_floor(is_new_game=True)
@@ -501,6 +515,7 @@ class Game:
         p.move_speed   = 5.0    # 이동 간격 60ms (최소)
         p.evasion      = 40     # 회피율 최대
         p.gold         = 99999
+        self._skill_points = 99
         # 강화 시스템 테스트용 아이템
         from entities.item import Item as _Item
         p.enhance_stones = 100
@@ -531,8 +546,22 @@ class Game:
         self.skills.from_dict(data.get('skills', {}))
         self._unlocked_combos = set(data.get('unlocked_combos', []))
         self._skill_books     = set(data.get('skill_books', []))
-        self._skill_levels    = data.get('skill_levels', {'W': 1, 'A': 1, 'S': 1, 'D': 1})
-        self._skill_xp        = data.get('skill_xp', {'W': 0, 'A': 0, 'S': 0, 'D': 0})
+        # migrate old slot-keyed saves to skill_id-keyed
+        _raw_levels = data.get('skill_levels', {})
+        _OLD_MAP = {'W': 'flash_dash', 'A': 'steel_whirl', 'S': 'regen_breath', 'D': 'judgment'}
+        if _raw_levels and all(k in _OLD_MAP for k in _raw_levels):
+            self._skill_levels = {sid: 1 for sid in ALL_SKILL_DEFS}
+            for _slot, _lvl in _raw_levels.items():
+                self._skill_levels[_OLD_MAP[_slot]] = _lvl
+        else:
+            self._skill_levels = {sid: _raw_levels.get(sid, 1) for sid in ALL_SKILL_DEFS}
+        _raw_xp = data.get('skill_xp', {})
+        if _raw_xp and all(k in _OLD_MAP for k in _raw_xp):
+            self._skill_xp = {sid: 0 for sid in ALL_SKILL_DEFS}
+        else:
+            self._skill_xp = {sid: _raw_xp.get(sid, 0) for sid in ALL_SKILL_DEFS}
+        self._skill_points    = data.get('skill_points', 0)
+        self._equipped_skills = data.get('equipped_skills', DEFAULT_EQUIPPED.copy())
         self._apply_skill_level_cds()
         self._run_kills       = 0
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
@@ -569,7 +598,8 @@ class Game:
                 self.messages.append((t('shop_floor'), 'info'))
             if not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                              self._skill_levels, self._skill_xp)
+                              self._skill_levels, self._skill_xp, self._skill_points,
+                              self._equipped_skills)
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -631,7 +661,9 @@ class Game:
                     self._inv_drag_pos = event.pos
 
             elif event.type == pygame.KEYDOWN:
-                if self._enhance_open:
+                if self._skillbook_open:
+                    self._handle_skillbook_key(event.key)
+                elif self._enhance_open:
                     self._handle_enhance_key(event.key)
                 elif self._inv_confirm_idx is not None:
                     if event.key in (pygame.K_y, pygame.K_RETURN):
@@ -646,6 +678,13 @@ class Game:
             t = action['type']
 
             if t == 'escape':
+                if self._skillbook_open:
+                    if self._skillbook_equip_mode:
+                        self._skillbook_equip_mode = False
+                        self._skillbook_target_slot = None
+                    else:
+                        self._skillbook_open = False
+                    continue
                 if self._enhance_open:
                     self._enhance_open = False
                     continue
@@ -690,8 +729,12 @@ class Game:
                 elif t == 'enhance':
                     self._enhance_open = True
                     self._enhance_cursor = 0
+                elif t == 'skillbook':
+                    self._skillbook_open   = not self._skillbook_open
+                    self._skillbook_cursor = 0
                 elif t in ('move', 'wait', 'attack', 'use_item', 'skill', 'combo_skill', 'ultimate'):
-                    self._process(action)
+                    if not self._skillbook_open:
+                        self._process(action)
             elif self.state == 'dead':
                 if t == 'ultimate' and action.get('key') == 'R':
                     self._new_game()
@@ -925,7 +968,8 @@ class Game:
         elif self._pause_sel == 1:   # 저장하기
             if self.player and not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                          self._skill_levels, self._skill_xp)
+                          self._skill_levels, self._skill_xp, self._skill_points,
+                          self._equipped_skills)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -1170,14 +1214,16 @@ class Game:
         else:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
         if self.player.gain_xp(enemy.xp_value):
+            self._skill_points += 3
             self.messages.append((t('levelup', self.player.level), 'good'))
+            self.messages.append((f'스킬 포인트 +3 (보유: {self._skill_points})', 'info'))
             self.audio.play('levelup')
             for cid, cdef in COMBO_SKILL_DEFS.items():
                 slv_req = cdef.get('skill_level_req', 1)
                 if (cid in self._skill_books and
                         cid not in self._unlocked_combos and
                         self.player.level >= cdef['level_req'] and
-                        all(self._skill_levels.get(k, 1) >= slv_req for k in cid)):
+                        all(self._skill_levels.get(self._equipped_skills.get(k, ''), 1) >= slv_req for k in cid)):
                     self._unlocked_combos.add(cid)
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
         self.dungeon.enemies.remove(enemy)
@@ -1201,7 +1247,7 @@ class Game:
                 self._skill_books.add(combo_id)
                 slv_req = cdef.get('skill_level_req', 1)
                 level_ok = self.player.level >= cdef['level_req']
-                skill_ok = all(self._skill_levels.get(k, 1) >= slv_req for k in combo_id)
+                skill_ok = all(self._skill_levels.get(self._equipped_skills.get(k, ''), 1) >= slv_req for k in combo_id)
                 if level_ok and skill_ok:
                     self._unlocked_combos.add(combo_id)
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
@@ -1273,26 +1319,43 @@ class Game:
         """스킬 데미지 기준 공격력 (장신구 강화 보너스 포함)."""
         return int(self.player.total_attack * self.player.skill_damage_mul)
 
-    def _use_skill(self, key):
-        sdef = next((s for s in SKILL_DEFS if s['key'] == key), None)
-        if sdef and self.player.level < sdef['level_req']:
+    def _use_skill(self, slot):
+        skill_id = self._equipped_skills.get(slot)
+        if not skill_id:
+            return False
+        sdef = ALL_SKILL_DEFS.get(skill_id)
+        if not sdef:
+            return False
+        if self.player.level < sdef['level_req']:
             self.messages.append((t('skill_need_level', sdef['name'], sdef['level_req']), 'warn'))
             return False
-        if not self.skills.ready(key):
-            self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
+        if not self.skills.ready(slot):
+            self.messages.append((t('skill_cd', self.skills.remaining_sec(slot)), 'info'))
             return False
-        if key == 'W': return self._skill_dash()
-        if key == 'A': return self._skill_whirl()
-        if key == 'S': return self._skill_heal()
-        if key == 'D': return self._skill_power_attack()
-        return False
+        _exec_map = {
+            'flash_dash':  self._exec_flash_dash,
+            'steel_whirl': self._exec_steel_whirl,
+            'regen_breath': self._exec_regen_breath,
+            'judgment':    self._exec_judgment,
+            'shadow_step': self._exec_shadow_step,
+            'iron_shell':  self._exec_iron_shell,
+            'flame_strike': self._exec_flame_strike,
+            'life_steal':  self._exec_life_steal,
+            'war_cry':     self._exec_war_cry,
+            'dark_pulse':  self._exec_dark_pulse,
+        }
+        fn = _exec_map.get(skill_id)
+        return fn(slot) if fn else False
 
-    def _skill_dash(self):
-        lvl   = self._skill_levels['W']
-        tiles = SKILL_UPGRADES['W'][lvl - 1]['tiles']
+    # ── 기본 장착 스킬 실행 ──────────────────────────────────────────────
+
+    def _exec_flash_dash(self, slot):
+        lvl   = self._skill_levels.get('flash_dash', 1)
+        stats = ALL_SKILL_DEFS['flash_dash']['upgrades'][lvl - 1]
+        tiles = stats['tiles']
+        stagger_ms = stats['stagger_ms']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
         dx, dy = dirs.get(self._facing, (0, 1))
-        stagger_ms = SKILL_UPGRADES['W'][lvl - 1]['stagger_ms']
         sx, sy = self.player.x, self.player.y
         moved = 0
         hit_enemy = False
@@ -1309,20 +1372,18 @@ class Game:
             self.player.x, self.player.y = nx, ny; moved += 1
         self.animator.particles.emit_dash_trail((sx, sy), (self.player.x, self.player.y))
         self._trigger_atk_anim()
-        self._gain_skill_xp('W')
-
+        self._gain_skill_xp('flash_dash')
         if lvl >= SKILL_MAX_LEVEL and hit_enemy:
-            self.skills.reset('W')
+            self.skills.reset(slot)
         else:
-            self.skills.trigger('W')
-
+            self.skills.trigger(slot)
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
         return True
 
-    def _skill_whirl(self, no_cooldown=False):
-        lvl    = self._skill_levels['A']
-        stats  = SKILL_UPGRADES['A'][lvl - 1]
+    def _exec_steel_whirl(self, slot, no_cooldown=False):
+        lvl    = self._skill_levels.get('steel_whirl', 1)
+        stats  = ALL_SKILL_DEFS['steel_whirl']['upgrades'][lvl - 1]
         radius = stats['radius']
         mul    = stats['mul']
         dirs = [(ddx, ddy) for ddx in range(-radius, radius+1)
@@ -1346,32 +1407,36 @@ class Game:
         self.animator.add(WhirlAnim(self.player.x, self.player.y))
         self.animator.particles.emit_whirl(self.player.x, self.player.y)
         if not no_cooldown:
-            self._gain_skill_xp('A', hits)
-            self.skills.trigger('A')
+            self._gain_skill_xp('steel_whirl', hits)
+            self.skills.trigger(slot)
         self.audio.play('skill_whirl')
         self.messages.append((t('skill_whirl_h', hits) if hits else t('skill_whirl_m'),
                                'warn' if hits else 'info'))
         return True
 
-    def _skill_heal(self):
-        lvl   = self._skill_levels['S']
-        stats = SKILL_UPGRADES['S'][lvl - 1]
+    def _skill_whirl(self, no_cooldown=False):
+        """whirlwind 아이템 사용 시 호환용 — steel_whirl을 A 슬롯으로 직접 발동."""
+        return self._exec_steel_whirl('A', no_cooldown=no_cooldown)
+
+    def _exec_regen_breath(self, slot):
+        lvl   = self._skill_levels.get('regen_breath', 1)
+        stats = ALL_SKILL_DEFS['regen_breath']['upgrades'][lvl - 1]
         amt   = max(1, int(self.player.max_hp * stats['heal_pct']))
         self.player.heal(amt)
         self.player.heal_def_bonus = stats['def_bonus']
         self.player.heal_def_ms   = stats['def_ms']
         self.animator.add(HealAnim(self.player.x, self.player.y))
         self.animator.particles.emit_heal(self.player.x, self.player.y)
-        self._gain_skill_xp('S')
-        self.skills.trigger('S')
+        self._gain_skill_xp('regen_breath')
+        self.skills.trigger(slot)
         self.audio.play('skill_heal')
         self.messages.append((t('skill_heal', amt), 'good'))
         self.messages.append((f"방어력 +{stats['def_bonus']} ({stats['def_ms']//1000}초)", 'good'))
         return True
 
-    def _skill_power_attack(self):
-        lvl   = self._skill_levels['D']
-        stats = SKILL_UPGRADES['D'][lvl - 1]
+    def _exec_judgment(self, slot):
+        lvl   = self._skill_levels.get('judgment', 1)
+        stats = ALL_SKILL_DEFS['judgment']['upgrades'][lvl - 1]
         mul   = stats['mul']
         crit_chance = stats['crit']
         dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
@@ -1382,7 +1447,7 @@ class Game:
         self.animator.add(AttackSwingAnim(self.player.x, self.player.y, self._facing, hit=bool(enemy)))
         if not enemy:
             self.audio.play('swing')
-            self.skills.trigger('D')
+            self.skills.trigger(slot)
             self.messages.append((t('skill_power_miss'), 'info'))
             return True
         crit = random.random() < crit_chance
@@ -1399,30 +1464,208 @@ class Game:
             self.messages.append((t('skill_power', enemy.name, dmg), 'warn'))
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
-        self._gain_skill_xp('D')
-        self.skills.trigger('D')
+        self._gain_skill_xp('judgment')
+        self.skills.trigger(slot)
+        return True
+
+    # ── 추가 스킬 실행 ────────────────────────────────────────────────────
+
+    def _exec_shadow_step(self, slot):
+        lvl = self._skill_levels.get('shadow_step', 1)
+        stats = ALL_SKILL_DEFS['shadow_step']['upgrades'][lvl - 1]
+        tiles = stats['tiles']
+        stagger_ms = [500, 800, 1000][lvl - 1]
+        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
+        dx, dy = dirs.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        dest_x, dest_y = sx, sy
+        for _ in range(tiles):
+            nx, ny = dest_x + dx, dest_y + dy
+            if not self.dungeon.is_walkable(nx, ny):
+                break
+            if self.dungeon.get_enemy_at(nx, ny):
+                dest_x, dest_y = nx, ny
+                break
+            dest_x, dest_y = nx, ny
+        enemy = self.dungeon.get_enemy_at(dest_x, dest_y)
+        if enemy:
+            enemy.staggered_ms = stagger_ms
+            self.animator.add(HitFlashAnim(dest_x, dest_y, 0, (180, 100, 255)))
+        else:
+            self.player.x, self.player.y = dest_x, dest_y
+        self.animator.particles.emit_dash_trail((sx, sy), (dest_x, dest_y))
+        self._gain_skill_xp('shadow_step')
+        self.skills.trigger(slot)
+        self.audio.play('skill_dash')
+        self.messages.append(('그림자 속으로 사라졌다!', 'warn'))
+        return True
+
+    def _exec_iron_shell(self, slot):
+        lvl = self._skill_levels.get('iron_shell', 1)
+        stats = ALL_SKILL_DEFS['iron_shell']['upgrades'][lvl - 1]
+        self.player.damage_reduce_pct = stats['reduce']
+        self.player.damage_reduce_ms  = stats['duration_ms']
+        self.animator.add(HealAnim(self.player.x, self.player.y))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self._gain_skill_xp('iron_shell')
+        self.skills.trigger(slot)
+        self.audio.play('skill_heal')
+        self.messages.append((f'철갑 방벽! 피해 {int(stats["reduce"]*100)}% 감소 ({stats["duration_ms"]//1000}초)', 'good'))
+        return True
+
+    def _exec_flame_strike(self, slot):
+        lvl = self._skill_levels.get('flame_strike', 1)
+        stats = ALL_SKILL_DEFS['flame_strike']['upgrades'][lvl - 1]
+        range_ = stats['range']
+        mul = stats['mul']
+        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
+        dx, dy = dirs.get(self._facing, (0, 1))
+        hits = 0
+        for i in range(1, range_ + 1):
+            nx, ny = self.player.x + dx*i, self.player.y + dy*i
+            if not self.dungeon.in_bounds(nx, ny):
+                break
+            self.animator.add(BoltAnim(self.player.x, self.player.y, nx, ny, (255, 140, 40)))
+            if not self.dungeon.is_walkable(nx, ny) and not self.dungeon.get_enemy_at(nx, ny):
+                break
+            enemy = self.dungeon.get_enemy_at(nx, ny)
+            if enemy:
+                dmg = max(1, int(self._skill_atk * mul) - enemy.defense)
+                enemy.take_damage(dmg)
+                self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 140, 40)))
+                self.animator.particles.emit_power_hit(nx, ny)
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        self._gain_skill_xp('flame_strike', max(1, hits))
+        self.skills.trigger(slot)
+        self.audio.play('skill_dash')
+        self.messages.append((f'화염 강타! {hits}명 적중' if hits else '화염이 허공을 갈랐다!',
+                               'warn' if hits else 'info'))
+        return True
+
+    def _exec_life_steal(self, slot):
+        lvl = self._skill_levels.get('life_steal', 1)
+        stats = ALL_SKILL_DEFS['life_steal']['upgrades'][lvl - 1]
+        radius = stats['radius']
+        steal_pct = stats['steal_pct']
+        dirs = [(ddx, ddy) for ddx in range(-radius, radius+1)
+                for ddy in range(-radius, radius+1)
+                if not (ddx == 0 and ddy == 0)]
+        total_dmg = 0
+        for ddx, ddy in dirs:
+            nx, ny = self.player.x+ddx, self.player.y+ddy
+            enemy = self.dungeon.get_enemy_at(nx, ny)
+            if not enemy: continue
+            dmg = max(1, self._skill_atk - enemy.defense)
+            enemy.take_damage(dmg)
+            total_dmg += dmg
+            self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (220, 80, 180)))
+            self.animator.add(HitFlashAnim(nx, ny, dmg, (220, 80, 180)))
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        heal = max(1, int(total_dmg * steal_pct)) if total_dmg else 0
+        if heal:
+            self.player.heal(heal)
+            self.animator.add(HealAnim(self.player.x, self.player.y))
+        self._gain_skill_xp('life_steal', max(1, total_dmg // 5 + 1))
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((f'생명 흡수! {heal} HP 회복' if heal else '생명 흡수 (미적중)',
+                               'good' if heal else 'info'))
+        return True
+
+    def _exec_war_cry(self, slot):
+        lvl = self._skill_levels.get('war_cry', 1)
+        stats = ALL_SKILL_DEFS['war_cry']['upgrades'][lvl - 1]
+        self.player.atk_bonus_pct = stats['atk_mul']
+        self.player.atk_bonus_ms  = stats['duration_ms']
+        self.animator.add(HealAnim(self.player.x, self.player.y))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self._gain_skill_xp('war_cry')
+        self.skills.trigger(slot)
+        self.audio.play('skill_heal')
+        self.messages.append((f'전투 함성! 공격력 +{int(stats["atk_mul"]*100)}% ({stats["duration_ms"]//1000}초)', 'good'))
+        return True
+
+    def _exec_dark_pulse(self, slot):
+        lvl = self._skill_levels.get('dark_pulse', 1)
+        stats = ALL_SKILL_DEFS['dark_pulse']['upgrades'][lvl - 1]
+        radius = stats['radius']
+        mul = stats['mul']
+        push = stats['push']
+        stagger_ms = stats.get('stagger_ms', 0)
+        dirs = [(ddx, ddy) for ddx in range(-radius, radius+1)
+                for ddy in range(-radius, radius+1)
+                if not (ddx == 0 and ddy == 0)]
+        hits = 0
+        for ddx, ddy in dirs:
+            nx, ny = self.player.x+ddx, self.player.y+ddy
+            enemy = self.dungeon.get_enemy_at(nx, ny)
+            if not enemy: continue
+            dmg = max(1, int(self._skill_atk * mul) - enemy.defense)
+            enemy.take_damage(dmg)
+            hits += 1
+            if stagger_ms:
+                enemy.staggered_ms = stagger_ms
+            push_dx = (1 if ddx > 0 else -1) if ddx != 0 else 0
+            push_dy = (1 if ddy > 0 else -1) if ddy != 0 else 0
+            for _ in range(push):
+                px, py = enemy.x + push_dx, enemy.y + push_dy
+                if self.dungeon.is_walkable(px, py) and not self.dungeon.get_enemy_at(px, py):
+                    enemy.x, enemy.y = px, py
+                else:
+                    break
+            self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (140, 80, 220)))
+            self.animator.add(HitFlashAnim(nx, ny, dmg, (140, 80, 220)))
+            self.animator.particles.emit_whirl(nx, ny)
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        self.animator.add(WhirlAnim(self.player.x, self.player.y))
+        self._gain_skill_xp('dark_pulse', max(1, hits))
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((f'암흑 파동! {hits}명 적중' if hits else '파동이 허공에 사라졌다!',
+                               'warn' if hits else 'info'))
         return True
 
     # ─────────────── 스킬 강화 ───────────────────────────────────────
     def _apply_skill_level_cds(self):
-        for key, lvl in self._skill_levels.items():
-            cd_ms = SKILL_UPGRADES[key][lvl - 1]['cd_ms']
-            self.skills.set_cd_override(key, cd_ms)
+        for slot in ('W', 'A', 'S', 'D'):
+            skill_id = self._equipped_skills.get(slot)
+            if not skill_id:
+                continue
+            lvl = self._skill_levels.get(skill_id, 1)
+            sdef = ALL_SKILL_DEFS.get(skill_id)
+            if not sdef:
+                continue
+            cd_ms = sdef['upgrades'][min(lvl - 1, len(sdef['upgrades']) - 1)]['cd_ms']
+            self.skills.set_cd_override(slot, cd_ms)
 
-    def _gain_skill_xp(self, key: str, amount: int = 1):
-        lvl = self._skill_levels.get(key, 1)
+    def _gain_skill_xp(self, skill_id: str, amount: int = 1):
+        """스킬 적중 → 5회 누적마다 SP +1."""
+        self._skill_xp[skill_id] = self._skill_xp.get(skill_id, 0) + amount
+        gained = self._skill_xp[skill_id] // 5
+        if gained > 0:
+            self._skill_xp[skill_id] %= 5
+            self._skill_points += gained
+
+    def _do_skill_upgrade(self, skill_id: str):
+        """스킬 도감에서 Enter 시 호출 — SP를 소모해 스킬 레벨업."""
+        lvl = self._skill_levels.get(skill_id, 1)
+        sname = ALL_SKILL_DEFS.get(skill_id, {}).get('name', skill_id)
         if lvl >= SKILL_MAX_LEVEL:
+            self.messages.append((f'{sname} 스킬이 이미 최대 레벨입니다.', 'warn'))
             return
-        self._skill_xp[key] = self._skill_xp.get(key, 0) + amount
-        req = SKILL_XP_REQ[key][lvl - 1]
-        if self._skill_xp[key] >= req:
-            self._skill_xp[key] -= req
-            self._skill_levels[key] = lvl + 1
-            self._apply_skill_level_cds()
-            name_key = {'W': 'skill_w_name', 'A': 'skill_a_name',
-                        'S': 'skill_s_name', 'D': 'skill_d_name'}.get(key, key)
-            self.messages.append((t('upg_done', t(name_key), self._skill_levels[key]), 'good'))
-            self.audio.play('levelup')
+        cost = SKILL_SP_COST.get(skill_id, [5, 10])[lvl - 1]
+        if self._skill_points < cost:
+            self.messages.append((f'SP가 부족합니다. (필요: {cost}, 보유: {self._skill_points})', 'warn'))
+            return
+        self._skill_points -= cost
+        self._skill_levels[skill_id] = lvl + 1
+        self._apply_skill_level_cds()
+        self.messages.append((t('upg_done', sname, self._skill_levels[skill_id]), 'good'))
+        self.audio.play('levelup')
 
 
     # ─────────────── 조합 스킬 ───────────────────────────────────────
@@ -1615,6 +1858,87 @@ class Game:
         'feet':      '이동속도 +0.05',
         'accessory': '스킬 데미지 +5%',
     }
+
+    def _skillbook_avail_skills(self):
+        """현재 플레이어 레벨에서 사용 가능한 스킬 id 목록."""
+        return [sid for sid, sdef in ALL_SKILL_DEFS.items()
+                if self.player.level >= sdef.get('level_req', 1)]
+
+    def _handle_skillbook_key(self, key):
+        import pygame
+        avail = self._skillbook_avail_skills()
+        total = 4 + len(avail)
+        SLOTS = ('W', 'A', 'S', 'D')
+
+        def _exit_equip():
+            self._skillbook_equip_mode = False
+            self._skillbook_target_slot = None
+            self._skillbook_equip_skill_id = None
+
+        if self._skillbook_equip_mode:
+            if self._skillbook_equip_skill_id is not None:
+                # ── pick_slot 모드: 스킬 → 슬롯 선택 ──────────────────
+                if key in (pygame.K_UP, pygame.K_w):
+                    self._skillbook_equip_cursor = (self._skillbook_equip_cursor - 1) % 4
+                elif key in (pygame.K_DOWN, pygame.K_s):
+                    self._skillbook_equip_cursor = (self._skillbook_equip_cursor + 1) % 4
+                elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                    slot = SLOTS[self._skillbook_equip_cursor]
+                    sid  = self._skillbook_equip_skill_id
+                    self._equipped_skills[slot] = sid
+                    sname = ALL_SKILL_DEFS[sid]['name']
+                    self.messages.append((f'[{slot}] 슬롯에 [{sname}] 장착!', 'good'))
+                    self._apply_skill_level_cds()
+                    _exit_equip()
+                elif key == pygame.K_ESCAPE:
+                    _exit_equip()
+            else:
+                # ── pick_skill 모드: 슬롯 → 스킬 선택 ─────────────────
+                if key in (pygame.K_UP, pygame.K_w):
+                    self._skillbook_equip_cursor = (self._skillbook_equip_cursor - 1) % max(1, len(avail))
+                elif key in (pygame.K_DOWN, pygame.K_s):
+                    self._skillbook_equip_cursor = (self._skillbook_equip_cursor + 1) % max(1, len(avail))
+                elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                    if avail and self._skillbook_equip_cursor < len(avail):
+                        chosen = avail[self._skillbook_equip_cursor]
+                        target = self._skillbook_target_slot
+                        if target:
+                            self._equipped_skills[target] = chosen
+                            sname = ALL_SKILL_DEFS[chosen]['name']
+                            self.messages.append((f'[{target}] 슬롯에 [{sname}] 장착!', 'good'))
+                            self._apply_skill_level_cds()
+                    _exit_equip()
+                elif key == pygame.K_ESCAPE:
+                    _exit_equip()
+        else:
+            # ── 일반 탐색 ───────────────────────────────────────────────
+            if key in (pygame.K_UP, pygame.K_w):
+                self._skillbook_cursor = (self._skillbook_cursor - 1) % max(1, total)
+            elif key in (pygame.K_DOWN, pygame.K_s):
+                self._skillbook_cursor = (self._skillbook_cursor + 1) % max(1, total)
+            elif key in (pygame.K_RETURN, pygame.K_SPACE):
+                if self._skillbook_cursor < 4:
+                    # 슬롯 행 → pick_skill 모드 진입
+                    self._skillbook_equip_mode = True
+                    self._skillbook_target_slot = SLOTS[self._skillbook_cursor]
+                    self._skillbook_equip_skill_id = None
+                    self._skillbook_equip_cursor = 0
+                else:
+                    avail_idx = self._skillbook_cursor - 4
+                    if avail_idx < len(avail):
+                        # 스킬 행 → pick_slot 모드 진입
+                        self._skillbook_equip_mode = True
+                        self._skillbook_equip_skill_id = avail[avail_idx]
+                        self._skillbook_target_slot = None
+                        self._skillbook_equip_cursor = 0
+            elif key == pygame.K_u:
+                # U 키: SP 소모 업그레이드
+                if self._skillbook_cursor >= 4:
+                    avail_idx = self._skillbook_cursor - 4
+                    if avail_idx < len(avail):
+                        self._do_skill_upgrade(avail[avail_idx])
+            elif key in (pygame.K_ESCAPE, pygame.K_k):
+                self._skillbook_open = False
 
     def _handle_enhance_key(self, key):
         import pygame
@@ -1980,7 +2304,8 @@ class Game:
                         skill_books=self._skill_books,
                         skill_levels=self._skill_levels,
                         skill_xp=self._skill_xp,
-                        is_test_mode=self._is_test_mode)
+                        is_test_mode=self._is_test_mode,
+                        equipped_skills=self._equipped_skills)
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -2016,6 +2341,21 @@ class Game:
                                       self._sprites.get('hero_down'),
                                       mouse_pos=pygame.mouse.get_pos())
 
+        if self._skillbook_open and self.state == 'playing':
+            self.hud.render_skillbook(
+                self.screen,
+                skill_levels=self._skill_levels,
+                unlocked_combos=self._unlocked_combos,
+                skill_books=self._skill_books,
+                skill_points=self._skill_points,
+                cursor=self._skillbook_cursor,
+                player_level=self.player.level,
+                equipped_skills=self._equipped_skills,
+                equip_mode=self._skillbook_equip_mode,
+                equip_target_slot=self._skillbook_target_slot,
+                equip_skill_id=self._skillbook_equip_skill_id,
+                equip_cursor=self._skillbook_equip_cursor,
+            )
         if self._enhance_open and self.state == 'playing':
             self.hud.render_enhance(self.screen, self.player, self._enhance_cursor, self._enhance_result)
 

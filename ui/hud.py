@@ -2,7 +2,13 @@ import os
 import math
 import pygame
 from core.constants import *
-from core.skills import SKILL_DEFS, SKILL_XP_REQ, SKILL_MAX_LEVEL
+from core.skills import (SKILL_DEFS, SKILL_XP_REQ, SKILL_MAX_LEVEL,
+                         COMBO_SKILL_DEFS, ULTIMATE_SKILL_DEFS, SKILL_UPGRADES)
+try:
+    from core.skills import ALL_SKILL_DEFS, DEFAULT_EQUIPPED
+except ImportError:
+    ALL_SKILL_DEFS = {}
+    DEFAULT_EQUIPPED = {'W': 'flash_dash', 'A': 'steel_whirl', 'S': 'regen_breath', 'D': 'judgment'}
 from core.lang import t
 from map.tile import TileType
 
@@ -105,11 +111,13 @@ class HUD:
                dungeon=None, skill_mgr=None,
                unlocked_combos=None, skill_books=None,
                skill_levels=None, skill_xp=None,
-               is_test_mode=False):
+               is_test_mode=False,
+               equipped_skills=None):
         self._top_bar(screen, player, floor_num, is_test_mode=is_test_mode)
         self._right_panel(screen, player, dungeon, skill_mgr,
                           unlocked_combos or set(), skill_books or set(),
-                          skill_levels or {}, skill_xp or {})
+                          skill_levels or {}, skill_xp or {},
+                          equipped_skills=equipped_skills)
         self._bottom_bar(screen, messages)
 
     # ------------------------------------------------------------------ #
@@ -605,7 +613,8 @@ class HUD:
 
     def _right_panel(self, screen, player, dungeon, skill_mgr,
                      unlocked_combos=None, skill_books=None,
-                     skill_levels=None, skill_xp=None):
+                     skill_levels=None, skill_xp=None,
+                     equipped_skills=None):
         rx = GAME_W
         pw = RIGHT_PANEL_W
         bw = pw - 16
@@ -677,25 +686,27 @@ class HUD:
 
         # ── 단일 스킬 (W/A/S/D) ─────────────────────────────────────
         sec_header('sec_skills', LIGHT_GRAY)
-        _SKILL_TRANS = {
-            'W': ('skill_w_name', 'skill_w_desc'),
-            'A': ('skill_a_name', 'skill_a_desc'),
-            'S': ('skill_s_name', 'skill_s_desc'),
-            'D': ('skill_d_name', 'skill_d_desc'),
-        }
         sl = skill_levels or {}
-        sx = skill_xp or {}
-        for sdef in SKILL_DEFS:
-            sk    = sdef['key']
-            ready = skill_mgr.ready(sk) if skill_mgr else True
-            frac  = skill_mgr.cooldown_frac(sk) if skill_mgr else 0.0
-            rem   = skill_mgr.remaining_sec(sk) if skill_mgr else 0.0
+        _eq = equipped_skills or DEFAULT_EQUIPPED
+        for slot in ('W', 'A', 'S', 'D'):
+            skill_id = _eq.get(slot)
+            if not skill_id:
+                continue
+            # try ALL_SKILL_DEFS first, fall back to legacy SKILL_DEFS
+            sdef = ALL_SKILL_DEFS.get(skill_id)
+            if sdef is None:
+                # legacy fallback: find by key
+                sdef = next((s for s in SKILL_DEFS if s['key'] == slot), None)
+            if sdef is None:
+                continue
+            ready = skill_mgr.ready(slot) if skill_mgr else True
+            frac  = skill_mgr.cooldown_frac(slot) if skill_mgr else 0.0
+            rem   = skill_mgr.remaining_sec(slot) if skill_mgr else 0.0
             nc    = sdef['color'] if ready else (60, 60, 80)
-            nk, dk = _SKILL_TRANS.get(sk, ('', ''))
-            lvl    = sl.get(sk, 1)
+            lvl    = sl.get(skill_id, 1)
             is_max = lvl >= SKILL_MAX_LEVEL
             lv_str = " MAX" if is_max else (f" Lv.{lvl}" if lvl > 1 else "")
-            label  = f"[{sk}] {t(nk)}{lv_str}" if nk else f"[{sk}] {sdef['name']}{lv_str}"
+            label  = f"[{slot}] {sdef['name']}{lv_str}"
 
             if ready:
                 pygame.draw.rect(screen, (20, 28, 50), (rx+6, y-1, pw-12, 24))
@@ -708,11 +719,6 @@ class HUD:
             _bar(screen, rx+8, y, bw, 5, int(bw*(1-frac)), bw,
                  sdef['color'] if ready else (40, 40, 65), (18, 18, 35))
             y += 6
-            if not is_max:
-                xp_cur = sx.get(sk, 0)
-                xp_req = SKILL_XP_REQ[sk][lvl - 1]
-                _bar(screen, rx+8, y, bw, 3, xp_cur, xp_req, (80, 160, 80), (12, 20, 12))
-                y += 4
             y += 2
         y += 3
 
@@ -1158,6 +1164,429 @@ class HUD:
         guide_s = self.font_sm.render('↑↓ 선택   Enter 강화   P/ESC 닫기', True, (70, 90, 130))
         screen.blit(guide_s, (bx + (pw - guide_s.get_width()) // 2, by + ph - 24))
 
+    # ------------------------------------------------------------------ #
+    def render_skillbook(self, screen, skill_levels: dict, unlocked_combos: set,
+                         skill_books: set, skill_points: int, cursor: int,
+                         player_level: int,
+                         equipped_skills=None,
+                         equip_mode=False, equip_target_slot=None,
+                         equip_skill_id=None, equip_cursor=0):
+        """스킬 도감 오버레이 (K키)."""
+        # lazy import to avoid circular imports
+        try:
+            from core.skills import ALL_SKILL_DEFS as _ALL_SKILL_DEFS, DEFAULT_EQUIPPED as _DEFAULT_EQUIPPED
+        except ImportError:
+            _ALL_SKILL_DEFS = ALL_SKILL_DEFS
+            _DEFAULT_EQUIPPED = DEFAULT_EQUIPPED
+
+        # Try to import SKILL_SP_COST; fall back to default if not yet defined
+        try:
+            from core.skills import SKILL_SP_COST
+        except ImportError:
+            SKILL_SP_COST = {'W': [5, 10], 'A': [5, 10], 'S': [5, 10], 'D': [5, 10]}
+
+        _eq = equipped_skills or _DEFAULT_EQUIPPED
+
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+
+        # ── 반투명 배경 오버레이 ────────────────────────────────────────
+        overlay = pygame.Surface((W, H), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        screen.blit(overlay, (0, 0))
+
+        # ── 창 레이아웃 ─────────────────────────────────────────────────
+        bw, bh = 720, 520
+        bx = W // 2 - bw // 2
+        by = H // 2 - bh // 2
+
+        WIN_BG      = (8, 12, 24)
+        WIN_BORDER  = (60, 100, 160)
+        HDR_COLOR   = (60, 80, 110)
+        SEL_BG      = (20, 35, 65)
+        SEL_BORDER  = (80, 130, 210)
+        LOCKED_COL  = (55, 60, 75)
+        DIVIDER_COL = (40, 60, 100)
+        GOLD        = (255, 215, 0)
+        SP_OK       = (160, 220, 255)
+        SP_NO       = (220, 80, 80)
+
+        LEFT_W  = 238   # left panel width
+        RIGHT_X = bx + LEFT_W + 8   # right panel start x
+        RIGHT_W = bw - LEFT_W - 8
+
+        pygame.draw.rect(screen, WIN_BG, (bx, by, bw, bh))
+        pygame.draw.rect(screen, WIN_BORDER, (bx, by, bw, bh), 2)
+
+        # ── 상단 헤더 바 ─────────────────────────────────────────────────
+        HEADER_H = 34
+        pygame.draw.rect(screen, (12, 18, 36), (bx, by, bw, HEADER_H))
+        pygame.draw.line(screen, WIN_BORDER, (bx, by + HEADER_H), (bx + bw, by + HEADER_H))
+
+        title_s = self.font_lg.render(t('sb_title'), True, (180, 220, 255))
+        screen.blit(title_s, (bx + 14, by + (HEADER_H - title_s.get_height()) // 2))
+
+        sp_col = SP_OK if skill_points > 0 else (100, 120, 150)
+        sp_s = self.font_md.render(t('sb_sp', skill_points), True, sp_col)
+        screen.blit(sp_s, (bx + bw - sp_s.get_width() - 14,
+                            by + (HEADER_H - sp_s.get_height()) // 2))
+
+        # ── 하단 힌트 바 ─────────────────────────────────────────────────
+        FOOTER_H = 26
+        footer_y = by + bh - FOOTER_H
+        pygame.draw.line(screen, DIVIDER_COL, (bx, footer_y), (bx + bw, footer_y))
+        pygame.draw.rect(screen, (10, 15, 28), (bx, footer_y, bw, FOOTER_H))
+        _hint_key = 'sb_equip_hint' if equip_mode else 'sb_hint'
+        _hint_col = (200, 140, 50) if equip_mode else (70, 90, 120)
+        hint_s = self.font_sm.render(t(_hint_key), True, _hint_col)
+        screen.blit(hint_s, (bx + (bw - hint_s.get_width()) // 2,
+                              footer_y + (FOOTER_H - hint_s.get_height()) // 2))
+
+        # ── 패널 세로 구분선 ─────────────────────────────────────────────
+        div_x = bx + LEFT_W
+        pygame.draw.line(screen, DIVIDER_COL,
+                         (div_x, by + HEADER_H), (div_x, footer_y))
+
+        # ── 커서용 아이템 목록 빌드 ──────────────────────────────────────
+        # Section 1: 4 slot rows (W/A/S/D)
+        SLOT_ROWS = ['W', 'A', 'S', 'D']
+        # Section 2: available skills from ALL_SKILL_DEFS unlocked by player_level
+        avail_skills = [
+            sid for sid, sdef in _ALL_SKILL_DEFS.items()
+            if player_level >= sdef.get('level_req', 1)
+        ] if _ALL_SKILL_DEFS else []
+        # total items = 4 slots + N avail skills
+        total_items = len(SLOT_ROWS) + len(avail_skills)
+        cursor = max(0, min(cursor, total_items - 1))
+        # pick_slot 모드: equip_cursor는 슬롯 인덱스 (0-3)
+        # pick_skill 모드: equip_cursor는 avail_skills 인덱스
+        if equip_mode and equip_skill_id is not None:
+            equip_cursor = max(0, min(equip_cursor, 3))
+        else:
+            equip_cursor = max(0, min(equip_cursor, len(avail_skills) - 1)) if avail_skills else 0
+
+        # Determine what is selected for right panel display
+        if cursor < len(SLOT_ROWS):
+            sel_mode = 'slot'
+            sel_slot = SLOT_ROWS[cursor]
+            sel_skill_id = _eq.get(sel_slot)
+        else:
+            sel_mode = 'avail'
+            avail_idx = cursor - len(SLOT_ROWS)
+            sel_skill_id = avail_skills[avail_idx] if avail_idx < len(avail_skills) else None
+            sel_slot = None
+
+        # pick_skill 모드에서만 equip_cursor로 스킬 결정 (pick_slot 모드면 파라미터 그대로 사용)
+        if equip_mode and equip_skill_id is None and avail_skills:
+            equip_skill_id = avail_skills[equip_cursor] if equip_cursor < len(avail_skills) else None
+
+        # reverse-map: skill_id -> slot it is equipped in
+        equipped_in = {v: k for k, v in _eq.items()}
+
+        # ── 왼쪽 패널 스크롤 클립 영역 ───────────────────────────────────
+        content_y0 = by + HEADER_H + 4
+        content_y1 = footer_y - 2
+        LEFT_CLIP = pygame.Rect(bx, content_y0, LEFT_W, content_y1 - content_y0)
+
+        ITEM_H = 26
+        GROUP_H = 20
+
+        # ── 왼쪽 패널 그리기 ─────────────────────────────────────────────
+        screen.set_clip(LEFT_CLIP)
+        lx = bx + 8
+        ly = content_y0 + 4
+
+        # equip_mode banner
+        if equip_mode:
+            if equip_skill_id:
+                # pick_slot 모드: 어느 슬롯에 장착?
+                _sn = (_ALL_SKILL_DEFS.get(equip_skill_id) or {}).get('name', equip_skill_id)
+                banner_s = self.font_sm.render(
+                    f'[{_sn}] → 어느 슬롯에 장착?', True, (255, 200, 80))
+            elif equip_target_slot:
+                # pick_skill 모드: 슬롯에 장착할 스킬 선택
+                banner_s = self.font_sm.render(
+                    f'→ {equip_target_slot} 슬롯에 장착할 스킬 선택', True, (255, 160, 50))
+            else:
+                banner_s = None
+            if banner_s:
+                screen.blit(banner_s, (lx, ly + 2))
+                ly += GROUP_H + 2
+
+        # ─ Section 1: 장착 슬롯 ─
+        gh_s = self.font_sm.render('장착 슬롯', True, HDR_COLOR)
+        screen.blit(gh_s, (lx, ly + (GROUP_H - gh_s.get_height()) // 2))
+        ly += GROUP_H
+
+        for slot_idx, slot in enumerate(SLOT_ROWS):
+            item_idx = slot_idx
+            is_sel       = (not equip_mode) and (item_idx == cursor)
+            is_slot_pick = equip_mode and equip_skill_id and (slot_idx == equip_cursor)
+            row_rect = pygame.Rect(bx + 2, ly, LEFT_W - 4, ITEM_H)
+            sid = _eq.get(slot)
+            sdef_slot = _ALL_SKILL_DEFS.get(sid) if sid else None
+            locked_slot = sdef_slot and player_level < sdef_slot.get('level_req', 1)
+
+            if is_slot_pick:
+                pygame.draw.rect(screen, (40, 35, 10), row_rect)
+                pygame.draw.rect(screen, (255, 200, 50), row_rect, 2)
+            elif is_sel:
+                pygame.draw.rect(screen, SEL_BG, row_rect)
+                pygame.draw.rect(screen, SEL_BORDER, row_rect, 1)
+
+            if locked_slot:
+                text_col = LOCKED_COL
+            elif is_slot_pick:
+                text_col = (255, 220, 100)
+            elif is_sel:
+                text_col = (220, 240, 255)
+            else:
+                text_col = (160, 180, 210)
+
+            if sdef_slot:
+                lvl_s = skill_levels.get(sid, 1)
+                lv_str = f' Lv{lvl_s}' if lvl_s > 1 else ''
+                row_text = f'[{slot}] {sdef_slot["name"]}{lv_str}'
+            elif sid:
+                row_text = f'[{slot}] {sid}'
+            else:
+                row_text = f'[{slot}] ---'
+
+            row_s = self.font_sm.render(row_text, True, text_col)
+            screen.blit(row_s, (lx, ly + (ITEM_H - row_s.get_height()) // 2))
+
+            if is_slot_pick:
+                # ← 선택 표시
+                pick_s = self.font_sm.render('← 여기에', True, (255, 200, 50))
+                screen.blit(pick_s, (bx + LEFT_W - pick_s.get_width() - 6,
+                                     ly + (ITEM_H - pick_s.get_height()) // 2))
+            elif is_sel and not equip_mode:
+                chg_s = self.font_sm.render('[변경]', True, (100, 200, 255))
+                screen.blit(chg_s, (bx + LEFT_W - chg_s.get_width() - 6,
+                                    ly + (ITEM_H - chg_s.get_height()) // 2))
+            ly += ITEM_H
+
+        ly += 6
+
+        # ─ Section 2: 보유 스킬 ─
+        gh2_s = self.font_sm.render('보유 스킬', True, HDR_COLOR)
+        screen.blit(gh2_s, (lx, ly + (GROUP_H - gh2_s.get_height()) // 2))
+        ly += GROUP_H
+
+        for avail_idx2, sid2 in enumerate(avail_skills):
+            item_idx2 = len(SLOT_ROWS) + avail_idx2
+            is_sel2 = (not equip_mode) and (item_idx2 == cursor)
+            is_equip_sel = equip_mode and (not equip_skill_id) and (avail_idx2 == equip_cursor)
+            row_rect2 = pygame.Rect(bx + 2, ly, LEFT_W - 4, ITEM_H)
+            sdef2 = _ALL_SKILL_DEFS.get(sid2, {})
+
+            if is_sel2 or is_equip_sel:
+                sel_bg2 = (20, 45, 25) if is_equip_sel else SEL_BG
+                sel_bd2 = (80, 200, 80) if is_equip_sel else SEL_BORDER
+                pygame.draw.rect(screen, sel_bg2, row_rect2)
+                pygame.draw.rect(screen, sel_bd2, row_rect2, 1)
+
+            if is_sel2 or is_equip_sel:
+                text_col2 = (200, 255, 200) if is_equip_sel else (220, 240, 255)
+            else:
+                text_col2 = (160, 180, 210)
+
+            lvl2 = skill_levels.get(sid2, 1)
+            lv_str2 = f' Lv{lvl2}' if lvl2 > 1 else ''
+            nm2 = sdef2.get('name', sid2)
+            row_text2 = f'{nm2}{lv_str2}'
+
+            row_s2 = self.font_sm.render(row_text2, True, text_col2)
+            screen.blit(row_s2, (lx, ly + (ITEM_H - row_s2.get_height()) // 2))
+
+            # show [slot] badge if equipped
+            if sid2 in equipped_in:
+                badge_slot = equipped_in[sid2]
+                badge_s = self.font_sm.render(f'[{badge_slot}]', True, (180, 220, 100))
+                screen.blit(badge_s, (bx + LEFT_W - badge_s.get_width() - 6,
+                                      ly + (ITEM_H - badge_s.get_height()) // 2))
+            ly += ITEM_H
+
+        screen.set_clip(None)
+
+        # ── 오른쪽 패널 ──────────────────────────────────────────────────
+        rx = RIGHT_X + 6
+        ry = content_y0 + 8
+        rw = bw - (rx - bx) - 10
+
+        # Helper: render detail for a skill from ALL_SKILL_DEFS
+        def _render_all_skill_detail(sid, slot_label=None):
+            nonlocal ry
+            sdef_r = _ALL_SKILL_DEFS.get(sid)
+            if not sdef_r:
+                no_s = self.font_sm.render(f'({sid})', True, LOCKED_COL)
+                screen.blit(no_s, (rx, ry))
+                return
+            lvl_r = skill_levels.get(sid, 1)
+            sk_col = sdef_r.get('color', WHITE)
+            slot_info = f'  [{slot_label}]' if slot_label else ''
+            ttl_s = self.font_lg.render(f'{sdef_r["name"]}{slot_info}', True, sk_col)
+            screen.blit(ttl_s, (rx, ry))
+            ry += ttl_s.get_height() + 4
+
+            usage_text = sdef_r.get('usage', sdef_r.get('desc', ''))
+            if usage_text:
+                u_s = self.font_sm.render(usage_text, True, (140, 160, 190))
+                screen.blit(u_s, (rx, ry))
+                ry += u_s.get_height() + 10
+
+            pygame.draw.line(screen, DIVIDER_COL, (rx, ry), (rx + rw - 4, ry))
+            ry += 4
+
+            upgrades = sdef_r.get('upgrades', [])
+            TABLE_ROW_H = 20
+            col_lv_x  = rx
+            col_eff_x = rx + 36
+            col_cd_x  = rx + rw - 70
+            hdr_lv  = self.font_sm.render(t('sb_lv_header'),  True, (100, 120, 150))
+            hdr_eff = self.font_sm.render(t('sb_eff_header'), True, (100, 120, 150))
+            hdr_cd  = self.font_sm.render(t('sb_cd_header'),  True, (100, 120, 150))
+            screen.blit(hdr_lv,  (col_lv_x,  ry))
+            screen.blit(hdr_eff, (col_eff_x, ry))
+            screen.blit(hdr_cd,  (col_cd_x,  ry))
+            ry += hdr_lv.get_height() + 2
+            pygame.draw.line(screen, DIVIDER_COL, (rx, ry), (rx + rw - 4, ry))
+            ry += 3
+
+            for li, upg in enumerate(upgrades):
+                row_lv  = li + 1
+                is_curr = (row_lv == lvl_r)
+                is_lock = (row_lv > lvl_r)
+                eff_text = upg.get('level_desc', f'{upg.get("cd_ms", 0)//1000:.0f}s')
+                cd_text  = f'{upg.get("cd_ms", 0) / 1000:.1f}s'
+                if is_curr:
+                    row_col  = GOLD
+                    lv_label = f'{row_lv}★'
+                    pygame.draw.rect(screen, (30, 24, 4), (rx - 2, ry - 1, rw, TABLE_ROW_H))
+                elif is_lock:
+                    row_col  = LOCKED_COL
+                    lv_label = str(row_lv)
+                else:
+                    row_col  = (130, 160, 190)
+                    lv_label = str(row_lv)
+                lv_s  = self.font_sm.render(lv_label, True, row_col)
+                eff_s = self.font_sm.render(eff_text,  True, row_col)
+                cd_s  = self.font_sm.render(cd_text,   True, row_col)
+                screen.blit(lv_s,  (col_lv_x,  ry + (TABLE_ROW_H - lv_s.get_height())  // 2))
+                screen.blit(eff_s, (col_eff_x, ry + (TABLE_ROW_H - eff_s.get_height()) // 2))
+                screen.blit(cd_s,  (col_cd_x,  ry + (TABLE_ROW_H - cd_s.get_height())  // 2))
+                ry += TABLE_ROW_H
+
+            pygame.draw.line(screen, DIVIDER_COL, (rx, ry + 2), (rx + rw - 4, ry + 2))
+            ry += 12
+
+            # upgrade section
+            if lvl_r < SKILL_MAX_LEVEL:
+                sp_cost_list = sdef_r.get('sp_cost', SKILL_SP_COST.get(sid, [5, 10]))
+                if isinstance(sp_cost_list, list):
+                    cost_r = sp_cost_list[lvl_r - 1] if lvl_r - 1 < len(sp_cost_list) else 10
+                else:
+                    cost_r = int(sp_cost_list)
+                can_upg = skill_points >= cost_r
+                sp_c = SP_OK if can_upg else SP_NO
+                upg_s = self.font_md.render(
+                    t('sb_upgrade_line', lvl_r, lvl_r + 1, cost_r), True, sp_c)
+                screen.blit(upg_s, (rx, ry))
+                ry += upg_s.get_height() + 6
+                btn_col = (80, 160, 80) if can_upg else (50, 55, 60)
+                btn_brd = (120, 220, 120) if can_upg else (70, 75, 80)
+                btn_tc  = (180, 255, 180) if can_upg else (80, 85, 90)
+                btn_rect = pygame.Rect(rx, ry, 170, 28)
+                pygame.draw.rect(screen, btn_col, btn_rect, border_radius=3)
+                pygame.draw.rect(screen, btn_brd, btn_rect, 1, border_radius=3)
+                btn_s = self.font_sm.render(t('sb_upgrade_btn'), True, btn_tc)
+                screen.blit(btn_s, (btn_rect.centerx - btn_s.get_width() // 2,
+                                    btn_rect.centery - btn_s.get_height() // 2))
+                ry += 34
+            else:
+                max_s = self.font_md.render(t('sb_max_done'), True, GOLD)
+                screen.blit(max_s, (rx, ry))
+                ry += max_s.get_height() + 4
+
+        # Determine which skill to show in the right panel
+        if equip_mode:
+            if equip_skill_id:
+                # pick_slot 모드: 장착하려는 스킬 상세 표시
+                _render_all_skill_detail(equip_skill_id)
+                hint_eq = self.font_sm.render('↑↓ 슬롯 선택   Enter 장착   ESC 취소',
+                                              True, (255, 200, 80))
+            elif avail_skills and equip_cursor < len(avail_skills):
+                # pick_skill 모드: 선택 중인 스킬 상세 표시
+                _render_all_skill_detail(avail_skills[equip_cursor])
+                hint_eq = self.font_sm.render('↑↓ 스킬 선택   Enter 장착   ESC 취소',
+                                              True, (255, 180, 50))
+            else:
+                hint_eq = self.font_sm.render('Enter 장착 / ESC 취소', True, (255, 180, 50))
+            screen.blit(hint_eq, (rx, content_y1 - hint_eq.get_height() - 4))
+        elif sel_mode == 'slot':
+            # cursor on a slot row: show equipped skill detail
+            _e_sid = _eq.get(sel_slot)
+            if _e_sid and (_ALL_SKILL_DEFS.get(_e_sid) or True):
+                if _ALL_SKILL_DEFS.get(_e_sid):
+                    _render_all_skill_detail(_e_sid, slot_label=sel_slot)
+                else:
+                    # legacy fallback for basic skills
+                    legacy = next((s for s in SKILL_DEFS if s['key'] == sel_slot), None)
+                    if legacy:
+                        lvl  = skill_levels.get(sel_slot, 1)
+                        ttl_s = self.font_lg.render(
+                            f'{legacy["name"]}  [{sel_slot}키]', True, legacy['color'])
+                        screen.blit(ttl_s, (rx, ry)); ry += ttl_s.get_height() + 4
+                        usage_text = legacy.get('usage', legacy.get('desc', ''))
+                        if usage_text:
+                            u_s = self.font_sm.render(usage_text, True, (140, 160, 190))
+                            screen.blit(u_s, (rx, ry)); ry += u_s.get_height() + 10
+                        pygame.draw.line(screen, DIVIDER_COL, (rx, ry), (rx+rw-4, ry)); ry += 4
+                        TABLE_ROW_H = 20
+                        col_lv_x, col_eff_x, col_cd_x = rx, rx+36, rx+rw-70
+                        for li in range(SKILL_MAX_LEVEL):
+                            row_lv = li + 1
+                            upg = SKILL_UPGRADES[sel_slot][li]
+                            eff_text = _fmt_skill_stats(sel_slot, upg)
+                            cd_text  = f'{upg["cd_ms"]/1000:.1f}s'
+                            is_curr = row_lv == lvl; is_lock = row_lv > lvl
+                            row_col = GOLD if is_curr else (LOCKED_COL if is_lock else (130,160,190))
+                            lv_label = f'{row_lv}★' if is_curr else str(row_lv)
+                            if is_curr: pygame.draw.rect(screen, (30,24,4), (rx-2,ry-1,rw,TABLE_ROW_H))
+                            lv_s=self.font_sm.render(lv_label,True,row_col)
+                            eff_s=self.font_sm.render(eff_text,True,row_col)
+                            cd_s=self.font_sm.render(cd_text,True,row_col)
+                            screen.blit(lv_s,(col_lv_x,ry+(TABLE_ROW_H-lv_s.get_height())//2))
+                            screen.blit(eff_s,(col_eff_x,ry+(TABLE_ROW_H-eff_s.get_height())//2))
+                            screen.blit(cd_s,(col_cd_x,ry+(TABLE_ROW_H-cd_s.get_height())//2))
+                            ry += TABLE_ROW_H
+                        pygame.draw.line(screen, DIVIDER_COL,(rx,ry+2),(rx+rw-4,ry+2)); ry+=12
+                        if lvl < SKILL_MAX_LEVEL:
+                            cost_list2 = SKILL_SP_COST.get(sel_slot, [5,10])
+                            cost2 = cost_list2[lvl-1] if lvl-1<len(cost_list2) else 10
+                            can_upg2 = skill_points >= cost2
+                            sp_c2 = SP_OK if can_upg2 else SP_NO
+                            upg_s2=self.font_md.render(t('sb_upgrade_line',lvl,lvl+1,cost2),True,sp_c2)
+                            screen.blit(upg_s2,(rx,ry)); ry+=upg_s2.get_height()+6
+                            bc=(80,160,80) if can_upg2 else (50,55,60)
+                            bb=(120,220,120) if can_upg2 else (70,75,80)
+                            btc=(180,255,180) if can_upg2 else (80,85,90)
+                            br2=pygame.Rect(rx,ry,170,28)
+                            pygame.draw.rect(screen,bc,br2,border_radius=3)
+                            pygame.draw.rect(screen,bb,br2,1,border_radius=3)
+                            bs2=self.font_sm.render(t('sb_upgrade_btn'),True,btc)
+                            screen.blit(bs2,(br2.centerx-bs2.get_width()//2,br2.centery-bs2.get_height()//2))
+                        else:
+                            mx_s=self.font_md.render(t('sb_max_done'),True,GOLD)
+                            screen.blit(mx_s,(rx,ry))
+            else:
+                empty_s = self.font_sm.render(f'[{sel_slot}] 비어 있음', True, LOCKED_COL)
+                screen.blit(empty_s, (rx, ry))
+        else:
+            # cursor on an available skill
+            if sel_skill_id:
+                _render_all_skill_detail(sel_skill_id)
+
+    # ------------------------------------------------------------------ #
     def render_equipment(self, screen, player, sel, player_spr=None, mouse_pos=(0, 0)):
         """장비 장착 화면 — 페이퍼돌 레이아웃."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT

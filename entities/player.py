@@ -28,6 +28,10 @@ class Player(Entity):
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가
         self.heal_def_ms      = 0   # 버프 잔여 시간
+        self.damage_reduce_pct = 0.0  # 철갑 방벽: 피해 감소율 (0.0~1.0)
+        self.damage_reduce_ms  = 0    # 버프 잔여 시간
+        self.atk_bonus_pct     = 0.0  # 전투 함성: 공격력 증가율
+        self.atk_bonus_ms      = 0    # 버프 잔여 시간
 
         # 인벤토리 (최대 20칸)
         self.inventory: list    = []
@@ -50,7 +54,10 @@ class Player(Entity):
             item.enhance_level for item in self.equipment.values()
             if item and item.item_type == 'weapon'
         )
-        return self.attack + bonus + enhance
+        base = self.attack + bonus + enhance
+        if self.atk_bonus_ms > 0:
+            base = int(base * (1.0 + self.atk_bonus_pct))
+        return base
 
     @property
     def total_defense(self) -> int:
@@ -88,6 +95,8 @@ class Player(Entity):
             return
         if self.cursed_ms > 0:
             amount = int(amount * 1.5)
+        if self.damage_reduce_ms > 0:
+            amount = max(1, int(amount * (1.0 - self.damage_reduce_pct)))
         self.hp = max(0, self.hp - amount)
 
     def tick_debuffs(self, dt_ms: int):
@@ -103,6 +112,14 @@ class Player(Entity):
             self.heal_def_ms = max(0, self.heal_def_ms - dt_ms)
             if self.heal_def_ms == 0:
                 self.heal_def_bonus = 0
+        if self.damage_reduce_ms > 0:
+            self.damage_reduce_ms = max(0, self.damage_reduce_ms - dt_ms)
+            if self.damage_reduce_ms == 0:
+                self.damage_reduce_pct = 0.0
+        if self.atk_bonus_ms > 0:
+            self.atk_bonus_ms = max(0, self.atk_bonus_ms - dt_ms)
+            if self.atk_bonus_ms == 0:
+                self.atk_bonus_pct = 0.0
 
     @property
     def total_move_speed(self) -> float:
