@@ -584,9 +584,9 @@ class HUD:
 
         # ── 상태이상 배지 ──
         _debuffs = [
-            ('cursed_ms',  "저주",   (220, 100, 255), (45,  10,  60), (160,  50, 220)),
-            ('slowed_ms',  "슬로우", ( 90, 170, 255), (10,  20,  55), ( 60, 120, 220)),
-            ('feared_ms',  "두려움", (255, 215,  60), (50,  40,   5), (200, 160,  20)),
+            ('cursed_ms',  t('debuff_curse'), (220, 100, 255), (45,  10,  60), (160,  50, 220)),
+            ('slowed_ms',  t('debuff_slow'),  ( 90, 170, 255), (10,  20,  55), ( 60, 120, 220)),
+            ('feared_ms',  t('debuff_fear'),  (255, 215,  60), (50,  40,   5), (200, 160,  20)),
         ]
         ch = TOP_BAR_H - 8; cy2 = 4
         for attr, label, txt_col, bg_col, border_col in _debuffs:
@@ -640,11 +640,11 @@ class HUD:
         atk_str = str(player.total_attack) + (f" (+{atk_bonus})" if atk_bonus else "")
         def_str = str(player.total_defense) + (f" (+{def_bonus})" if def_bonus else "")
         stats = [
-            ('공격력',   atk_str,                         WHITE),
-            ('방어력',   def_str,                         (130, 180, 255)),
-            ('공격속도', f"{player.attack_speed:.2f}",    (255, 200, 80)),
-            ('회피율',   f"{player.evasion}%",            (80, 220, 160)),
-            ('이동속도', f"{player.move_speed:.2f}",      (160, 160, 255)),
+            (t('stat_atk'),  atk_str,                         WHITE),
+            (t('stat_def'),  def_str,                         (130, 180, 255)),
+            (t('stat_aspd'), f"{player.attack_speed:.2f}",    (255, 200, 80)),
+            (t('stat_eva'),  f"{player.evasion}%",            (80, 220, 160)),
+            (t('stat_mspd'), f"{player.move_speed:.2f}",      (160, 160, 255)),
         ]
         for label, val, col in stats:
             lbl_s = self.font_sm.render(label, True, (100, 100, 130))
@@ -656,8 +656,8 @@ class HUD:
 
         # ── 장착 장비 ───────────────────────────────────────────────
         sec_header('sec_equip', LIGHT_GRAY)
-        _SLOT_LABELS = {'head': '투구', 'body': '갑옷', 'weapon': '무기',
-                        'off_hand': '보조', 'accessory': '장신구', 'feet': '신발'}
+        _SLOT_LABELS = {'head': t('slot_head_s'), 'body': t('slot_body_s'), 'weapon': t('slot_wpn_s'),
+                        'off_hand': t('slot_off_hud'), 'accessory': t('slot_acc_s'), 'feet': t('slot_feet_s')}
         for slot, item in player.equipment.items():
             lbl_s = self.font_sm.render(_SLOT_LABELS.get(slot, slot), True, (100, 100, 130))
             if item:
@@ -1019,9 +1019,10 @@ class HUD:
         pygame.draw.line(screen, (50, 50, 80), (bx+12, info_y), (bx+pw-12, info_y))
         if sel < len(inv):
             item = inv[sel]
-            type_map = {'weapon': '무기', 'armor': '갑옷', 'head': '투구',
-                        'off_hand': '보조무기', 'accessory': '장신구', 'boots': '신발',
-                        'consumable': '소비', 'skillbook': '스킬북'}
+            type_map = {'weapon': t('inv_type_weapon'), 'armor': t('inv_type_armor'),
+                        'head': t('inv_type_head'), 'off_hand': t('inv_type_off'),
+                        'accessory': t('inv_type_acc'), 'boots': t('inv_type_boots'),
+                        'consumable': t('inv_type_cons'), 'skillbook': t('inv_type_book')}
             tname = type_map.get(item.item_type, item.item_type)
             info = f"{item.name}  [{tname}]"
             if item.equip_slot:
@@ -1057,7 +1058,7 @@ class HUD:
             pygame.draw.rect(screen, (18, 12, 12), trash_rect, border_radius=4)
             pygame.draw.rect(screen, (55, 35, 35), trash_rect, 1, border_radius=4)
             tc = (65, 42, 42)
-        trash_lbl = self.font_sm.render("🗑 버리기", True, tc)
+        trash_lbl = self.font_sm.render(t('inv_discard_btn'), True, tc)
         screen.blit(trash_lbl, (trash_rect.centerx - trash_lbl.get_width() // 2,
                                 trash_rect.centery - trash_lbl.get_height() // 2))
 
@@ -1070,7 +1071,7 @@ class HUD:
             screen.blit(ghost_surf, (drag_pos[0] - 18, drag_pos[1] - 18))
 
         # 힌트
-        hint_s = self.font_sm.render(t('inv_hint') + "  Del:버리기", True, (65, 65, 95))
+        hint_s = self.font_sm.render(t('inv_hint') + "  " + t('inv_del_hint'), True, (65, 65, 95))
         screen.blit(hint_s, (bx + 10, by + ph - 20))
 
     # ------------------------------------------------------------------ #
@@ -1100,19 +1101,19 @@ class HUD:
         pygame.draw.rect(screen, (10, 14, 28), (bx, by, pw, ph), border_radius=6)
         pygame.draw.rect(screen, border_col, (bx, by, pw, ph), 2, border_radius=6)
 
-        title = self.font_lg.render('장비 강화', True, (160, 210, 255))
+        title = self.font_lg.render(t('enh_title'), True, (160, 210, 255))
         screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
 
-        stone_s = self.font_sm.render(f'강화석: {player.enhance_stones}개', True, (160, 210, 255))
+        stone_s = self.font_sm.render(t('enh_stones', player.enhance_stones), True, (160, 210, 255))
         screen.blit(stone_s, (bx + pw - stone_s.get_width() - 14, by + 14))
 
         pygame.draw.line(screen, (50, 80, 120), (bx+12, by+42), (bx+pw-12, by+42))
 
         _SLOT_ORDER = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
-        _SLOT_NAMES = {'head':'투구','body':'갑옷','weapon':'무기',
-                       'off_hand':'보조무기','accessory':'장신구','feet':'신발'}
-        _STAT_LABEL = {'head':'회피율 +1%','body':'방어력 +1','weapon':'공격력 +1',
-                       'off_hand':'방어력 +1','accessory':'스킬 데미지 +5%','feet':'이동속도 +0.05'}
+        _SLOT_NAMES = {'head': t('slot_head_s'), 'body': t('slot_body_s'), 'weapon': t('slot_wpn_s'),
+                       'off_hand': t('slot_off_s'), 'accessory': t('slot_acc_s'), 'feet': t('slot_feet_s')}
+        _STAT_LABEL = {'head': t('enh_stat_head'), 'body': t('enh_stat_body'), 'weapon': t('enh_stat_wpn'),
+                       'off_hand': t('enh_stat_off'), 'accessory': t('enh_stat_acc'), 'feet': t('enh_stat_feet')}
         _RATES = [100,100,100,100,100,100,80,80,80,60,60,60,40,40,40,20,20,20]
 
         y = by + 52
@@ -1161,20 +1162,20 @@ class HUD:
                 if enh < 18:
                     rate = _RATES[enh]
                     rate_col = (80, 220, 80) if rate == 100 else (220, 180, 60) if rate >= 60 else (220, 80, 80)
-                    rate_s = self.font_sm.render(f"성공률 {rate}%", True, rate_col)
+                    rate_s = self.font_sm.render(t('enh_rate', rate), True, rate_col)
                     screen.blit(rate_s, (bx + pw - rate_s.get_width() - 14, y+2))
-                    cost_s = self.font_sm.render("강화석 1개", True, (140, 170, 220))
+                    cost_s = self.font_sm.render(t('enh_cost'), True, (140, 170, 220))
                     screen.blit(cost_s, (bx + pw - cost_s.get_width() - 14, y+16))
                 else:
                     max_s = self.font_sm.render("MAX", True, (255, 200, 50))
                     screen.blit(max_s, (bx + pw - max_s.get_width() - 14, y+8))
             else:
-                empty_s = self.font_sm.render('--- 비어있음 ---', True, (50, 55, 75))
+                empty_s = self.font_sm.render(t('enh_empty'), True, (50, 55, 75))
                 screen.blit(empty_s, (bx+80, y+9))
 
             y += 38
 
-        guide_s = self.font_sm.render('↑↓ 선택   Enter 강화   P/ESC 닫기', True, (70, 90, 130))
+        guide_s = self.font_sm.render(t('enh_hint'), True, (70, 90, 130))
         screen.blit(guide_s, (bx + (pw - guide_s.get_width()) // 2, by + ph - 24))
 
     # ------------------------------------------------------------------ #
@@ -1257,7 +1258,7 @@ class HUD:
         pygame.draw.line(screen, DIVIDER_COL, (bx, footer_y), (bx + bw, footer_y))
         pygame.draw.rect(screen, (10, 15, 28), (bx, footer_y, bw, FOOTER_H))
         if arcane_window:
-            _hint_text = '★ 오의 발동 가능! R키를 누르세요'
+            _hint_text = t('arcane_ready')
             _hint_col  = (255, 200, 80)
         elif equip_mode:
             _hint_text = t('sb_equip_hint')
@@ -1329,11 +1330,11 @@ class HUD:
                 # pick_slot 모드: 어느 슬롯에 장착?
                 _sn = (_ALL_SKILL_DEFS.get(equip_skill_id) or {}).get('name', equip_skill_id)
                 banner_s = self.font_sm.render(
-                    f'[{_sn}] → 어느 슬롯에 장착?', True, (255, 200, 80))
+                    t('sb_pick_slot_banner', _sn), True, (255, 200, 80))
             elif equip_target_slot:
                 # pick_skill 모드: 슬롯에 장착할 스킬 선택
                 banner_s = self.font_sm.render(
-                    f'→ {equip_target_slot} 슬롯에 장착할 스킬 선택', True, (255, 160, 50))
+                    t('sb_pick_skill_banner', equip_target_slot), True, (255, 160, 50))
             else:
                 banner_s = None
             if banner_s:
@@ -1341,7 +1342,7 @@ class HUD:
                 ly += GROUP_H + 2
 
         # ─ Section 1: 장착 슬롯 ─
-        gh_s = self.font_sm.render('장착 슬롯', True, HDR_COLOR)
+        gh_s = self.font_sm.render(t('sb_slot_section'), True, HDR_COLOR)
         screen.blit(gh_s, (lx, ly + (GROUP_H - gh_s.get_height()) // 2))
         ly += GROUP_H
 
@@ -1384,11 +1385,11 @@ class HUD:
 
             if is_slot_pick:
                 # ← 선택 표시
-                pick_s = self.font_sm.render('← 여기에', True, (255, 200, 50))
+                pick_s = self.font_sm.render(t('sb_slot_here'), True, (255, 200, 50))
                 screen.blit(pick_s, (bx + LEFT_W - pick_s.get_width() - 6,
                                      ly + (ITEM_H - pick_s.get_height()) // 2))
             elif is_sel and not equip_mode:
-                chg_s = self.font_sm.render('[변경]', True, (100, 200, 255))
+                chg_s = self.font_sm.render(t('sb_slot_change'), True, (100, 200, 255))
                 screen.blit(chg_s, (bx + LEFT_W - chg_s.get_width() - 6,
                                     ly + (ITEM_H - chg_s.get_height()) // 2))
             ly += ITEM_H
@@ -1396,7 +1397,7 @@ class HUD:
         ly += 6
 
         # ─ Section 2: 보유 스킬 ─
-        gh2_s = self.font_sm.render('보유 스킬', True, HDR_COLOR)
+        gh2_s = self.font_sm.render(t('sb_avail_section'), True, HDR_COLOR)
         screen.blit(gh2_s, (lx, ly + (GROUP_H - gh2_s.get_height()) // 2))
         ly += GROUP_H
 
@@ -1543,12 +1544,12 @@ class HUD:
             enc = _enc.get(sid, {})
             pygame.draw.line(screen, DIVIDER_COL, (rx, ry), (rx + rw - 4, ry))
             ry += 4
-            hdr_s = self.font_sm.render('인챈트  (1위력  2신속  3절약  4오의)', True, (100, 120, 150))
+            hdr_s = self.font_sm.render(t('enc_header'), True, (100, 120, 150))
             screen.blit(hdr_s, (rx, ry)); ry += hdr_s.get_height() + 3
 
             for ei, etype in enumerate(_ENCHANT_TYPES):
                 edef  = _ENCHANT_DEFS.get(etype, {})
-                ename = edef.get('name_ko', etype)
+                ename = t(f'enc_type_{etype}')
                 ecol  = edef.get('color', WHITE)
                 cur   = enc.get(etype, 0)
                 costs = edef.get('sp_cost', [5, 10, 20])
@@ -1574,15 +1575,13 @@ class HUD:
             if equip_skill_id:
                 # pick_slot 모드: 장착하려는 스킬 상세 표시
                 _render_all_skill_detail(equip_skill_id)
-                hint_eq = self.font_sm.render('↑↓ 슬롯 선택   Enter 장착   ESC 취소',
-                                              True, (255, 200, 80))
+                hint_eq = self.font_sm.render(t('sb_equip_slot_hint'), True, (255, 200, 80))
             elif avail_skills and equip_cursor < len(avail_skills):
                 # pick_skill 모드: 선택 중인 스킬 상세 표시
                 _render_all_skill_detail(avail_skills[equip_cursor])
-                hint_eq = self.font_sm.render('↑↓ 스킬 선택   Enter 장착   ESC 취소',
-                                              True, (255, 180, 50))
+                hint_eq = self.font_sm.render(t('sb_equip_skill_hint'), True, (255, 180, 50))
             else:
-                hint_eq = self.font_sm.render('Enter 장착 / ESC 취소', True, (255, 180, 50))
+                hint_eq = self.font_sm.render(t('sb_equip_confirm'), True, (255, 180, 50))
             screen.blit(hint_eq, (rx, content_y1 - hint_eq.get_height() - 4))
         elif sel_mode == 'slot':
             # cursor on a slot row: show equipped skill detail
@@ -1597,7 +1596,7 @@ class HUD:
                     if legacy:
                         lvl  = skill_levels.get(sel_slot, 1)
                         ttl_s = self.font_lg.render(
-                            f'{legacy["name"]}  [{sel_slot}키]', True, legacy['color'])
+                            f'{legacy["name"]}  {t("sb_key_legacy", sel_slot)}', True, legacy['color'])
                         screen.blit(ttl_s, (rx, ry)); ry += ttl_s.get_height() + 4
                         usage_text = legacy.get('usage', legacy.get('desc', ''))
                         if usage_text:
@@ -1642,7 +1641,7 @@ class HUD:
                             mx_s=self.font_md.render(t('sb_max_done'),True,GOLD)
                             screen.blit(mx_s,(rx,ry))
             else:
-                empty_s = self.font_sm.render(f'[{sel_slot}] 비어 있음', True, LOCKED_COL)
+                empty_s = self.font_sm.render(t('sb_slot_empty', sel_slot), True, LOCKED_COL)
                 screen.blit(empty_s, (rx, ry))
         else:
             # cursor on an available skill
@@ -1781,7 +1780,7 @@ class HUD:
         screen.blit(nm_s, (cx + (cw - nm_s.get_width()) // 2, cy + 10))
 
         # 질문 텍스트
-        q_s = self.font_md.render("버리시겠습니까?", True, WHITE)
+        q_s = self.font_md.render(t('discard_confirm'), True, WHITE)
         screen.blit(q_s, (cx + (cw - q_s.get_width()) // 2, cy + 28))
 
         # 예 버튼
@@ -1790,7 +1789,7 @@ class HUD:
                          yes_rect, border_radius=4)
         pygame.draw.rect(screen, (110, 210, 110) if yes_hov else (60, 130, 60),
                          yes_rect, 1, border_radius=4)
-        yes_s = self.font_md.render("예  [Y]", True,
+        yes_s = self.font_md.render(t('discard_yes'), True,
                                     (160, 255, 160) if yes_hov else (100, 200, 100))
         screen.blit(yes_s, (yes_rect.centerx - yes_s.get_width() // 2,
                             yes_rect.centery - yes_s.get_height() // 2))
@@ -1801,7 +1800,7 @@ class HUD:
                          no_rect, border_radius=4)
         pygame.draw.rect(screen, (230, 80, 80) if no_hov else (140, 54, 54),
                          no_rect, 1, border_radius=4)
-        no_s = self.font_md.render("아니오  [N]", True,
+        no_s = self.font_md.render(t('discard_no'), True,
                                    (255, 140, 140) if no_hov else (200, 80, 80))
         screen.blit(no_s, (no_rect.centerx - no_s.get_width() // 2,
                            no_rect.centery - no_s.get_height() // 2))
@@ -1817,15 +1816,16 @@ def _bar(screen, x, y, w, h, cur, maximum, fg, bg):
     pygame.draw.rect(screen, UI_BORDER, (x, y, w, h), 1)
 
 def _fmt_skill_stats(key, stats):
+    from core.lang import t as _t
     cd = stats['cd_ms'] / 1000
     if key == 'W':
-        return f"{stats['tiles']}칸 전진  CD {cd:.1f}s"
+        return _t('fmt_tiles', stats['tiles'], f'{cd:.1f}')
     if key == 'A':
-        return f"반경 {stats['radius']}  공격력 {int(stats['mul']*100)}%  CD {cd:.1f}s"
+        return _t('fmt_radius_atk', stats['radius'], int(stats['mul']*100), f'{cd:.1f}')
     if key == 'S':
         return f"HP +{int(stats['heal_pct']*100)}%  CD {cd:.1f}s"
     if key == 'D':
-        return f"{stats['mul']:.1f}배 강타  치명 {int(stats['crit']*100)}%  CD {cd:.1f}s"
+        return _t('fmt_mul_crit', f"{stats['mul']:.1f}", int(stats['crit']*100), f'{cd:.1f}')
     return ""
 
 def _cx(surf, container_w):

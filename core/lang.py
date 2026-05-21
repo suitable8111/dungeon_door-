@@ -250,6 +250,133 @@ _T: dict[str, dict[str, str]] = {
     'new_theme':    {'ko': '◆ 새로운 구역: {}',          'en': '◆ New Zone: {}'},
     'victory':      {'ko': '★★★ 축하합니다! 999층 클리어! ★★★',
                      'en': '★★★ Congratulations! Floor 999 cleared! ★★★'},
+
+    # ── 스탯 레이블 (HUD 사이드 패널) ──────────────────────────────────
+    'stat_atk':     {'ko': '공격력',   'en': 'ATK'},
+    'stat_def':     {'ko': '방어력',   'en': 'DEF'},
+    'stat_aspd':    {'ko': '공격속도', 'en': 'ATK Spd'},
+    'stat_eva':     {'ko': '회피율',   'en': 'Evasion'},
+    'stat_mspd':    {'ko': '이동속도', 'en': 'MOV Spd'},
+
+    # ── 장비 슬롯 짧은 이름 ────────────────────────────────────────────
+    'slot_head_s':  {'ko': '투구',    'en': 'Head'},
+    'slot_body_s':  {'ko': '갑옷',    'en': 'Armor'},
+    'slot_wpn_s':   {'ko': '무기',    'en': 'Wpn'},
+    'slot_off_s':   {'ko': '보조무기','en': 'Off-Hand'},
+    'slot_off_hud': {'ko': '보조',    'en': 'Off'},
+    'slot_acc_s':   {'ko': '장신구',  'en': 'Acc'},
+    'slot_feet_s':  {'ko': '신발',    'en': 'Boots'},
+
+    # ── 아이템 장착 / 해제 메시지 ─────────────────────────────────────
+    'item_discard':      {'ko': '[{}] 버림',               'en': '[{}] discarded'},
+    'item_unequip':      {'ko': '{} {} 해제',              'en': '{} {} unequipped'},
+    'item_equip_msg':    {'ko': '{}{} {} 장착! (+{})',     'en': '{}{} {} equipped! (+{})'},
+    'item_unequip_inv':  {'ko': '{} 해제 → 인벤토리',      'en': '{} unequipped → inventory'},
+    'item_unequip_full': {'ko': '{} 해제 (인벤토리 가득 참)', 'en': '{} unequipped (inv full)'},
+
+    # ── 장비 강화 패널 ─────────────────────────────────────────────────
+    'enh_title':     {'ko': '장비 강화',    'en': 'Enhancement'},
+    'enh_stones':    {'ko': '강화석: {}개', 'en': 'Stones: {}'},
+    'enh_rate':      {'ko': '성공률 {}%',   'en': '{}% chance'},
+    'enh_cost':      {'ko': '강화석 1개',   'en': '1 Stone'},
+    'enh_empty':     {'ko': '--- 비어있음 ---', 'en': '--- Empty ---'},
+    'enh_hint':      {'ko': '↑↓ 선택   Enter 강화   P/ESC 닫기',
+                      'en': '↑↓ Select   Enter Enhance   P/ESC Close'},
+    'enh_stat_head': {'ko': '회피율 +1%',      'en': 'Evasion +1%'},
+    'enh_stat_body': {'ko': '방어력 +1',       'en': 'DEF +1'},
+    'enh_stat_wpn':  {'ko': '공격력 +1',       'en': 'ATK +1'},
+    'enh_stat_off':  {'ko': '방어력 +1',       'en': 'DEF +1'},
+    'enh_stat_acc':  {'ko': '스킬 데미지 +5%', 'en': 'Skill DMG +5%'},
+    'enh_stat_feet': {'ko': '이동속도 +0.05',  'en': 'MOV Spd +0.05'},
+
+    # ── 스킬 도감 UI ──────────────────────────────────────────────────
+    'sb_slot_section':    {'ko': '장착 슬롯', 'en': 'Equipped'},
+    'sb_avail_section':   {'ko': '보유 스킬', 'en': 'Available'},
+    'sb_pick_slot_banner':{'ko': '[{}] → 어느 슬롯에 장착?',    'en': '[{}] → Which slot?'},
+    'sb_pick_skill_banner':{'ko': '→ {} 슬롯에 장착할 스킬 선택','en': '→ Pick skill for {} slot'},
+    'sb_slot_here':       {'ko': '← 여기에', 'en': '← Here'},
+    'sb_slot_change':     {'ko': '[변경]',    'en': '[Change]'},
+    'enc_header':         {'ko': '인챈트  (1위력  2신속  3절약  4오의)',
+                           'en': 'Enchant  (1Pwr  2Haste  3Eff  4Arc)'},
+
+    # ── 전투 / 스킬 메시지 ────────────────────────────────────────────
+    'fear_miss':        {'ko': '두려움에 공격이 빗나갔습니다!', 'en': 'Fear! Attack missed!'},
+    'sp_gained':        {'ko': '스킬 포인트 +3 (보유: {})',   'en': 'Skill Points +3 (have: {})'},
+    'monster_appear':   {'ko': '몬스터가 나타났다!',           'en': 'A monster appeared!'},
+    'skill_regen_def':  {'ko': '방어력 +{} ({}초)',           'en': 'DEF +{} ({}s)'},
+    'skill_shadow_step':{'ko': '그림자 속으로 사라졌다!',      'en': 'Vanished into the shadows!'},
+    'skill_iron_shell': {'ko': '철갑 방벽! 피해 {}% 감소 ({}초)', 'en': 'Iron Shell! DMG -{}% ({}s)'},
+    'skill_flame_hit':  {'ko': '화염 강타! {}명 적중',         'en': 'Flame Strike! Hit {}'},
+    'skill_flame_miss': {'ko': '화염이 허공을 갈랐다!',        'en': 'Flame cut the air!'},
+    'skill_life_hit':   {'ko': '생명 흡수! {} HP 회복',        'en': 'Life Steal! +{} HP'},
+    'skill_life_miss':  {'ko': '생명 흡수 (미적중)',           'en': 'Life Steal (miss)'},
+    'skill_war_cry':    {'ko': '전투 함성! 공격력 +{}% ({}초)','en': 'War Cry! ATK +{}% ({}s)'},
+    'skill_dark_hit':   {'ko': '암흑 파동! {}명 적중',         'en': 'Dark Pulse! Hit {}'},
+    'skill_dark_miss':  {'ko': '파동이 허공에 사라졌다!',      'en': 'Dark Pulse faded!'},
+
+    # ── 인챈트 타입 이름 ──────────────────────────────────────────────
+    'enc_type_power':      {'ko': '위력', 'en': 'Power'},
+    'enc_type_haste':      {'ko': '신속', 'en': 'Haste'},
+    'enc_type_efficiency': {'ko': '절약', 'en': 'Efficiency'},
+    'enc_type_arcane':     {'ko': '오의', 'en': 'Arcane'},
+
+    # ── 스킬 강화 / 인챈트 메시지 ─────────────────────────────────────
+    'skill_upg_maxed':  {'ko': '{} 스킬이 이미 최대 레벨입니다.', 'en': '{} is already max level.'},
+    'skill_upg_nosp':   {'ko': 'SP가 부족합니다. (필요: {}, 보유: {})',
+                         'en': 'Not enough SP. (need: {}, have: {})'},
+    'enc_max':          {'ko': '이미 최대 레벨입니다.',         'en': 'Already at max level.'},
+    'enc_no_sp':        {'ko': 'SP 부족 (필요: {}, 보유: {})', 'en': 'Not enough SP (need: {}, have: {})'},
+    'enc_done':         {'ko': '[{}] {} Lv.{}!',               'en': '[{}] {} Lv.{}!'},
+    'arcane_no_skill':  {'ko': '오의: 먼저 오의 스킬을 사용하세요.', 'en': 'Arcane: Use an arcane skill first.'},
+    'arcane_no_enc':    {'ko': '오의: 오의 인챈트가 해금되지 않았습니다.', 'en': 'Arcane: enchant not unlocked.'},
+    'arcane_no_sp':     {'ko': '오의: SP 부족 ({}/{})',        'en': 'Arcane: Low SP ({}/{})'},
+    'arcane_trigger':   {'ko': '★ 오의 발동!',                 'en': '★ Arcane Art!'},
+    'skill_equip_slot': {'ko': '[{}] 슬롯에 [{}] 장착!',       'en': '[{}] equipped with [{}]!'},
+
+    # ── 궁극기 메시지 ──────────────────────────────────────────────────
+    'ult_no_level':     {'ko': '{}: Lv.{} 필요 (현재 Lv.{})',  'en': '{}: Requires Lv.{} (cur Lv.{})'},
+    'ult_breaker_hit':  {'ko': '⚔ 던전 브레이커! {}마리 초토화!', 'en': '⚔ Dungeon Breaker! {} obliterated!'},
+    'ult_breaker_miss': {'ko': '⚔ 던전 브레이커! 적 없음',     'en': '⚔ Dungeon Breaker! No enemies'},
+    'ult_slash_hit':    {'ko': '真 일도양단! 무적 2초 + {}마리 섬멸!',
+                         'en': '真 True Cut! 2s invincible + {} defeated!'},
+    'ult_slash_miss':   {'ko': '真 일도양단! (적 없음)',        'en': '真 True Cut! (No enemies)'},
+
+    # ── 상태이상 배지 ───────────────────────────────────────────────────
+    'debuff_curse': {'ko': '저주',   'en': 'Curse'},
+    'debuff_slow':  {'ko': '슬로우', 'en': 'Slow'},
+    'debuff_fear':  {'ko': '두려움', 'en': 'Fear'},
+
+    # ── 인벤토리 아이템 타입 이름 ─────────────────────────────────────
+    'inv_type_weapon': {'ko': '무기',   'en': 'Weapon'},
+    'inv_type_armor':  {'ko': '갑옷',   'en': 'Armor'},
+    'inv_type_head':   {'ko': '투구',   'en': 'Head'},
+    'inv_type_off':    {'ko': '보조무기','en': 'Off-Hand'},
+    'inv_type_acc':    {'ko': '장신구', 'en': 'Accessory'},
+    'inv_type_boots':  {'ko': '신발',   'en': 'Boots'},
+    'inv_type_cons':   {'ko': '소비',   'en': 'Consumable'},
+    'inv_type_book':   {'ko': '스킬북', 'en': 'Skill Book'},
+    'inv_discard_btn': {'ko': '🗑 버리기', 'en': '🗑 Discard'},
+    'inv_del_hint':    {'ko': 'Del:버리기', 'en': 'Del:Discard'},
+
+    # ── 스킬 도감 추가 UI ─────────────────────────────────────────────
+    'arcane_ready':         {'ko': '★ 오의 발동 가능! R키를 누르세요', 'en': '★ Arcane ready! Press R'},
+    'sb_equip_slot_hint':   {'ko': '↑↓ 슬롯 선택   Enter 장착   ESC 취소',
+                             'en': '↑↓ Select slot   Enter Equip   ESC Cancel'},
+    'sb_equip_skill_hint':  {'ko': '↑↓ 스킬 선택   Enter 장착   ESC 취소',
+                             'en': '↑↓ Select skill   Enter Equip   ESC Cancel'},
+    'sb_equip_confirm':     {'ko': 'Enter 장착 / ESC 취소',  'en': 'Enter Equip / ESC Cancel'},
+    'sb_key_legacy':        {'ko': '[{}키]',                'en': '[{}]'},
+    'sb_slot_empty':        {'ko': '[{}] 비어 있음',         'en': '[{}] Empty'},
+
+    # ── 버리기 확인 대화상자 ──────────────────────────────────────────
+    'discard_confirm': {'ko': '버리시겠습니까?', 'en': 'Discard item?'},
+    'discard_yes':     {'ko': '예  [Y]',        'en': 'Yes  [Y]'},
+    'discard_no':      {'ko': '아니오  [N]',    'en': 'No  [N]'},
+
+    # ── 스킬 스탯 포맷 ────────────────────────────────────────────────
+    'fmt_tiles':     {'ko': '{}칸 전진  CD {}s',            'en': '{} tiles fwd  CD {}s'},
+    'fmt_radius_atk':{'ko': '반경 {}  공격력 {}%  CD {}s',  'en': 'Range {}  ATK {}%  CD {}s'},
+    'fmt_mul_crit':  {'ko': '{}배 강타  치명 {}%  CD {}s',  'en': '{}x Strike  Crit {}%  CD {}s'},
 }
 
 

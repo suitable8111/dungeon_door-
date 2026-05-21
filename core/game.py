@@ -919,7 +919,7 @@ class Game:
                 break
         inv.pop(idx)
         self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
-        self.messages.append((f"[{item.name}] 버림", 'info'))
+        self.messages.append((t('item_discard', item.name), 'info'))
         self.audio.play('use_item')
 
     def _start_discard_confirm(self, idx):
@@ -1223,7 +1223,7 @@ class Game:
     def _player_attack(self, enemy):
         # 두려움: 명중률 40%
         if getattr(self.player, 'feared_ms', 0) > 0 and random.random() > 0.4:
-            self.messages.append(("두려움에 공격이 빗나갔습니다!", 'bad'))
+            self.messages.append((t('fear_miss'), 'bad'))
             return
         crit = random.random() < 0.1
         dmg  = max(1, self.player.total_attack - enemy.defense + random.randint(0, 3))
@@ -1251,7 +1251,7 @@ class Game:
         if self.player.gain_xp(enemy.xp_value):
             self._skill_points += 3
             self.messages.append((t('levelup', self.player.level), 'good'))
-            self.messages.append((f'스킬 포인트 +3 (보유: {self._skill_points})', 'info'))
+            self.messages.append((t('sp_gained', self._skill_points), 'info'))
             self.audio.play('levelup')
             for cid, cdef in COMBO_SKILL_DEFS.items():
                 slv_req = cdef.get('skill_level_req', 1)
@@ -1481,7 +1481,7 @@ class Game:
         self.skills.trigger(slot)
         self.audio.play('skill_heal')
         self.messages.append((t('skill_heal', amt), 'good'))
-        self.messages.append((f"방어력 +{stats['def_bonus']} ({stats['def_ms']//1000}초)", 'good'))
+        self.messages.append((t('skill_regen_def', stats['def_bonus'], stats['def_ms']//1000), 'good'))
         return True
 
     def _exec_judgment(self, slot):
@@ -1547,7 +1547,7 @@ class Game:
         self._gain_skill_xp('shadow_step')
         self.skills.trigger(slot)
         self.audio.play('skill_dash')
-        self.messages.append(('그림자 속으로 사라졌다!', 'warn'))
+        self.messages.append((t('skill_shadow_step'), 'warn'))
         return True
 
     def _exec_iron_shell(self, slot):
@@ -1560,7 +1560,7 @@ class Game:
         self._gain_skill_xp('iron_shell')
         self.skills.trigger(slot)
         self.audio.play('skill_heal')
-        self.messages.append((f'철갑 방벽! 피해 {int(stats["reduce"]*100)}% 감소 ({stats["duration_ms"]//1000}초)', 'good'))
+        self.messages.append((t('skill_iron_shell', int(stats["reduce"]*100), stats["duration_ms"]//1000), 'good'))
         return True
 
     def _exec_flame_strike(self, slot):
@@ -1590,7 +1590,7 @@ class Game:
         self._gain_skill_xp('flame_strike', max(1, hits))
         self.skills.trigger(slot)
         self.audio.play('skill_dash')
-        self.messages.append((f'화염 강타! {hits}명 적중' if hits else '화염이 허공을 갈랐다!',
+        self.messages.append((t('skill_flame_hit', hits) if hits else t('skill_flame_miss'),
                                'warn' if hits else 'info'))
         return True
 
@@ -1621,7 +1621,7 @@ class Game:
         self._gain_skill_xp('life_steal', max(1, total_dmg // 5 + 1))
         self.skills.trigger(slot)
         self.audio.play('skill_whirl')
-        self.messages.append((f'생명 흡수! {heal} HP 회복' if heal else '생명 흡수 (미적중)',
+        self.messages.append((t('skill_life_hit', heal) if heal else t('skill_life_miss'),
                                'good' if heal else 'info'))
         return True
 
@@ -1635,7 +1635,7 @@ class Game:
         self._gain_skill_xp('war_cry')
         self.skills.trigger(slot)
         self.audio.play('skill_heal')
-        self.messages.append((f'전투 함성! 공격력 +{int(stats["atk_mul"]*100)}% ({stats["duration_ms"]//1000}초)', 'good'))
+        self.messages.append((t('skill_war_cry', int(stats["atk_mul"]*100), stats["duration_ms"]//1000), 'good'))
         return True
 
     def _exec_dark_pulse(self, slot):
@@ -1675,7 +1675,7 @@ class Game:
         self._gain_skill_xp('dark_pulse', max(1, hits))
         self.skills.trigger(slot)
         self.audio.play('skill_whirl')
-        self.messages.append((f'암흑 파동! {hits}명 적중' if hits else '파동이 허공에 사라졌다!',
+        self.messages.append((t('skill_dark_hit', hits) if hits else t('skill_dark_miss'),
                                'warn' if hits else 'info'))
         return True
 
@@ -1725,11 +1725,11 @@ class Game:
         lvl = self._skill_levels.get(skill_id, 1)
         sname = ALL_SKILL_DEFS.get(skill_id, {}).get('name', skill_id)
         if lvl >= SKILL_MAX_LEVEL:
-            self.messages.append((f'{sname} 스킬이 이미 최대 레벨입니다.', 'warn'))
+            self.messages.append((t('skill_upg_maxed', sname), 'warn'))
             return
         cost = SKILL_SP_COST.get(skill_id, [5, 10])[lvl - 1]
         if self._skill_points < cost:
-            self.messages.append((f'SP가 부족합니다. (필요: {cost}, 보유: {self._skill_points})', 'warn'))
+            self.messages.append((t('skill_upg_nosp', cost, self._skill_points), 'warn'))
             return
         self._skill_points -= cost
         self._skill_levels[skill_id] = lvl + 1
@@ -1745,41 +1745,40 @@ class Game:
             skill_id, {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0})
         cur = enc.get(etype, 0)
         if cur >= ENCHANT_MAX_LEVEL:
-            self.messages.append(('이미 최대 레벨입니다.', 'warn'))
+            self.messages.append((t('enc_max'), 'warn'))
             return
         edef = ENCHANT_DEFS.get(etype, {})
         sp_costs = edef.get('sp_cost', [5, 10, 20])
         cost = sp_costs[cur] if cur < len(sp_costs) else 20
         if self._skill_points < cost:
-            self.messages.append((f'SP 부족 (필요: {cost}, 보유: {self._skill_points})', 'warn'))
+            self.messages.append((t('enc_no_sp', cost, self._skill_points), 'warn'))
             return
         self._skill_points -= cost
         enc[etype] = cur + 1
         self._apply_skill_level_cds()
         sname = ALL_SKILL_DEFS.get(skill_id, {}).get('name', skill_id)
-        ename = edef.get('name_ko', etype)
-        self.messages.append((f'[{sname}] {ename} Lv.{cur + 1}!', 'good'))
+        ename = t(f'enc_type_{etype}')
+        self.messages.append((t('enc_done', sname, ename, cur + 1), 'good'))
         self.audio.play('levelup')
 
     def _try_arcane_art(self) -> bool:
         """오의 연계 시도 — SP가 임계치 이상이고 오의 스킬이 사용된 직후여야 함."""
         skill_id = self._arcane_last_skill
         if not skill_id:
-            self.messages.append(('오의: 먼저 오의 스킬을 사용하세요.', 'warn'))
+            self.messages.append((t('arcane_no_skill'), 'warn'))
             return False
         stats = self._get_skill_final_stats(skill_id)
         if not stats['arcane_eligible']:
-            self.messages.append(('오의: 오의 인챈트가 해금되지 않았습니다.', 'warn'))
+            self.messages.append((t('arcane_no_enc'), 'warn'))
             return False
         threshold = stats['sp_threshold']
         if self.player.arcane_sp < threshold:
-            self.messages.append((
-                f'오의: SP 부족 ({self.player.arcane_sp}/{threshold})', 'warn'))
+            self.messages.append((t('arcane_no_sp', self.player.arcane_sp, threshold), 'warn'))
             return False
         self.player.arcane_sp = 0
         self._arcane_window_ms = 0
         self._arcane_last_skill = None
-        self.messages.append(('★ 오의 발동!', 'warn'))
+        self.messages.append((t('arcane_trigger'), 'warn'))
         return self._skill_ultimate_slash()
 
 
@@ -2002,7 +2001,7 @@ class Game:
                     sid  = self._skillbook_equip_skill_id
                     self._equipped_skills[slot] = sid
                     sname = ALL_SKILL_DEFS[sid]['name']
-                    self.messages.append((f'[{slot}] 슬롯에 [{sname}] 장착!', 'good'))
+                    self.messages.append((t('skill_equip_slot', slot, sname), 'good'))
                     self._apply_skill_level_cds()
                     _exit_equip()
                 elif key == pygame.K_ESCAPE:
@@ -2020,7 +2019,7 @@ class Game:
                         if target:
                             self._equipped_skills[target] = chosen
                             sname = ALL_SKILL_DEFS[chosen]['name']
-                            self.messages.append((f'[{target}] 슬롯에 [{sname}] 장착!', 'good'))
+                            self.messages.append((t('skill_equip_slot', target, sname), 'good'))
                             self._apply_skill_level_cds()
                     _exit_equip()
                 elif key == pygame.K_ESCAPE:
@@ -2155,7 +2154,7 @@ class Game:
         data['key'] = key
         enemy = Enemy(sx, sy, data)
         self.dungeon.enemies.append(enemy)
-        self.messages.append(('몬스터가 나타났다!', 'warn'))
+        self.messages.append((t('monster_appear'), 'warn'))
 
     def _remove_fortify_buff(self):
         if self._fortify_def_bonus or self._fortify_atk_bonus:
@@ -2176,7 +2175,7 @@ class Game:
             return False
         if self.player.level < udef['level_req']:
             self.messages.append((
-                f"{udef['name']}: Lv.{udef['level_req']} 필요 (현재 Lv.{self.player.level})", 'warn'))
+                t('ult_no_level', udef['name'], udef['level_req'], self.player.level), 'warn'))
             return False
         if not self.skills.ready(key):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
@@ -2208,9 +2207,9 @@ class Game:
         self.skills.trigger('R')
         self.audio.play('skill_whirl')
         if hits:
-            self.messages.append((f"⚔ 던전 브레이커! {hits}마리 초토화!", 'bad'))
+            self.messages.append((t('ult_breaker_hit', hits), 'bad'))
         else:
-            self.messages.append(("⚔ 던전 브레이커! 적 없음", 'info'))
+            self.messages.append((t('ult_breaker_miss'), 'info'))
         return True
 
     def _skill_ultimate_slash(self):
@@ -2233,7 +2232,7 @@ class Game:
         self._start_shake(10, 600)
         self.skills.trigger('Ctrl_R')
         self.audio.play('crit')
-        msg = f"真 일도양단! 무적 2초 + {hits}마리 섬멸!" if hits else "真 일도양단! (적 없음)"
+        msg = t('ult_slash_hit', hits) if hits else t('ult_slash_miss')
         self.messages.append((msg, 'warn'))
         return True
 

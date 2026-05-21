@@ -45,20 +45,20 @@ class Item:
             return t('item_all', self.name, self.value, self.value)
         return t('item_use', self.name)
 
-    _SLOT_NAMES = {
-        'weapon': '무기', 'body': '갑옷', 'head': '투구',
-        'off_hand': '보조무기', 'accessory': '장신구', 'feet': '신발',
+    _SLOT_T = {
+        'weapon': 'slot_wpn_s', 'body': 'slot_body_s', 'head': 'slot_head_s',
+        'off_hand': 'slot_off_s', 'accessory': 'slot_acc_s', 'feet': 'slot_feet_s',
     }
 
     def _equip(self, player, slot):
-        slot_name = self._SLOT_NAMES.get(slot, slot)
+        slot_name = t(self._SLOT_T.get(slot, slot))
 
         # 이미 장착 중이면 해제
         if player.equipment[slot] is self:
             player.equipment[slot] = None
             if len(player.inventory) < player.max_inventory:
                 player.inventory.append(self)
-            return f"{self.name} {slot_name} 해제"
+            return t('item_unequip', self.name, slot_name)
 
         # 이전 장비 → 인벤토리 반환
         prev = player.equipment[slot]
@@ -72,7 +72,7 @@ class Item:
         player.equipment[slot] = self
 
         enh = f" [+{self.enhance_level}]" if self.enhance_level > 0 else ""
-        return f"{self.name}{enh} {slot_name} 장착! (+{self.value})"
+        return t('item_equip_msg', self.name, enh, slot_name, self.value)
 
     def unequip(self, player) -> str:
         slot = self.equip_slot
@@ -81,5 +81,5 @@ class Item:
         player.equipment[slot] = None
         if len(player.inventory) < player.max_inventory:
             player.inventory.append(self)
-            return f"{self.name} 해제 → 인벤토리"
-        return f"{self.name} 해제 (인벤토리 가득 참)"
+            return t('item_unequip_inv', self.name)
+        return t('item_unequip_full', self.name)
