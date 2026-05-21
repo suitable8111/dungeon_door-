@@ -445,15 +445,10 @@ def make_main(rng):
                       [(235,185,60),(180,140,40),(255,220,100),
                        (220,220,255),(150,185,255),(200,100,215)])
 
-    # 로고 (좌상단)
+    # 로고 (좌상단) — 타이틀만 허용 (Steam 규정)
     f1, f2 = px(54), px(72)
     txt_glow(surf, "DUNGEON", f1, GOLD_L, GOLD_D, 44, 28)
     txt_glow(surf, "DOOR",    f2, GOLD,   GOLD_D, 44, 28 + f1.get_height() + 10)
-
-    # 부제
-    fs = ko(20)
-    txt_outline(surf, "로그라이크 던전 탐험", fs, (195, 200, 235), (8, 6, 18),
-                44, 28 + f1.get_height() + 10 + f2.get_height() + 14)
 
     draw_vignette(surf, W, H, 225, 0.36)
     return surf
