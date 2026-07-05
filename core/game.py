@@ -124,6 +124,7 @@ def draw_hp_bar(s, x, y, hp, max_hp):
         _r(s,(200+int(55*(1-ratio)),int(210*ratio),40),x+2,y+2,max(1,int(bw*ratio)),4)
 
 from entities.enemy_sprites import ENEMY_SPRITE_FNS as _SPRITE_FN, draw_generic
+from entities.enemy import ELITE_AFFIXES
 from entities.player_renderer import draw_player_layered
 from core.skill_effect import SkillEffect
 from map.burning_stage import (generate_arena, spawn_wave,
@@ -217,6 +218,11 @@ class Game:
         # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
         self._hitstop_ms: float = 0.0
         self._hurt_flash_ms: float = 0.0
+
+        # 처치 연쇄 (4초 윈도우)
+        self._combo_count: int = 0
+        self._combo_ms: float = 0.0
+        self._combo_font = None  # 첫 렌더 시 lazy 생성
 
         # 인벤토리 / 장비 화면 선택 인덱스
         self._inv_sel   = 0
@@ -410,6 +416,10 @@ class Game:
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
+                if self._combo_ms > 0:
+                    self._combo_ms = max(0.0, self._combo_ms - world_dt)
+                    if self._combo_ms == 0:
+                        self._combo_count = 0
                 self._update_enemies(world_dt)
             self._update_bgm()
             self._render()
@@ -520,6 +530,8 @@ class Game:
         }
         self._arcane_window_ms  = 0
         self._arcane_last_skill = None
+        self._combo_count = 0
+        self._combo_ms    = 0.0
         self._load_floor(is_new_game=True)
         self.state = 'playing'
 
@@ -1079,7 +1091,9 @@ class Game:
         from entities.item import Item
 
         is_boss = getattr(enemy, 'is_boss', False)
-        if not is_boss and random.random() >= 0.28:
+        # 엘리트는 70% 드랍 (일반 28%) — 위험을 감수할 이유
+        drop_chance = 0.70 if getattr(enemy, 'elite', None) else 0.28
+        if not is_boss and random.random() >= drop_chance:
             return
 
         pool = drop_pool(self.floor)
@@ -1268,6 +1282,27 @@ class Game:
         self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
         self._hitstop_ms = max(self._hitstop_ms, 60)
         self._start_shake(5 if enemy.is_boss else 2, 160)
+        # 폭발 엘리트: 사망 시 1칸 폭발 — 인접 처치의 리스크
+        if enemy.elite == 'volatile':
+            self.animator.particles.emit_fireball_hit(enemy.x, enemy.y)
+            self._start_shake(5, 220)
+            if abs(self.player.x - enemy.x) + abs(self.player.y - enemy.y) <= 1:
+                dmg = roll_damage(enemy.attack, self.player.total_defense, 1.2)
+                self.player.take_damage(dmg)
+                self._hurt_flash_ms = 260
+                self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255,120,40)))
+                self.messages.append((t('volatile_boom', enemy.name, dmg), 'bad'))
+            else:
+                self.messages.append((t('volatile_boom_safe', enemy.name), 'warn'))
+        # 처치 연쇄: 4초 안에 이어 죽이면 오의 SP 보너스
+        self._combo_count += 1
+        self._combo_ms = 4000
+        if self._combo_count >= 2:
+            bonus = min(self._combo_count, 8)
+            self.player.arcane_sp = min(self.player.arcane_sp_max,
+                                        self.player.arcane_sp + bonus)
+            if self._combo_count % 5 == 0:
+                self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
         if gold:
             self.player.gold += gold
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
@@ -2175,11 +2210,16 @@ class Game:
         key  = _rnd.choice(pool)
         if key not in self._enemy_data:
             return
+        from map.generator import maybe_make_elite
         data = _scale_enemy(self._enemy_data[key], self.floor)
         data['key'] = key
+        data = maybe_make_elite(data, self.floor)
         enemy = Enemy(sx, sy, data)
         self.dungeon.enemies.append(enemy)
-        self.messages.append((t('monster_appear'), 'warn'))
+        if enemy.elite:
+            self.messages.append((t('elite_appear', enemy.name), 'warn'))
+        else:
+            self.messages.append((t('monster_appear'), 'warn'))
 
     def _remove_fortify_buff(self):
         if self._fortify_def_bonus or self._fortify_atk_bonus:
@@ -2585,6 +2625,20 @@ class Game:
 
         self.animator.draw(self._game_surf, cx, cy)
 
+        # 처치 연쇄 카운터 (상단 중앙, 직후 팝 + 잔여 시간 페이드)
+        if self._combo_count >= 2 and self._combo_ms > 0:
+            if self._combo_font is None:
+                from core.animator import _load_font
+                self._combo_font = _load_font(24)
+            alpha = min(255, int(255 * self._combo_ms / 1500))
+            txt = self._combo_font.render(f"COMBO x{self._combo_count}", True,
+                                          (255, 225, 80))
+            if self._combo_ms > 3800:  # 처치 직후 팝
+                w, h = txt.get_size()
+                txt = pygame.transform.scale(txt, (int(w * 1.3), int(h * 1.3)))
+            txt.set_alpha(alpha)
+            self._game_surf.blit(txt, ((GAME_W - txt.get_width()) // 2, 34))
+
         # 피격 붉은 비네트 (가장자리 테두리, 잔여 시간에 따라 옅어짐)
         if self._hurt_flash_ms > 0:
             a = max(0, int(110 * self._hurt_flash_ms / 260))
@@ -2879,6 +2933,13 @@ class Game:
         if telegraphing:
             x += random.randint(-1, 1)
             y += random.randint(-1, 1)
+        # 엘리트 오라: 발밑에 어픽스 색 링이 맥동
+        if enemy.elite:
+            aura = ELITE_AFFIXES[enemy.elite]['aura']
+            pulse = int(2 * math.sin(pygame.time.get_ticks() * 0.008))
+            pygame.draw.ellipse(self._game_surf, aura,
+                                (x + 3 - pulse, y + ts - 9 - pulse // 2,
+                                 ts - 6 + pulse * 2, 8 + pulse), 2)
         if enemy.is_boss:
             tmp = pygame.Surface((ts, ts))
             tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)

@@ -2,17 +2,42 @@ import random
 from entities.entity import Entity
 from core.combat import roll_damage
 from core.constants import TILE_SIZE
-from core.lang import t
+from core.lang import t, get_lang
+
+
+# ── 엘리트 변종 어픽스 ──────────────────────────────────────────────────
+# 스탯 배수 + 오라 색. 특수 기믹: vampiric(가한 피해 50% 회복),
+# volatile(사망 시 1칸 폭발 — game._on_enemy_killed에서 처리)
+ELITE_AFFIXES = {
+    'swift':    {'hp': 1.2, 'atk': 1.0, 'df': 1.0, 'df_add': 0,
+                 'move': 0.65, 'atkspd': 0.80, 'aura': ( 80, 220, 255)},
+    'ironhide': {'hp': 1.6, 'atk': 1.0, 'df': 2.0, 'df_add': 2,
+                 'move': 1.25, 'atkspd': 1.00, 'aura': (205, 210, 220)},
+    'berserk':  {'hp': 1.3, 'atk': 1.5, 'df': 1.0, 'df_add': 0,
+                 'move': 1.00, 'atkspd': 0.85, 'aura': (255,  80,  60)},
+    'vampiric': {'hp': 1.4, 'atk': 1.1, 'df': 1.0, 'df_add': 0,
+                 'move': 1.00, 'atkspd': 1.00, 'aura': (190,  70, 220)},
+    'volatile': {'hp': 1.1, 'atk': 1.2, 'df': 1.0, 'df_add': 0,
+                 'move': 0.90, 'atkspd': 1.00, 'aura': (255, 160,  40)},
+}
+ELITE_XP_MUL   = 2.5
+ELITE_GOLD_MUL = 3
 
 
 class Enemy(Entity):
     def __init__(self, x, y, data):
+        # 언어별 이름 해석 (+ 엘리트 접두어)
+        name = data.get('name_en') or data['name'] if get_lang() == 'en' else data['name']
+        elite = data.get('elite')
+        if elite in ELITE_AFFIXES:
+            name = t('elite_' + elite, name)
         super().__init__(
             x, y,
-            data['name'],
+            name,
             data['hp'], data['hp'],
             data['attack'], data['defense'],
         )
+        self.elite        = elite if elite in ELITE_AFFIXES else None
         self.key          = data.get('key', 'rat')
         self.color        = tuple(data['color'])
         self.xp_value     = data['xp']
@@ -276,6 +301,9 @@ class Enemy(Entity):
         dmg = roll_damage(self.attack, player.total_defense)
         player.take_damage(dmg)
         messages.append((t('enemy_atk', self.name, dmg), 'bad'))
+        # 흡혈 엘리트: 가한 피해의 50% 회복
+        if self.elite == 'vampiric':
+            self.heal(max(1, dmg // 2))
 
     def _move_toward(self, tx, ty, dungeon, player):
         dx, dy = tx - self.x, ty - self.y

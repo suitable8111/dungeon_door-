@@ -362,6 +362,19 @@ _T: dict[str, dict[str, str]] = {
     'boss_slow':       {'ko': '{}이(가) 슬로우를 걸었습니다! 이동속도 감소',    'en': '{} slowed you! Move speed down'},
     'boss_fear':       {'ko': '{}이(가) 두려움을 심었습니다! 명중률 40%로 저하','en': '{} instilled fear! Hit rate 40%'},
 
+    # ── 엘리트 변종 ───────────────────────────────────────────────────
+    'elite_swift':    {'ko': '신속한 {}',   'en': 'Swift {}'},
+    'elite_ironhide': {'ko': '강철의 {}',   'en': 'Ironhide {}'},
+    'elite_berserk':  {'ko': '광폭한 {}',   'en': 'Berserk {}'},
+    'elite_vampiric': {'ko': '흡혈의 {}',   'en': 'Vampiric {}'},
+    'elite_volatile': {'ko': '폭발하는 {}', 'en': 'Volatile {}'},
+    'elite_appear':   {'ko': '⚡ 엘리트 출현! [{}]', 'en': '⚡ Elite appeared! [{}]'},
+    'volatile_boom':      {'ko': '💥 {}이(가) 폭발했다! {} 피해!', 'en': '💥 {} exploded! {} damage!'},
+    'volatile_boom_safe': {'ko': '💥 {}이(가) 폭발했다!',          'en': '💥 {} exploded!'},
+
+    # ── 처치 연쇄 ─────────────────────────────────────────────────────
+    'combo_kill': {'ko': '⚡ 처치 연쇄 x{}!  (+{} SP)', 'en': '⚡ Kill combo x{}!  (+{} SP)'},
+
     # ── 상태이상 배지 ───────────────────────────────────────────────────
     'debuff_curse': {'ko': '저주',   'en': 'Curse'},
     'debuff_slow':  {'ko': '슬로우', 'en': 'Slow'},

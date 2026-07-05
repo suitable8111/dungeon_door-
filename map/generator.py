@@ -150,6 +150,25 @@ def _scale_enemy(data, floor_level):
     return d
 
 
+def maybe_make_elite(d, floor_level, force=None):
+    """4층부터 확률적으로 적을 엘리트 변종으로 승격 (스케일된 dict에 적용)."""
+    from entities.enemy import ELITE_AFFIXES, ELITE_XP_MUL, ELITE_GOLD_MUL
+    chance = min(0.15, 0.05 + floor_level * 0.002)
+    if force is None and (floor_level < 4 or random.random() >= chance):
+        return d
+    affix = force if force in ELITE_AFFIXES else random.choice(list(ELITE_AFFIXES))
+    a = ELITE_AFFIXES[affix]
+    d['elite']     = affix
+    d['hp']        = max(1, int(d['hp'] * a['hp']))
+    d['attack']    = max(1, int(d['attack'] * a['atk']))
+    d['defense']   = int(d.get('defense', 0) * a['df']) + a['df_add']
+    d['move_ms']   = max(200, int(d.get('move_ms', 900) * a['move']))
+    d['attack_ms'] = max(400, int(d.get('attack_ms', 1500) * a['atkspd']))
+    d['xp']        = int(d['xp'] * ELITE_XP_MUL)
+    d['gold_drop'] = int(d.get('gold_drop', 0) * ELITE_GOLD_MUL)
+    return d
+
+
 def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
     from entities.enemy import Enemy
 
@@ -176,6 +195,7 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
                 key = random.choice(enemy_pool)
                 data = _scale_enemy(enemy_data[key], floor_level)
                 data['key'] = key
+                data = maybe_make_elite(data, floor_level)
                 dungeon.enemies.append(Enemy(ex, ey, data))
 
     if boss_room is not None:
