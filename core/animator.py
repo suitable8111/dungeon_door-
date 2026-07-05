@@ -175,6 +175,37 @@ class HitFlashAnim(_Anim):
             surf.blit(num_surf, (nx, float_y))
 
 
+class DeathAnim(_Anim):
+    """적 사망 잔상 — 스프라이트가 주저앉으며 페이드아웃."""
+    _CKEY = (1, 2, 3)
+
+    def __init__(self, x, y, draw_fn, color, is_boss=False):
+        super().__init__(320)
+        self.x, self.y = x, y
+        self.draw_fn = draw_fn
+        self.color = color
+        self.is_boss = is_boss
+
+    def draw(self, surf, cam_x, cam_y, font):
+        ts = TILE_SIZE
+        t = self.t
+        tmp = pygame.Surface((ts, ts))
+        tmp.fill(self._CKEY); tmp.set_colorkey(self._CKEY)
+        # 시체는 색이 바래며 어두워진다
+        fade = tuple(max(0, int(c * (1 - t * 0.6))) for c in self.color)
+        self.draw_fn(tmp, 0, 0, fade, pygame.time.get_ticks())
+        # 세로로 주저앉는 스쿼시
+        scale = 2 if self.is_boss else 1
+        w = int(ts * scale * (1 + t * 0.25))
+        h = max(2, int(ts * scale * (1 - _smooth(t) * 0.8)))
+        squashed = pygame.transform.scale(tmp, (w, h))
+        squashed.set_colorkey(self._CKEY)
+        squashed.set_alpha(int(230 * (1 - t)))
+        sx = (self.x - cam_x) * ts + (ts - w) // 2
+        sy = (self.y - cam_y) * ts + (ts * scale - h) - (ts // 2 if self.is_boss else 0)
+        surf.blit(squashed, (sx, sy))
+
+
 class BoltAnim(_Anim):
     """원거리 투사체 (마법 볼트 등)."""
     def __init__(self, sx, sy, tx, ty, color=(100, 180, 255)):

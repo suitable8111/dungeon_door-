@@ -27,6 +27,8 @@ class Enemy(Entity):
         self.boss_skills  = data.get('boss_skills', [])
         self._skill_cd_ms = data.get('skill_cd_ms', 5000)
         self._skill_t     = random.uniform(3000, 6000)
+        # 예고 중인 보스 스킬: {'skill', 'ms', 'tx', 'ty'} — 위험 구역 표시용
+        self._pending_skill = None
 
         self.staggered_ms = 0
         self.hurt_ms      = 0     # 피격 흰 플래시 잔여 시간
@@ -79,6 +81,16 @@ class Enemy(Entity):
             self.windup_ms = 0
             return None
 
+        # 보스 스킬 예고(채널링): 제자리에서 시전 — 피격으로 끊기지 않는다
+        if self._pending_skill is not None:
+            self._pending_skill['ms'] -= dt_ms
+            if self._pending_skill['ms'] <= 0:
+                pending = self._pending_skill
+                self._pending_skill = None
+                return self._exec_boss_skill(pending['skill'], dungeon,
+                                             player, messages, pending)
+            return None
+
         if self.staggered_ms > 0:
             self.staggered_ms = max(0, self.staggered_ms - dt_ms)
             return None
@@ -91,8 +103,15 @@ class Enemy(Entity):
         if self.is_boss and self.boss_skills:
             self._skill_t -= dt_ms
             if self._skill_t <= 0:
-                boss_result = self._do_boss_skill(dungeon, player, messages)
                 self._skill_t = self._skill_cd_ms + random.randint(-1000, 1500)
+                skill = random.choice(self.boss_skills)
+                if skill in ('charge', 'whirlwind', 'death_nova'):
+                    # 공격 스킬은 예고 후 발동 — 위험 구역을 보고 피할 수 있다
+                    self._pending_skill = {'skill': skill, 'ms': 750,
+                                           'tx': player.x, 'ty': player.y}
+                    messages.append((t('boss_prep_' + skill, self.name), 'warn'))
+                    return None
+                boss_result = self._exec_boss_skill(skill, dungeon, player, messages, None)
 
         in_range = dist <= self.attack_range
         has_los  = (self.attack_range <= 1) or dungeon._has_los(self.x, self.y, player.x, player.y)
@@ -130,10 +149,37 @@ class Enemy(Entity):
         return boss_result
 
     # ------------------------------------------------------------------ #
-    def _do_boss_skill(self, dungeon, player, messages):
-        skill = random.choice(self.boss_skills)
+    def telegraph_tiles(self, dungeon):
+        """예고 중인 스킬의 위험 구역 타일 목록 (렌더링용)."""
+        if not self._pending_skill:
+            return []
+        sk = self._pending_skill['skill']
+        if sk == 'charge':
+            tiles = []
+            sx, sy = self.x, self.y
+            tx, ty = self._pending_skill['tx'], self._pending_skill['ty']
+            for _ in range(3):
+                dx, dy = tx - sx, ty - sy
+                if dx == 0 and dy == 0:
+                    break
+                step_x = (1 if dx > 0 else -1) if abs(dx) >= abs(dy) else 0
+                step_y = (1 if dy > 0 else -1) if abs(dy) > abs(dx) else 0
+                sx, sy = sx + step_x, sy + step_y
+                if not dungeon.is_walkable(sx, sy):
+                    break
+                tiles.append((sx, sy))
+            return tiles
+        radius = {'whirlwind': 3, 'death_nova': 5}.get(sk, 0)
+        return [(self.x + dx, self.y + dy)
+                for dx in range(-radius, radius + 1)
+                for dy in range(-radius, radius + 1)
+                if abs(dx) + abs(dy) <= radius
+                and dungeon.is_walkable(self.x + dx, self.y + dy)]
+
+    def _exec_boss_skill(self, skill, dungeon, player, messages, pending):
         if skill == 'charge':
-            return self._skill_charge(dungeon, player, messages)
+            target = (pending['tx'], pending['ty']) if pending else None
+            return self._skill_charge(dungeon, player, messages, target)
         elif skill == 'whirlwind':
             return self._skill_whirlwind(player, messages)
         elif skill == 'death_nova':
@@ -148,8 +194,9 @@ class Enemy(Entity):
             return self._skill_fear(player, messages)
         return None
 
-    def _skill_charge(self, dungeon, player, messages):
-        px, py = player.x, player.y
+    def _skill_charge(self, dungeon, player, messages, target=None):
+        # 예고 시점에 고정된 목표 지점으로 돌진 — 예고를 보고 비키면 피한다
+        px, py = target if target else (player.x, player.y)
         for _ in range(2):
             dx, dy = px - self.x, py - self.y
             if abs(dx) + abs(dy) <= 1:
@@ -159,11 +206,12 @@ class Enemy(Entity):
             nx, ny = self.x + step_x, self.y + step_y
             if (dungeon.is_walkable(nx, ny) and
                     not dungeon.get_enemy_at(nx, ny) and
-                    (nx, ny) != (px, py)):
+                    (nx, ny) != (player.x, player.y)):
                 ox, oy = self.x, self.y
                 self.x, self.y = nx, ny
                 self._slide_from(ox, oy)
-        if abs(px - self.x) + abs(py - self.y) <= 1:
+        # 명중 판정은 실제 플레이어 위치 기준
+        if abs(player.x - self.x) + abs(player.y - self.y) <= 1:
             if random.random() < player.total_evasion / 100:
                 messages.append((t('boss_charge_ev', self.name), 'good'))
             else:

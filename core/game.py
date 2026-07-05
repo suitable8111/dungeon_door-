@@ -8,7 +8,8 @@ from core.constants import *
 from core.camera import Camera
 from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
-                            AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim)
+                            AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
+                            DeathAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
@@ -1260,7 +1261,10 @@ class Game:
     def _on_enemy_killed(self, enemy):
         gold = enemy.gold_drop
         self._run_kills += 1
-        # 사망 연출: 적 색 파편 버스트 + 히트스톱 + 흔들림
+        # 사망 연출: 시체 잔상 + 적 색 파편 버스트 + 히트스톱 + 흔들림
+        self.animator.add(DeathAnim(enemy.x, enemy.y,
+                                    _SPRITE_FN.get(enemy.key, draw_generic),
+                                    enemy.color, enemy.is_boss))
         self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
         self._hitstop_ms = max(self._hitstop_ms, 60)
         self._start_shake(5 if enemy.is_boss else 2, 160)
@@ -2544,6 +2548,19 @@ class Game:
             if self.dungeon.tiles[item.y][item.x].visible:
                 self._draw_item(item, (item.x-cx)*TILE_SIZE, (item.y-cy)*TILE_SIZE)
 
+        # 보스 스킬 위험 구역 (예고 중 붉게 점멸)
+        for enemy in self.dungeon.enemies:
+            if not (enemy.is_alive() and enemy._pending_skill):
+                continue
+            pulse = 70 + int(45 * math.sin(pygame.time.get_ticks() * 0.018))
+            ov = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            ov.fill((255, 55, 35, pulse))
+            pygame.draw.rect(ov, (255, 90, 60, min(255, pulse + 70)),
+                             (0, 0, TILE_SIZE, TILE_SIZE), 2)
+            for wx, wy in enemy.telegraph_tiles(self.dungeon):
+                if self.dungeon.in_bounds(wx, wy) and self.dungeon.tiles[wy][wx].visible:
+                    self._game_surf.blit(ov, ((wx-cx)*TILE_SIZE, (wy-cy)*TILE_SIZE))
+
         for enemy in self.dungeon.enemies:
             if enemy.is_alive() and self.dungeon.tiles[enemy.y][enemy.x].visible:
                 self._draw_enemy(enemy,
@@ -2858,7 +2875,8 @@ class Game:
         ts = TILE_SIZE
         # 피격 순간 흰 플래시 / 공격 전조 중 미세 떨림
         col = (255, 255, 255) if enemy.hurt_ms > 0 else enemy.color
-        if enemy.windup_ms > 0:
+        telegraphing = enemy.windup_ms > 0 or enemy._pending_skill is not None
+        if telegraphing:
             x += random.randint(-1, 1)
             y += random.randint(-1, 1)
         if enemy.is_boss:
@@ -2880,7 +2898,7 @@ class Game:
             fn(self._game_surf, x, y, col, pygame.time.get_ticks())
             draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
         # 공격 전조 '!' 마커 (회피 타이밍 안내)
-        if enemy.windup_ms > 0:
+        if telegraphing:
             mx = x + ts // 2
             my = y - (ts // 2 + 4 if enemy.is_boss else 2)
             _r(self._game_surf, (255, 220, 60), mx - 1, my - 9, 3, 6)

@@ -204,8 +204,9 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
 
 def _make_shop_items(floor_level, item_data):
     from entities.item import Item
-    tier = 1 + (floor_level - 1) // 50
-    mul  = 1 + (tier - 1) * 0.4
+    # 골드 수입 스케일(1 + (f-1)^0.65 * 0.12)보다 완만한 가격 상승(0.07) —
+    # 층이 깊어질수록 상점 이용이 상대적으로 수월해져 진행 보상이 된다
+    mul = 1.0 + (floor_level - 1) ** 0.65 * 0.07
     prices = {
         'health_potion':       int(15  * mul),
         'large_health_potion': int(35  * mul),
