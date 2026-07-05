@@ -161,8 +161,12 @@ class Player(Entity):
 
     def _level_up(self):
         self.level += 1
-        self.xp_next = int(self.xp_next * 1.6)
-        self.max_hp += 8
+        # 소프트캡 곡선: Lv20까지는 ×1.33, 이후 ×1.15 —
+        # 몬스터 XP는 층수 다항 스케일이라 지수 곡선을 유지하면
+        # 후반 레벨업이 완전히 멈춰 버린다
+        rate = 1.33 if self.level < 20 else 1.15
+        self.xp_next = int(self.xp_next * rate + 10)
+        self.max_hp += 8 + self.level // 3
         self.hp = self.max_hp
         self.attack += 1
         if self.level % 2 == 0:

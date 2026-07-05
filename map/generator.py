@@ -134,14 +134,19 @@ def _v_tunnel(dungeon, y1, y2, x):
 
 
 def _scale_enemy(data, floor_level):
-    """층수에 따라 적 능력치를 스케일링한 복사본 반환."""
+    """층수에 따라 적 능력치를 스케일링한 복사본 반환.
+
+    방어력은 완만하게(0.55배율) 올린다 — 뺄셈 데미지 공식에서
+    방어력이 HP와 같은 속도로 오르면 깊은 층에서 '1딜 벽'이 생긴다.
+    """
     scale = 1.0 + (floor_level - 1) ** 0.65 * 0.12
+    def_scale = 1.0 + (scale - 1.0) * 0.55
     d = dict(data)
-    d['hp']     = max(1, int(d['hp']     * scale))
-    d['attack'] = max(1, int(d['attack'] * scale))
-    d['defense']= max(0, int(d.get('defense', 0) * scale))
-    d['xp']     = max(1, int(d['xp']     * scale))
-    d['gold']   = max(0, int(d.get('gold', 0) * scale))
+    d['hp']       = max(1, int(d['hp']     * scale))
+    d['attack']   = max(1, int(d['attack'] * scale))
+    d['defense']  = max(0, int(d.get('defense', 0) * def_scale))
+    d['xp']       = max(1, int(d['xp']     * scale))
+    d['gold_drop']= max(0, int(d.get('gold_drop', 0) * scale))
     return d
 
 
@@ -160,7 +165,9 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
 
     for room in boss_rooms:
         used = set()
-        count = random.randint(0, min(4, 1 + floor_level // 3))
+        # 3층부터는 빈 방이 나오지 않게 최소 1마리 보장
+        lo = 0 if floor_level <= 2 else 1
+        count = random.randint(lo, min(4, 1 + floor_level // 3))
         for _ in range(count):
             ex = random.randint(room.x + 1, room.x + room.w - 2)
             ey = random.randint(room.y + 1, room.y + room.h - 2)

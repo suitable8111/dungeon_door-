@@ -30,8 +30,12 @@ class Item:
         if slot:
             return self._equip(player, slot)
         if self.effect == 'heal':
-            actual = min(self.value, player.max_hp - player.hp)
-            player.heal(self.value)
+            # 고정량과 최대 HP 비례량(소형 25% / 대형 50%) 중 큰 쪽 —
+            # 후반에 물약이 무의미해지지 않도록
+            pct = 0.5 if self.value >= 40 else 0.25
+            amount = max(self.value, int(player.max_hp * pct))
+            actual = min(amount, player.max_hp - player.hp)
+            player.heal(amount)
             return t('item_heal', self.name, actual)
         if self.effect == 'attack_up':
             player.attack += self.value

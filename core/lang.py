@@ -341,6 +341,24 @@ _T: dict[str, dict[str, str]] = {
                          'en': '真 True Cut! 2s invincible + {} defeated!'},
     'ult_slash_miss':   {'ko': '真 일도양단! (적 없음)',        'en': '真 True Cut! (No enemies)'},
 
+    # ── 적 전투 메시지 ────────────────────────────────────────────────
+    'enemy_atk':       {'ko': '{}이(가) {} 피해를 입혔습니다!',      'en': '{} dealt {} damage!'},
+    'enemy_evade':     {'ko': '{}의 공격을 회피했습니다!',           'en': 'Dodged {}\'s attack!'},
+    'enemy_whiff':     {'ko': '{}의 공격이 빗나갔습니다!',           'en': '{}\'s attack missed!'},
+    'boss_charge_hit': {'ko': '{}이(가) 돌진 강타! {} 피해!',        'en': '{} charge strike! {} damage!'},
+    'boss_charge_use': {'ko': '{}이(가) 돌진합니다!',                'en': '{} is charging!'},
+    'boss_charge_ev':  {'ko': '{}의 돌진을 회피했습니다!',           'en': 'Dodged {}\'s charge!'},
+    'boss_whirl_hit':  {'ko': '{}이(가) 회전베기! {} 피해!',         'en': '{} whirlwind! {} damage!'},
+    'boss_whirl_use':  {'ko': '{}이(가) 회전베기를 사용했습니다!',   'en': '{} used whirlwind!'},
+    'boss_whirl_ev':   {'ko': '{}의 회전베기를 회피했습니다!',       'en': 'Dodged {}\'s whirlwind!'},
+    'boss_nova_hit':   {'ko': '{}이(가) 죽음의 파동! {} 피해!',      'en': '{} death nova! {} damage!'},
+    'boss_nova_use':   {'ko': '{}이(가) 죽음의 파동을 시전했습니다!','en': '{} cast death nova!'},
+    'boss_nova_ev':    {'ko': '{}의 죽음의 파동을 회피했습니다!',    'en': 'Dodged {}\'s death nova!'},
+    'boss_summon':     {'ko': '{}이(가) 언데드를 소환했습니다!',     'en': '{} summoned undead!'},
+    'boss_curse':      {'ko': '{}이(가) 저주를 걸었습니다! 받는 피해 50% 증가', 'en': '{} cursed you! DMG taken +50%'},
+    'boss_slow':       {'ko': '{}이(가) 슬로우를 걸었습니다! 이동속도 감소',    'en': '{} slowed you! Move speed down'},
+    'boss_fear':       {'ko': '{}이(가) 두려움을 심었습니다! 명중률 40%로 저하','en': '{} instilled fear! Hit rate 40%'},
+
     # ── 상태이상 배지 ───────────────────────────────────────────────────
     'debuff_curse': {'ko': '저주',   'en': 'Curse'},
     'debuff_slow':  {'ko': '슬로우', 'en': 'Slow'},

@@ -18,6 +18,7 @@ from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
                              load_records, update_records)
 from core.lang import t, set_lang
+from core.combat import roll_damage
 from map.generator import generate_dungeon
 from map.tile import Tile, TileType
 from map.theme import get_theme, is_new_theme, MAX_FLOOR
@@ -212,6 +213,10 @@ class Game:
         # 공격 쿨다운 타이머 (ms) — 0 이하일 때만 공격 가능
         self._atk_cd_timer: float = 0.0
 
+        # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
+        self._hitstop_ms: float = 0.0
+        self._hurt_flash_ms: float = 0.0
+
         # 인벤토리 / 장비 화면 선택 인덱스
         self._inv_sel   = 0
         self._equip_sel = 0
@@ -371,12 +376,20 @@ class Game:
     def run(self):
         while True:
             dt = self.clock.tick(FPS)
+            # 히트스톱: 타격 순간 월드(애니메이션·적)만 잠깐 정지
+            if self._hitstop_ms > 0:
+                self._hitstop_ms = max(0.0, self._hitstop_ms - dt)
+                world_dt = 0
+            else:
+                world_dt = dt
+            if self._hurt_flash_ms > 0:
+                self._hurt_flash_ms = max(0.0, self._hurt_flash_ms - dt)
             self._update_fade(dt)
             self._update_shake(dt)
             self._update_move_anim(dt)
             if not self._is_fading:
                 self._handle_events(dt)
-            self.animator.update(dt)
+            self.animator.update(world_dt)
             self._update_atk_anim(dt)
             # 공격 쿨다운 감소
             if self._atk_cd_timer > 0:
@@ -396,7 +409,7 @@ class Game:
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
-                self._update_enemies(dt)
+                self._update_enemies(world_dt)
             self._update_bgm()
             self._render()
 
@@ -430,7 +443,9 @@ class Game:
     def _update_move_anim(self, dt):
         if self._move_anim_offset[0] == 0.0 and self._move_anim_offset[1] == 0.0:
             return
-        factor = 0.982 ** dt
+        # 0.975: 연속 이동 간격(220ms) 안에 잔여 오프셋이 거의 소멸 —
+        # 이동이 끌리는 느낌 없이 또렷하게 끊긴다
+        factor = 0.975 ** dt
         self._move_anim_offset[0] *= factor
         self._move_anim_offset[1] *= factor
         if abs(self._move_anim_offset[0]) < 0.5:
@@ -1226,14 +1241,16 @@ class Game:
             self.messages.append((t('fear_miss'), 'bad'))
             return
         crit = random.random() < 0.1
-        dmg  = max(1, self.player.total_attack - enemy.defense + random.randint(0, 3))
+        dmg  = roll_damage(self.player.total_attack, enemy.defense)
         if crit:
             dmg *= 2
             self.messages.append((t('crit_hit', enemy.name, dmg), 'warn'))
         else:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
-        self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
+        enemy.on_hurt(self.player.x, self.player.y)
+        self._hitstop_ms = max(self._hitstop_ms, 70 if crit else 30)
+        self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80), crit=crit))
         self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
         self.player.arcane_sp = min(self.player.arcane_sp_max, self.player.arcane_sp + 3)
@@ -1243,6 +1260,10 @@ class Game:
     def _on_enemy_killed(self, enemy):
         gold = enemy.gold_drop
         self._run_kills += 1
+        # 사망 연출: 적 색 파편 버스트 + 히트스톱 + 흔들림
+        self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
+        self._hitstop_ms = max(self._hitstop_ms, 60)
+        self._start_shake(5 if enemy.is_boss else 2, 160)
         if gold:
             self.player.gold += gold
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
@@ -1445,7 +1466,7 @@ class Game:
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
             crit = random.random() < 0.1
-            dmg  = max(1, int(self._skill_atk * mul) - enemy.defense + random.randint(0,3))
+            dmg  = roll_damage(self._skill_atk, enemy.defense, mul)
             if crit: dmg *= 2
             enemy.take_damage(dmg)
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (255,180,60)))
@@ -1501,7 +1522,7 @@ class Game:
             self.messages.append((t('skill_power_miss'), 'info'))
             return True
         crit = random.random() < crit_chance
-        dmg  = max(1, int(self._skill_atk * mul) - enemy.defense)
+        dmg  = roll_damage(self._skill_atk, enemy.defense, mul)
         if crit: dmg = int(dmg * 1.5)
         enemy.take_damage(dmg)
         self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
@@ -1580,7 +1601,7 @@ class Game:
                 break
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if enemy:
-                dmg = max(1, int(self._skill_atk * mul) - enemy.defense)
+                dmg = roll_damage(self._skill_atk, enemy.defense, mul)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 140, 40)))
                 self.animator.particles.emit_power_hit(nx, ny)
@@ -1607,7 +1628,7 @@ class Game:
             nx, ny = self.player.x+ddx, self.player.y+ddy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
-            dmg = max(1, self._skill_atk - enemy.defense)
+            dmg = roll_damage(self._skill_atk, enemy.defense)
             enemy.take_damage(dmg)
             total_dmg += dmg
             self.animator.add(SlashAnim(self.player.x, self.player.y, nx, ny, (220, 80, 180)))
@@ -1653,7 +1674,7 @@ class Game:
             nx, ny = self.player.x+ddx, self.player.y+ddy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if not enemy: continue
-            dmg = max(1, int(self._skill_atk * mul) - enemy.defense)
+            dmg = roll_damage(self._skill_atk, enemy.defense, mul)
             enemy.take_damage(dmg)
             hits += 1
             if stagger_ms:
@@ -1818,7 +1839,7 @@ class Game:
             if enemy:
                 bolt_end = (tx, ty)
                 crit = random.random() < 0.3
-                dmg  = max(1, int(self._skill_atk * 2.2) - enemy.defense)
+                dmg  = roll_damage(self._skill_atk, enemy.defense, 2.2)
                 if crit: dmg = int(dmg * 1.5)
                 enemy.take_damage(dmg)
                 self.animator.add(BoltAnim(px, py, tx, ty, (255, 140, 40)))
@@ -1846,7 +1867,7 @@ class Game:
         targets = targets[:5]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self._skill_atk * 1.2) - enemy.defense)
+            dmg = roll_damage(self._skill_atk, enemy.defense, 1.2)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (200, 160, 255)))
             self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
@@ -1869,7 +1890,7 @@ class Game:
             if not enemy.is_alive():
                 continue
             if max(abs(enemy.x - px), abs(enemy.y - py)) <= 3:
-                dmg = max(1, int(self._skill_atk * 1.3) - enemy.defense)
+                dmg = roll_damage(self._skill_atk, enemy.defense, 1.3)
                 enemy.take_damage(dmg)
                 self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (100, 220, 255)))
                 self.animator.particles.emit_frost_hit(enemy.x, enemy.y)
@@ -1901,7 +1922,7 @@ class Game:
             end_x, end_y = tx, ty
             enemy = self.dungeon.get_enemy_at(tx, ty)
             if enemy and enemy.is_alive():
-                dmg = max(1, int(self._skill_atk * 1.8) - enemy.defense)
+                dmg = roll_damage(self._skill_atk, enemy.defense, 1.8)
                 enemy.take_damage(dmg)
                 self.animator.add(SlashAnim(px, py, tx, ty, (160, 255, 160)))
                 self.animator.add(HitFlashAnim(tx, ty, dmg, (160, 255, 160)))
@@ -2192,7 +2213,7 @@ class Game:
                    if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self._skill_atk * 3.0) - enemy.defense + random.randint(0, 5))
+            dmg = roll_damage(self._skill_atk, enemy.defense, 3.0)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
             self.animator.particles.emit_power_hit(enemy.x, enemy.y)
@@ -2219,7 +2240,7 @@ class Game:
                    if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
         hits = 0
         for enemy in targets:
-            dmg = max(1, int(self._skill_atk * 10) - enemy.defense)
+            dmg = roll_damage(self._skill_atk, enemy.defense, 10)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 255, 255)))
             self.animator.particles.emit_thunder_hit(enemy.x, enemy.y)
@@ -2362,7 +2383,10 @@ class Game:
                 dmg = prev_hp - self.player.hp
                 self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255,50,50)))
                 self.audio.play('player_hit')
-                self._start_shake(4 if enemy.is_boss else 2, 200)
+                # 피해 비중에 비례한 흔들림 + 붉은 비네트
+                ratio = dmg / max(1, self.player.max_hp)
+                self._start_shake(min(8, 2 + int(ratio * 20)), 200)
+                self._hurt_flash_ms = 260
                 # 원거리 공격 볼트 연출
                 dist = abs(enemy.x - self.player.x) + abs(enemy.y - self.player.y)
                 if dist > 1:
@@ -2522,7 +2546,9 @@ class Game:
 
         for enemy in self.dungeon.enemies:
             if enemy.is_alive() and self.dungeon.tiles[enemy.y][enemy.x].visible:
-                self._draw_enemy(enemy, (enemy.x-cx)*TILE_SIZE, (enemy.y-cy)*TILE_SIZE)
+                self._draw_enemy(enemy,
+                                 (enemy.x-cx)*TILE_SIZE + int(enemy.anim_ox),
+                                 (enemy.y-cy)*TILE_SIZE + int(enemy.anim_oy))
 
         ox, oy = self.animator.player_offset
         ox += int(self._move_anim_offset[0])
@@ -2541,6 +2567,14 @@ class Game:
             self._fortify_effect.draw_above(self._game_surf, px, py)
 
         self.animator.draw(self._game_surf, cx, cy)
+
+        # 피격 붉은 비네트 (가장자리 테두리, 잔여 시간에 따라 옅어짐)
+        if self._hurt_flash_ms > 0:
+            a = max(0, int(110 * self._hurt_flash_ms / 260))
+            vig = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+            pygame.draw.rect(vig, (255, 30, 30, a),      (0, 0, GAME_W, GAME_H), 14)
+            pygame.draw.rect(vig, (255, 30, 30, a // 2), (14, 14, GAME_W - 28, GAME_H - 28), 12)
+            self._game_surf.blit(vig, (0, 0))
 
         # 화면 흔들림 오프셋 적용
         sox, soy = self._shake_offset
@@ -2822,10 +2856,15 @@ class Game:
     def _draw_enemy(self, enemy, x, y):
         fn = _SPRITE_FN.get(enemy.key, draw_generic)
         ts = TILE_SIZE
+        # 피격 순간 흰 플래시 / 공격 전조 중 미세 떨림
+        col = (255, 255, 255) if enemy.hurt_ms > 0 else enemy.color
+        if enemy.windup_ms > 0:
+            x += random.randint(-1, 1)
+            y += random.randint(-1, 1)
         if enemy.is_boss:
             tmp = pygame.Surface((ts, ts))
             tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
-            fn(tmp, 0, 0, enemy.color, pygame.time.get_ticks())
+            fn(tmp, 0, 0, col, pygame.time.get_ticks())
             big = pygame.transform.scale(tmp, (ts * 2, ts * 2))
             big.set_colorkey(_CKEY)
             blit_x, blit_y = x - ts // 2, y - ts // 2
@@ -2838,8 +2877,14 @@ class Game:
                 col = (200 + int(55*(1-ratio)), int(210*ratio), 40)
                 _r(self._game_surf, col, blit_x + 2, blit_y + 2, max(1, int(bw*ratio)), 5)
         else:
-            fn(self._game_surf, x, y, enemy.color, pygame.time.get_ticks())
+            fn(self._game_surf, x, y, col, pygame.time.get_ticks())
             draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
+        # 공격 전조 '!' 마커 (회피 타이밍 안내)
+        if enemy.windup_ms > 0:
+            mx = x + ts // 2
+            my = y - (ts // 2 + 4 if enemy.is_boss else 2)
+            _r(self._game_surf, (255, 220, 60), mx - 1, my - 9, 3, 6)
+            _r(self._game_surf, (255, 220, 60), mx - 1, my - 1, 3, 2)
 
     def _draw_item(self, item, x, y):
         ts=TILE_SIZE; s=self._game_surf

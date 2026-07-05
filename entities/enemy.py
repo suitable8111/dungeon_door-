@@ -1,5 +1,8 @@
 import random
 from entities.entity import Entity
+from core.combat import roll_damage
+from core.constants import TILE_SIZE
+from core.lang import t
 
 
 class Enemy(Entity):
@@ -26,14 +29,54 @@ class Enemy(Entity):
         self._skill_t     = random.uniform(3000, 6000)
 
         self.staggered_ms = 0
+        self.hurt_ms      = 0     # 피격 흰 플래시 잔여 시간
+        self.windup_ms    = 0     # 공격 전조(텔레그래프) 잔여 시간
+        self.anim_ox      = 0.0   # 렌더 오프셋(px) — 타일 이동 슬라이드/넉백
+        self.anim_oy      = 0.0
 
         self._move_t   = random.uniform(0, self.move_ms)
         self._attack_t = random.uniform(0, self.attack_ms)
 
+    # 공격 전조 시간: 빠른 적일수록 짧게, 원거리는 길게
+    @property
+    def _windup_total(self) -> int:
+        base = 400 if self.attack_range > 1 else 280
+        return min(base, int(self.attack_ms * 0.3))
+
+    def _slide_from(self, old_x, old_y):
+        """타일 이동 직후 호출 — 이전 위치에서 미끄러져 오는 렌더 오프셋."""
+        self.anim_ox += (old_x - self.x) * TILE_SIZE
+        self.anim_oy += (old_y - self.y) * TILE_SIZE
+
+    def take_damage(self, amount: int):
+        """피격 시 흰 플래시 + 짧은 경직 + 공격 전조 취소 (모든 데미지 공통)."""
+        super().take_damage(amount)
+        self.hurt_ms = 140
+        self.staggered_ms = max(self.staggered_ms, 90)
+        self.windup_ms = 0
+
+    def on_hurt(self, from_x, from_y):
+        """방향이 있는 피격(근접 등): 공격자 반대편으로 넉백."""
+        kdx = 0 if self.x == from_x else (1 if self.x > from_x else -1)
+        kdy = 0 if self.y == from_y else (1 if self.y > from_y else -1)
+        self.anim_ox += kdx * 7
+        self.anim_oy += kdy * 7
+
     # ------------------------------------------------------------------ #
     def update(self, dt_ms, dungeon, player, messages):
+        # 렌더 오프셋 감쇠 (시야 밖/경직 중에도 항상)
+        if self.anim_ox or self.anim_oy:
+            factor = 0.975 ** dt_ms
+            self.anim_ox *= factor
+            self.anim_oy *= factor
+            if abs(self.anim_ox) < 0.5: self.anim_ox = 0.0
+            if abs(self.anim_oy) < 0.5: self.anim_oy = 0.0
+        if self.hurt_ms > 0:
+            self.hurt_ms = max(0, self.hurt_ms - dt_ms)
+
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist > self.aware_range:
+            self.windup_ms = 0
             return None
 
         if self.staggered_ms > 0:
@@ -54,10 +97,27 @@ class Enemy(Entity):
         in_range = dist <= self.attack_range
         has_los  = (self.attack_range <= 1) or dungeon._has_los(self.x, self.y, player.x, player.y)
 
+        # 전조 진행 중: 시간이 다 되면 타격 (플레이어가 벗어났으면 헛침)
+        if self.windup_ms > 0:
+            self.windup_ms -= dt_ms
+            if self.windup_ms <= 0:
+                self.windup_ms = 0
+                self._attack_t = self.attack_ms
+                if in_range and has_los:
+                    # 런지: 플레이어 쪽으로 튀어나갔다 제자리로
+                    ldx = player.x - self.x
+                    ldy = player.y - self.y
+                    mag = max(1, abs(ldx) + abs(ldy))
+                    self.anim_ox += ldx / mag * TILE_SIZE * 0.45
+                    self.anim_oy += ldy / mag * TILE_SIZE * 0.45
+                    self._do_attack(player, messages)
+                else:
+                    messages.append((t('enemy_whiff', self.name), 'good'))
+            return boss_result
+
         if in_range and has_los:
             if self._attack_t <= 0:
-                self._do_attack(player, messages)
-                self._attack_t = self.attack_ms
+                self.windup_ms = self._windup_total  # 공격 전조 시작
         else:
             if self._move_t <= 0:
                 if dist <= self.chase_range:
@@ -100,72 +160,74 @@ class Enemy(Entity):
             if (dungeon.is_walkable(nx, ny) and
                     not dungeon.get_enemy_at(nx, ny) and
                     (nx, ny) != (px, py)):
+                ox, oy = self.x, self.y
                 self.x, self.y = nx, ny
+                self._slide_from(ox, oy)
         if abs(px - self.x) + abs(py - self.y) <= 1:
             if random.random() < player.total_evasion / 100:
-                messages.append((f"{self.name}의 돌진을 회피했습니다!", 'good'))
+                messages.append((t('boss_charge_ev', self.name), 'good'))
             else:
-                dmg = max(1, int(self.attack * 1.7) - player.total_defense + random.randint(0, 3))
+                dmg = roll_damage(self.attack, player.total_defense, 1.7)
                 player.take_damage(dmg)
-                messages.append((f"{self.name}이(가) 돌진 강타! {dmg} 피해!", 'bad'))
+                messages.append((t('boss_charge_hit', self.name, dmg), 'bad'))
         else:
-            messages.append((f"{self.name}이(가) 돌진합니다!", 'warn'))
+            messages.append((t('boss_charge_use', self.name), 'warn'))
         return {'skill': 'charge', 'ex': self.x, 'ey': self.y}
 
     def _skill_whirlwind(self, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist <= 3:
             if random.random() < player.total_evasion / 100:
-                messages.append((f"{self.name}의 회전베기를 회피했습니다!", 'good'))
+                messages.append((t('boss_whirl_ev', self.name), 'good'))
             else:
-                dmg = max(1, int(self.attack * 1.3) - player.total_defense + random.randint(0, 2))
+                dmg = roll_damage(self.attack, player.total_defense, 1.3)
                 player.take_damage(dmg)
-                messages.append((f"{self.name}이(가) 회전베기! {dmg} 피해!", 'bad'))
+                messages.append((t('boss_whirl_hit', self.name, dmg), 'bad'))
         else:
-            messages.append((f"{self.name}이(가) 회전베기를 사용했습니다!", 'warn'))
+            messages.append((t('boss_whirl_use', self.name), 'warn'))
         return {'skill': 'whirlwind', 'ex': self.x, 'ey': self.y}
 
     def _skill_death_nova(self, player, messages):
         dist = abs(player.x - self.x) + abs(player.y - self.y)
         if dist <= 5:
             if random.random() < player.total_evasion / 100:
-                messages.append((f"{self.name}의 죽음의 파동을 회피했습니다!", 'good'))
+                messages.append((t('boss_nova_ev', self.name), 'good'))
             else:
-                dmg = max(1, int(self.attack * 1.4) - player.total_defense + random.randint(0, 3))
+                dmg = roll_damage(self.attack, player.total_defense, 1.4)
                 player.take_damage(dmg)
-                messages.append((f"{self.name}이(가) 죽음의 파동! {dmg} 피해!", 'bad'))
+                messages.append((t('boss_nova_hit', self.name, dmg), 'bad'))
         else:
-            messages.append((f"{self.name}이(가) 죽음의 파동을 시전했습니다!", 'warn'))
+            messages.append((t('boss_nova_use', self.name), 'warn'))
         return {'skill': 'death_nova', 'ex': self.x, 'ey': self.y}
 
     def _skill_summon_undead(self, messages):
-        messages.append((f"{self.name}이(가) 언데드를 소환했습니다!", 'warn'))
+        messages.append((t('boss_summon', self.name), 'warn'))
         return {'skill': 'summon_undead', 'ex': self.x, 'ey': self.y, 'spawn_key': 'skeleton'}
 
     def _skill_curse(self, player, messages):
         player.cursed_ms = 8000
-        messages.append((f"{self.name}이(가) 저주를 걸었습니다! 받는 피해 50% 증가", 'bad'))
+        messages.append((t('boss_curse', self.name), 'bad'))
         return {'skill': 'curse', 'ex': self.x, 'ey': self.y}
 
     def _skill_slow(self, player, messages):
         player.slowed_ms = 7000
-        messages.append((f"{self.name}이(가) 슬로우를 걸었습니다! 이동속도 감소", 'bad'))
+        messages.append((t('boss_slow', self.name), 'bad'))
         return {'skill': 'slow', 'ex': self.x, 'ey': self.y}
 
     def _skill_fear(self, player, messages):
         player.feared_ms = 6000
-        messages.append((f"{self.name}이(가) 두려움을 심었습니다! 명중률 40%로 저하", 'bad'))
+        messages.append((t('boss_fear', self.name), 'bad'))
         return {'skill': 'fear', 'ex': self.x, 'ey': self.y}
 
     # ------------------------------------------------------------------ #
     def _do_attack(self, player, messages):
         # 회피 판정
         if random.random() < player.total_evasion / 100:
-            messages.append((f"{self.name}의 공격을 회피했습니다!", 'good'))
+            messages.append((t('enemy_evade', self.name), 'good'))
             return
-        dmg = max(1, self.attack - player.total_defense + random.randint(0, 2))
+        dmg = roll_damage(self.attack, player.total_defense)
         player.take_damage(dmg)
-        messages.append((f"{self.name}이(가) {dmg} 피해를 입혔습니다!", 'bad'))
+        messages.append((t('enemy_atk', self.name, dmg), 'bad'))
 
     def _move_toward(self, tx, ty, dungeon, player):
         dx, dy = tx - self.x, ty - self.y
@@ -189,5 +251,7 @@ class Enemy(Entity):
             if (dungeon.is_walkable(nx, ny) and
                     not dungeon.get_enemy_at(nx, ny) and
                     (nx, ny) != (player.x, player.y)):
+                ox, oy = self.x, self.y
                 self.x, self.y = nx, ny
+                self._slide_from(ox, oy)
                 break

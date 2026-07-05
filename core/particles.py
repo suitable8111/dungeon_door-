@@ -232,6 +232,39 @@ class ParticleSystem:
                 sw=random.randint(5, 9), sh=random.randint(1, 3),
             ))
 
+    # ── 적 사망 ───────────────────────────────────────────────────────
+    def emit_death(self, tx: int, ty: int, color: tuple = (200, 200, 200)):
+        """적 사망 버스트 — 적 고유 색 파편이 흩어지며 소멸."""
+        cx, cy = self._tile_px(tx, ty)
+        c_dark = tuple(max(0, c - 90) for c in color)
+        c_lite = tuple(min(255, c + 70) for c in color)
+        # 몸체 파편 (적 색)
+        for _ in range(14):
+            a = random.uniform(0, _TWO_PI)
+            spd = random.uniform(80, 300)
+            self._add(Particle(
+                cx + random.uniform(-6, 6), cy + random.uniform(-6, 6),
+                math.cos(a) * spd, math.sin(a) * spd - 60,
+                drag=2.2, grav=2.2, life_ms=random.randint(380, 720),
+                r0=random.randint(2, 4), r1=1,
+                c0=color, c1=c_dark,
+                a0=235, a1=0, glow=False,
+                shape='shard', angle=random.uniform(0, _TWO_PI),
+                spin=random.uniform(-12, 12),
+                sw=random.randint(4, 9), sh=random.randint(2, 4),
+            ))
+        # 소멸 글로우 (밝은 잔광)
+        for _ in range(8):
+            a = random.uniform(0, _TWO_PI)
+            spd = random.uniform(40, 160)
+            self._add(Particle(
+                cx, cy, math.cos(a) * spd, math.sin(a) * spd - 30,
+                drag=3.0, grav=0.4, life_ms=random.randint(300, 560),
+                r0=random.randint(3, 5), r1=1,
+                c0=c_lite, c1=c_dark,
+                a0=190, a1=0, glow=True,
+            ))
+
     # ── 강타 (Power Attack) ───────────────────────────────────────────
     def emit_power_hit(self, tx: int, ty: int):
         """강타 — 충격파 글로우 + 무거운 돌 파편."""

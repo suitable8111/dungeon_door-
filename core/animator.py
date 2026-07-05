@@ -130,11 +130,14 @@ class SlashAnim(_Anim):
 
 
 class HitFlashAnim(_Anim):
-    def __init__(self, x, y, dmg, color=(255, 80, 80)):
-        super().__init__(480)
+    def __init__(self, x, y, dmg, color=(255, 80, 80), crit=False):
+        super().__init__(560 if crit else 480)
         self.x, self.y = x, y
         self.dmg = dmg
         self.color = color
+        self.crit = crit
+        # 연타 시 숫자가 겹치지 않게 좌우 랜덤 오프셋
+        self._jx = random.randint(-6, 6)
 
     def draw(self, surf, cam_x, cam_y, font):
         ts = TILE_SIZE
@@ -142,21 +145,33 @@ class HitFlashAnim(_Anim):
         sx = (self.x - cam_x) * ts
         sy = (self.y - cam_y) * ts
 
-        if t < 0.3:
-            alpha = int(220 * (1 - t / 0.3))
-            flash = pygame.Surface((ts, ts))
-            flash.fill(self.color)
-            flash.set_alpha(alpha)
-            surf.blit(flash, (sx, sy))
+        # 데미지 없는 플래시(상태이상 표시 등)만 타일 틴트 사용 —
+        # 데미지 피격은 스프라이트 자체가 흰색으로 번쩍이므로 생략
+        if self.dmg <= 0:
+            if t < 0.3:
+                alpha = int(220 * (1 - t / 0.3))
+                flash = pygame.Surface((ts, ts))
+                flash.fill(self.color)
+                flash.set_alpha(alpha)
+                surf.blit(flash, (sx, sy))
+            return
 
         text_alpha = max(0, int(255 * (1 - t * 1.25)))
         if text_alpha > 6:
-            float_y = sy - int(t * ts * 1.0)
-            r, g, b = self.color
-            bright = (min(255, r + 60), min(255, g + 60), min(255, b + 60))
+            float_y = sy - int(_smooth(t) * ts * 1.1)
+            if self.crit:
+                bright = (255, 225, 70)
+            else:
+                r, g, b = self.color
+                bright = (min(255, r + 60), min(255, g + 60), min(255, b + 60))
             num_surf = font.render(f"-{self.dmg}", True, bright)
+            if self.crit:
+                # 크리티컬: 초반에 크게 튀어나왔다 살짝 줄어드는 팝
+                pop = 1.7 if t < 0.15 else 1.4
+                w, h = num_surf.get_size()
+                num_surf = pygame.transform.scale(num_surf, (int(w * pop), int(h * pop)))
             num_surf.set_alpha(text_alpha)
-            nx = sx + ts // 2 - num_surf.get_width() // 2
+            nx = sx + ts // 2 - num_surf.get_width() // 2 + self._jx
             surf.blit(num_surf, (nx, float_y))
 
 
