@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.3.0 — Elite Variants, Kill Combos & Achievements
+
+### New Content
+- **Elite monster variants**: from floor 4, monsters have a 5–15% chance (scaling with depth) to spawn as elites with a colored aura and a name prefix:
+  - **Swift** — moves 35% faster, attacks 20% faster
+  - **Ironhide** — double defense, 1.6× HP
+  - **Berserk** — 1.5× attack
+  - **Vampiric** — heals for 50% of damage dealt
+  - **Volatile** — explodes on death (1-tile radius) — melee kills are risky!
+  - Elites grant 2.5× XP, 3× gold, and a 70% item drop chance (vs 28%)
+- **Kill combo**: chaining kills within 4 seconds builds a combo that grants bonus Arcane SP (up to +8 per kill) with an on-screen COMBO counter — aggressive play now feeds your ultimate faster.
+- **Achievements** (16): floor milestones, boss hunts, elite hunts, kill combos, enhancement mastery, and more. Tracked locally; Steam sync activates automatically once Steam libraries ship with the build.
+
+### Localization
+- All 52 monsters now have proper English names (previously shown in Korean).
+
 ## v1.2.0 — Combat Rebalance & Game Feel Update
 
 ### Balance
