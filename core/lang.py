@@ -375,6 +375,25 @@ _T: dict[str, dict[str, str]] = {
     # ── 처치 연쇄 ─────────────────────────────────────────────────────
     'combo_kill': {'ko': '⚡ 처치 연쇄 x{}!  (+{} SP)', 'en': '⚡ Kill combo x{}!  (+{} SP)'},
 
+    # ── 도전과제 ──────────────────────────────────────────────────────
+    'ach_unlock': {'ko': '🏆 도전과제 달성: {}', 'en': '🏆 Achievement unlocked: {}'},
+    'ach_ACH_FIRST_BLOOD': {'ko': '첫 사냥감',       'en': 'First Blood'},
+    'ach_ACH_KILLS_500':   {'ko': '학살자',          'en': 'Slaughterer'},
+    'ach_ACH_ELITE_25':    {'ko': '변종 사냥꾼',     'en': 'Variant Hunter'},
+    'ach_ACH_BOSS_10':     {'ko': '보스의 악몽',     'en': 'Nightmare of Bosses'},
+    'ach_ACH_FLOOR_5':     {'ko': '첫 관문',         'en': 'First Gate'},
+    'ach_ACH_FLOOR_10':    {'ko': '지하 10층',       'en': 'Depth 10'},
+    'ach_ACH_FLOOR_25':    {'ko': '심연을 향해',     'en': 'Into the Abyss'},
+    'ach_ACH_FLOOR_50':    {'ko': '감옥 탈출',       'en': 'Prison Break'},
+    'ach_ACH_FIRST_BOSS':  {'ko': '거인 사냥',       'en': 'Giant Slayer'},
+    'ach_ACH_COMBO_15':    {'ko': '멈추지 않는 칼날','en': 'Unstoppable Blade'},
+    'ach_ACH_LEVEL_20':    {'ko': '베테랑',          'en': 'Veteran'},
+    'ach_ACH_ENHANCE_10':  {'ko': '대장장이의 혼',   'en': 'Soul of the Smith'},
+    'ach_ACH_RICH':        {'ko': '던전의 부자',     'en': 'Dungeon Tycoon'},
+    'ach_ACH_BURNING':     {'ko': '불길에서 살아남다','en': 'Through the Flames'},
+    'ach_ACH_ULTIMATE':    {'ko': '오의 개방',       'en': 'Ultimate Unleashed'},
+    'ach_ACH_DIE':         {'ko': '던전의 세례',     'en': 'Dungeon Baptism'},
+
     # ── 상태이상 배지 ───────────────────────────────────────────────────
     'debuff_curse': {'ko': '저주',   'en': 'Curse'},
     'debuff_slow':  {'ko': '슬로우', 'en': 'Slow'},

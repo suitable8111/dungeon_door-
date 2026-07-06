@@ -2,6 +2,8 @@
 savegame.json
 settings.json
 records.json
+achievements.json
+steam_appid.txt
 
 # ── Python 캐시 ──────────────────────────────────────────────────────────────
 __pycache__/

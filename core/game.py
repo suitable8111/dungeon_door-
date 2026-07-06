@@ -190,6 +190,10 @@ class Game:
         self.messages = []
         self.floor    = 1
         self._theme   = get_theme(1)
+
+        # 도전과제 (로컬 저장 + 스팀 자동 동기화)
+        from core.achievements import AchievementManager
+        self.achievements = AchievementManager(on_unlock=self._on_achievement_unlocked)
         self._facing     = 'down'
         self._walk_frame = 0
 
@@ -1189,6 +1193,8 @@ class Game:
                 self.state = 'game_over'
             else:
                 self.floor += 1
+                if not self._is_test_mode:
+                    self.achievements.check_floor(self.floor)
                 self._start_fade(self._load_floor)
             return True
 
@@ -1272,6 +1278,19 @@ class Game:
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
 
+    # ── 도전과제 헬퍼 (테스트 모드에서는 잠금) ─────────────────────────
+    def _on_achievement_unlocked(self, api_name):
+        self.messages.append((t('ach_unlock', t('ach_' + api_name)), 'good'))
+        self.audio.play('levelup')
+
+    def _ach_unlock(self, api_name):
+        if not self._is_test_mode:
+            self.achievements.unlock(api_name)
+
+    def _ach_stat(self, stat, amount=1):
+        if not self._is_test_mode:
+            self.achievements.add_stat(stat, amount)
+
     def _on_enemy_killed(self, enemy):
         gold = enemy.gold_drop
         self._run_kills += 1
@@ -1303,6 +1322,17 @@ class Game:
                                         self.player.arcane_sp + bonus)
             if self._combo_count % 5 == 0:
                 self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
+        # 도전과제
+        self._ach_stat('kills')
+        if enemy.elite:
+            self._ach_stat('elite_kills')
+        if enemy.is_boss:
+            self._ach_stat('boss_kills')
+            self._ach_unlock('ACH_FIRST_BOSS')
+        if self._combo_count >= 15:
+            self._ach_unlock('ACH_COMBO_15')
+        if self.player.gold + (gold or 0) >= 2000:
+            self._ach_unlock('ACH_RICH')
         if gold:
             self.player.gold += gold
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
@@ -1310,6 +1340,8 @@ class Game:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
         if self.player.gain_xp(enemy.xp_value):
             self._skill_points += 3
+            if self.player.level >= 20:
+                self._ach_unlock('ACH_LEVEL_20')
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.messages.append((t('sp_gained', self._skill_points), 'info'))
             self.audio.play('levelup')
@@ -2161,6 +2193,8 @@ class Game:
         rate = self._ENHANCE_RATES[item.enhance_level]
         if random.random() < rate:
             item.enhance_level += 1
+            if item.enhance_level >= 10:
+                self._ach_unlock('ACH_ENHANCE_10')
             self.messages.append((t('enhance_success', item.name, item.enhance_level), 'good'))
             self.audio.play('levelup')
             self._start_shake(3, 200)
@@ -2246,10 +2280,14 @@ class Game:
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
             return False
         if key == 'R':
-            return self._skill_ultimate_breaker()
-        if key == 'Ctrl_R':
-            return self._skill_ultimate_slash()
-        return False
+            result = self._skill_ultimate_breaker()
+        elif key == 'Ctrl_R':
+            result = self._skill_ultimate_slash()
+        else:
+            return False
+        if result:
+            self._ach_unlock('ACH_ULTIMATE')
+        return result
 
     def _skill_ultimate_breaker(self):
         """던전 브레이커: 화면 내 모든 적에게 공격력 3배 일격 + 대규모 이펙트."""
@@ -2390,6 +2428,7 @@ class Game:
         if survived:
             self.messages.append((t('burning_survived'), 'good'))
             self.audio.play('levelup')
+            self._ach_unlock('ACH_BURNING')
             # 다음 보스 층으로 이동
             boss_floor = ((self._burning_floor // 5) + 1) * 5
             self.floor = max(boss_floor, self._burning_floor + 1)
@@ -2468,6 +2507,7 @@ class Game:
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
                 delete_save()
                 self.audio.play('death')
+                self._ach_unlock('ACH_DIE')
                 self.state = 'dead'
 
         # ── 몬스터 리스폰 ────────────────────────────────────────────
