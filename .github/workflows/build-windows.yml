@@ -25,6 +25,22 @@ jobs:
         run: |
           pip install pygame-ce pyinstaller pillow
 
+      # ── Steam 도전과제 연동 (App ID 4718470) — 실패해도 빌드는 계속 ──
+      - name: Install SteamworksPy (optional)
+        continue-on-error: true
+        run: |
+          pip install git+https://github.com/philippj/SteamworksPy.git
+
+      - name: Fetch SteamworksPy64.dll (optional)
+        continue-on-error: true
+        run: |
+          if (-Not (Test-Path steam_libs\SteamworksPy64.dll)) {
+            Invoke-WebRequest -Uri "https://github.com/philippj/SteamworksPy/releases/download/1.6.5/SteamworksPy64.dll" -OutFile steam_libs\SteamworksPy64.dll
+            Write-Host "SteamworksPy64.dll downloaded"
+          } else {
+            Write-Host "SteamworksPy64.dll already in repo"
+          }
+
       - name: Show environment info
         run: |
           python --version
@@ -45,6 +61,15 @@ jobs:
       - name: Build with PyInstaller
         run: |
           pyinstaller game.spec --clean --noconfirm --log-level WARN
+
+      - name: Bundle Steam libraries
+        run: |
+          if (Test-Path steam_libs\steam_api64.dll) {
+            Copy-Item steam_libs\*.dll dist\DungeonDoor\
+            Write-Host "Steam libs bundled - achievements sync ENABLED"
+          } else {
+            Write-Host "steam_api64.dll not in steam_libs\ - shipping WITHOUT Steam sync (local achievements only)"
+          }
 
       - name: Verify build
         run: |

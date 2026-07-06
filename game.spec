@@ -6,6 +6,14 @@ from PyInstaller.utils.hooks import collect_all
 # pygame-ce 전체 수집 (DLL 포함)
 pg_datas, pg_binaries, pg_hiddenimports = collect_all('pygame')
 
+# SteamworksPy (설치된 경우에만 — 도전과제 스팀 동기화)
+try:
+    from PyInstaller.utils.hooks import collect_submodules
+    import steamworks  # noqa: F401
+    sw_hiddenimports = collect_submodules('steamworks')
+except Exception:
+    sw_hiddenimports = []
+
 added_datas = [
     ('assets/fonts',   'assets/fonts'),
     ('assets/sprites', 'assets/sprites'),
@@ -37,7 +45,8 @@ a = Analysis(
         'map.generator',
         'ui.hud',
         'data_loader',
-    ],
+        'core.achievements',
+    ] + sw_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=['runtime_hook.py'],
