@@ -31,8 +31,8 @@ CI가 steamcmd로 로그인할 자격 증명입니다. 본 계정을 써도 되�
 ```bash
 brew install steamcmd
 steamcmd +login <계정명> +quit     # 비밀번호 + Steam Guard 코드 1회 입력
-# 로그인 성공 후 자격 캐시 파일 확인:
-cat ~/Library/Application\ Support/Steam/config/config.vdf   # (없으면 steamcmd 설치 경로의 config/config.vdf)
+# 로그인 성공 후 자격 캐시를 base64로 인코딩해 클립보드에 복사:
+base64 -i ~/Library/Application\ Support/Steam/config/config.vdf | pbcopy
 ```
 
 GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret:
@@ -40,7 +40,7 @@ GitHub 저장소 → Settings → Secrets and variables → Actions → New repo
 | Secret | 값 |
 |---|---|
 | `STEAM_USERNAME` | 빌더 계정명 |
-| `STEAM_CONFIG_VDF` | 위 `config.vdf` 파일 내용 전체 (여러 줄 그대로 붙여넣기) |
+| `STEAM_CONFIG_VDF` | **base64 인코딩된** `config.vdf` (위 명령의 클립보드 값 — 원문을 넣으면 `base64: invalid input` 오류 발생) |
 
 > Steam Guard가 캐시를 무효화하면(비밀번호 변경 등) config.vdf를 다시 추출해 갱신.
 
