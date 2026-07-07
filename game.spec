@@ -1,7 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
-# PyInstaller 6.x spec for DungeonDoor → game.exe
+# PyInstaller 6.x spec for DungeonDoor
+#   Windows → dist/DungeonDoor/game.exe
+#   macOS   → dist/DungeonDoor.app
+
+import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all
+
+IS_MAC = sys.platform == 'darwin'
+_icon = 'assets/steam/icon.icns' if IS_MAC else 'assets/steam/icon.ico'
+if not os.path.exists(_icon):
+    _icon = None  # 아이콘은 CI에서 생성 — 없으면 기본 아이콘으로 빌드
+GAME_VERSION = os.environ.get('GAME_VERSION', '0.0.0').lstrip('v')
 
 # pygame-ce 전체 수집 (DLL 포함)
 pg_datas, pg_binaries, pg_hiddenimports = collect_all('pygame')
@@ -70,7 +81,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
-    icon='assets/steam/icon.ico',
+    icon=_icon,
 )
 
 coll = COLLECT(
@@ -83,3 +94,18 @@ coll = COLLECT(
     upx_exclude=[],
     name='DungeonDoor',
 )
+
+if IS_MAC:
+    app = BUNDLE(
+        coll,
+        name='DungeonDoor.app',
+        icon=_icon,
+        bundle_identifier='com.dungeondoor.game',
+        info_plist={
+            'CFBundleName': 'Dungeon Door',
+            'CFBundleDisplayName': 'Dungeon Door',
+            'CFBundleShortVersionString': GAME_VERSION,
+            'NSHighResolutionCapable': True,
+            'LSApplicationCategoryType': 'public.app-category.games',
+        },
+    )

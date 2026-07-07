@@ -1,4 +1,4 @@
-name: Build Windows (game.exe)
+name: Build & Deploy (Windows + macOS + Steam)
 
 on:
   push:
@@ -98,3 +98,114 @@ jobs:
         with:
           files: DungeonDoor-${{ github.ref_name }}.zip
           generate_release_notes: true
+
+  # ─── macOS 빌드 (Apple Silicon) ──────────────────────────────────────
+  build-macos:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install pygame-ce pyinstaller pillow
+
+      - name: Generate icns icon
+        run: |
+          python -c "
+          from PIL import Image
+          Image.open('assets/steam/icon_512.png').save('assets/steam/icon.icns')
+          print('icon.icns generated OK')
+          "
+
+      - name: Build with PyInstaller
+        env:
+          GAME_VERSION: ${{ github.ref_name }}
+        run: |
+          pyinstaller game.spec --clean --noconfirm --log-level WARN
+
+      - name: Verify build
+        run: |
+          ls dist/
+          test -x dist/DungeonDoor.app/Contents/MacOS/game && echo "DungeonDoor.app OK"
+
+      # ditto: 실행 권한/심볼릭 링크 보존 zip (upload-artifact는 권한을 잃음)
+      - name: Zip app bundle
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent dist/DungeonDoor.app DungeonDoor-mac-${{ github.ref_name }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DungeonDoor-macOS
+          path: DungeonDoor-mac-${{ github.ref_name }}.zip
+          retention-days: 30
+
+      - name: Attach to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: DungeonDoor-mac-${{ github.ref_name }}.zip
+          generate_release_notes: true
+
+  # ─── Steam 자동 업로드 (secrets 설정 시에만 동작) ─────────────────────
+  # 필요 secrets: STEAM_USERNAME, STEAM_CONFIG_VDF (docs/STEAM_DEPLOY.md 참고)
+  # 업로드 후 'beta' 브랜치에 자동 라이브 — default 브랜치 승격은
+  # Valve 정책상 파트너 사이트에서 수동 (웹 2FA 필수)
+  deploy-steam:
+    needs: [build-windows, build-macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Steam credentials
+        id: creds
+        run: |
+          if [ -n "${{ secrets.STEAM_CONFIG_VDF }}" ]; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "STEAM_CONFIG_VDF secret 없음 — Steam 업로드 건너뜀"
+          fi
+
+      - name: Download Windows build
+        if: steps.creds.outputs.ok == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: DungeonDoor-Windows
+          path: build/windows
+
+      - name: Download macOS build
+        if: steps.creds.outputs.ok == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: DungeonDoor-macOS
+          path: mac_zip
+
+      - name: Unpack macOS app (권한 보존)
+        if: steps.creds.outputs.ok == 'true'
+        run: |
+          mkdir -p build/macos
+          unzip -q mac_zip/DungeonDoor-mac-${{ github.ref_name }}.zip -d build/macos
+          ls -la build/macos
+
+      - name: Deploy to Steam (App 4718470)
+        if: steps.creds.outputs.ok == 'true'
+        uses: game-ci/steam-deploy@v3
+        with:
+          username: ${{ secrets.STEAM_USERNAME }}
+          configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
+          appId: 4718470
+          buildDescription: ${{ github.ref_name }} (auto)
+          rootPath: build
+          depot1Path: windows     # depot 4718471 (Windows)
+          depot2Path: macos       # depot 4718472 (macOS)
+          releaseBranch: beta
