@@ -1,13 +1,27 @@
 """JSON 기반 저장 / 불러오기 / 설정 / 기록."""
 import json
 import os
+import sys
 
-_BASE = os.path.dirname(os.path.abspath(__file__))
-_PARENT = os.path.join(_BASE, '..')
 
-SAVE_PATH     = os.path.join(_PARENT, 'savegame.json')
-SETTINGS_PATH = os.path.join(_PARENT, 'settings.json')
-RECORDS_PATH  = os.path.join(_PARENT, 'records.json')
+def _get_data_dir():
+    if getattr(sys, 'frozen', False):
+        if sys.platform == 'darwin':
+            base = os.path.expanduser('~/Library/Application Support/DungeonDoor')
+        elif sys.platform == 'win32':
+            base = os.path.join(os.environ.get('APPDATA', os.path.expanduser('~')), 'DungeonDoor')
+        else:
+            base = os.path.join(os.path.expanduser('~'), '.dungeondoor')
+        os.makedirs(base, exist_ok=True)
+        return base
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+
+
+_DATA_DIR = _get_data_dir()
+
+SAVE_PATH     = os.path.join(_DATA_DIR, 'savegame.json')
+SETTINGS_PATH = os.path.join(_DATA_DIR, 'settings.json')
+RECORDS_PATH  = os.path.join(_DATA_DIR, 'records.json')
 
 _DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'ko'}
 _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0}

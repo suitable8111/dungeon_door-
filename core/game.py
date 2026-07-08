@@ -336,8 +336,9 @@ class Game:
     def _load_sprites(self):
         """assets/sprites/*.png 로드. 없으면 빈 딕셔너리."""
         self._sprites: dict[str, pygame.Surface] = {}
-        base    = os.path.join(os.path.dirname(__file__), '..', 'assets')
-        spr_dir = os.path.join(base, 'sprites')
+        _root   = sys._MEIPASS if (getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS')) \
+                  else os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+        spr_dir = os.path.join(_root, 'assets', 'sprites')
 
         # 종횡비 유지 letterbox: 영웅 + 공격 스프라이트
         fit_names = [

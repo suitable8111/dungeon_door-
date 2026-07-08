@@ -1,4 +1,5 @@
 import os
+import sys
 import math
 import pygame
 from core.constants import *
@@ -46,8 +47,13 @@ def _btn_colors(active, hovered, danger=False):
 
 _MSG_COLORS = {'info': MSG_INFO, 'warn': MSG_WARN, 'good': MSG_GOOD, 'bad': MSG_BAD}
 
+def _assets_root():
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        return sys._MEIPASS
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
+
 _DUNGGEU_FONT = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', 'assets', 'fonts', 'DungGeunMo.ttf'))
+    os.path.join(_assets_root(), 'assets', 'fonts', 'DungGeunMo.ttf'))
 
 _KO_FONT_FALLBACKS = [
     '/System/Library/Fonts/AppleSDGothicNeo.ttc',
@@ -87,7 +93,7 @@ class HUD:
         self.font_xl = _load_ko_font(46)
 
         # PressStart2P 픽셀 폰트 (ASCII 전용)
-        _base = os.path.join(os.path.dirname(__file__), '..', 'assets')
+        _base = os.path.join(_assets_root(), 'assets')
         _pf   = os.path.join(_base, 'fonts', 'PressStart2P-Regular.ttf')
         if os.path.exists(_pf):
             self.font_pixel_title = pygame.font.Font(_pf, 22)
