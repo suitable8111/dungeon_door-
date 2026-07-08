@@ -8,17 +8,9 @@ from core.particles import ParticleSystem
 
 
 def _load_font(size):
-    for path in [
-        '/System/Library/Fonts/AppleSDGothicNeo.ttc',
-        'C:/Windows/Fonts/malgun.ttf',
-        '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
-    ]:
-        if os.path.exists(path):
-            try:
-                return pygame.font.Font(path, size)
-            except Exception:
-                pass
-    return pygame.font.SysFont('sans-serif', size, bold=True)
+    # 언어별 UI 폰트 (core/fonts.py) — 데미지 숫자·배너 공용
+    from core.fonts import load_font
+    return load_font(size, bold=True)
 
 
 def _smooth(t):
@@ -31,6 +23,11 @@ class Animator:
         self._font = _load_font(12)
         self._anims: list[_Anim] = []
         self.particles = ParticleSystem()
+
+    def reload_fonts(self):
+        """언어 변경 후 호출 — 데미지 숫자/배너 폰트 재생성."""
+        self._font = _load_font(12)
+        BannerAnim._font_cache.clear()
 
     def add(self, anim):
         self._anims.append(anim)

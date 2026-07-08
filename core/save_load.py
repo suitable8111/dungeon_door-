@@ -23,7 +23,7 @@ SAVE_PATH     = os.path.join(_DATA_DIR, 'savegame.json')
 SETTINGS_PATH = os.path.join(_DATA_DIR, 'settings.json')
 RECORDS_PATH  = os.path.join(_DATA_DIR, 'records.json')
 
-_DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'ko'}
+_DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'en'}
 _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0}
 
 

@@ -191,6 +191,36 @@ _THEMES = [
          stairs_lit=(255,255,255), stairs_dim=(180,180,180), bg=(0, 0, 0)),
 ]
 
+# ── 테마 이름 다국어 (en, ja, zh, ru) — LocalizedDict가 조회 시 해석 ──────
+_THEME_NAMES = [
+    ('Abandoned Dungeon',        '見捨てられた地下牢',      '废弃的地牢',        'Заброшенная темница'),
+    ('Moldy Swamp',              'カビの湿地帯',            '霉菌沼泽',          'Заплесневелое болото'),
+    ('Frozen Silent Castle',     '霜降る静寂の古城',        '霜冻寂静古堡',      'Морозный безмолвный замок'),
+    ('Burning Magma Den',        '燃え盛るマグマ洞',        '燃烧的岩浆洞',      'Пылающая магмовая пещера'),
+    ('Tomb of Machines',         '機械仕掛けの墓場',        '机械装置之墓',      'Гробница механизмов'),
+    ('Violet Forest of Visions', '幻覚の紫の森',            '幻觉紫森林',        'Пурпурный лес видений'),
+    ('Fallen Paladin Temple',    '没落した聖騎士の神殿',    '堕落圣骑士神殿',    'Храм падшего паладина'),
+    ('Windswept Cliff Fortress', '風吹く断崖の要塞',        '风崖要塞',          'Крепость ветреных скал'),
+    ('Cursed Library',           '呪われた図書館',          '被诅咒的图书馆',    'Проклятая библиотека'),
+    ('Sunken Abyssal City',      '深海に沈んだ都市',        '深海沉没之城',      'Затонувший город бездны'),
+    ('Electric Circuit Maze',    '電気回路の迷宮',          '电路迷宫',          'Лабиринт электросхем'),
+    ('Giant Insect Hive',        '巨大昆虫の巣窟',          '巨虫巢群',          'Улей гигантских насекомых'),
+    ('Desolate Red Desert',      '荒涼たる赤い砂漠',        '荒凉红沙漠',        'Багровая пустошь'),
+    ("Alchemist's Laboratory",   '錬金術師の実験室',        '炼金术士实验室',    'Лаборатория алхимика'),
+    ('Shattered Sky Island',     '天空の崩れた島',          '天空崩岛',          'Разрушенный небесный остров'),
+    ('Shadow Realm',             '影の領域',                '暗影领域',          'Царство теней'),
+    ('Blood Moon Sanctum',       '血月の聖所',              '血月圣所',          'Святилище кровавой луны'),
+    ('Warped Spacetime Rift',    '歪んだ時空の裂け目',      '扭曲时空裂隙',      'Разлом искажённого пространства'),
+    ('Tomb of the Ancient God',  '古き神の墓',              '远古神之墓',        'Гробница древнего бога'),
+    ('The Void',                 '次元の果て (ヴォイド)',   '次元尽头 (虚空)',   'Край измерений (Пустота)'),
+]
+
+from core.lang import localize_defs as _localize_defs
+
+for _t, (_en, _ja, _zh, _ru) in zip(_THEMES, _THEME_NAMES):
+    _t['name_en'], _t['name_ja'], _t['name_zh'], _t['name_ru'] = _en, _ja, _zh, _ru
+_THEMES = [_localize_defs(_t) for _t in _THEMES]
+
 MAX_FLOOR = 999
 
 

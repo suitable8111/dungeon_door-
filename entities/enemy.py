@@ -2,7 +2,7 @@ import random
 from entities.entity import Entity
 from core.combat import roll_damage
 from core.constants import TILE_SIZE
-from core.lang import t, get_lang
+from core.lang import t, localized_name
 
 
 # ── 엘리트 변종 어픽스 ──────────────────────────────────────────────────
@@ -27,7 +27,7 @@ ELITE_GOLD_MUL = 3
 class Enemy(Entity):
     def __init__(self, x, y, data):
         # 언어별 이름 해석 (+ 엘리트 접두어)
-        name = data.get('name_en') or data['name'] if get_lang() == 'en' else data['name']
+        name = localized_name(data)
         elite = data.get('elite')
         if elite in ELITE_AFFIXES:
             name = t('elite_' + elite, name)

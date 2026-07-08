@@ -14,7 +14,10 @@
       60
     ],
     "move_ms": 550,
-    "attack_ms": 1100
+    "attack_ms": 1100,
+    "name_ja": "飢えたネズミ",
+    "name_zh": "饥饿的老鼠",
+    "name_ru": "Голодная крыса"
   },
   "bat": {
     "name": "박쥐",
@@ -30,7 +33,10 @@
       108
     ],
     "move_ms": 580,
-    "attack_ms": 1050
+    "attack_ms": 1050,
+    "name_ja": "コウモリ",
+    "name_zh": "蝙蝠",
+    "name_ru": "Летучая мышь"
   },
   "centipede": {
     "name": "지네",
@@ -46,7 +52,10 @@
       42
     ],
     "move_ms": 720,
-    "attack_ms": 1250
+    "attack_ms": 1250,
+    "name_ja": "ムカデ",
+    "name_zh": "蜈蚣",
+    "name_ru": "Многоножка"
   },
   "spider": {
     "name": "거미",
@@ -62,7 +71,10 @@
       80
     ],
     "move_ms": 650,
-    "attack_ms": 1100
+    "attack_ms": 1100,
+    "name_ja": "クモ",
+    "name_zh": "蜘蛛",
+    "name_ru": "Паук"
   },
   "slime": {
     "name": "슬라임",
@@ -78,7 +90,10 @@
       78
     ],
     "move_ms": 1350,
-    "attack_ms": 1900
+    "attack_ms": 1900,
+    "name_ja": "スライム",
+    "name_zh": "史莱姆",
+    "name_ru": "Слизь"
   },
   "blade_skeleton": {
     "name": "칼날 해골",
@@ -94,7 +109,10 @@
       122
     ],
     "move_ms": 900,
-    "attack_ms": 1400
+    "attack_ms": 1400,
+    "name_ja": "刃の骸骨",
+    "name_zh": "利刃骷髅",
+    "name_ru": "Скелет с клинком"
   },
   "shield_skeleton": {
     "name": "방패 해골",
@@ -110,7 +128,10 @@
       140
     ],
     "move_ms": 1100,
-    "attack_ms": 1700
+    "attack_ms": 1700,
+    "name_ja": "盾の骸骨",
+    "name_zh": "持盾骷髅",
+    "name_ru": "Скелет со щитом"
   },
   "archer_skeleton": {
     "name": "궁수 해골",
@@ -127,7 +148,10 @@
     ],
     "move_ms": 1000,
     "attack_ms": 1800,
-    "attack_range": 4
+    "attack_range": 4,
+    "name_ja": "弓の骸骨",
+    "name_zh": "弓箭手骷髅",
+    "name_ru": "Скелет-лучник"
   },
   "spear_skeleton": {
     "name": "창 해골",
@@ -144,7 +168,10 @@
     ],
     "move_ms": 950,
     "attack_ms": 1550,
-    "attack_range": 2
+    "attack_range": 2,
+    "name_ja": "槍の骸骨",
+    "name_zh": "持枪骷髅",
+    "name_ru": "Скелет-копейщик"
   },
   "skeleton": {
     "name": "스켈레톤",
@@ -160,7 +187,10 @@
       175
     ],
     "move_ms": 980,
-    "attack_ms": 1300
+    "attack_ms": 1300,
+    "name_ja": "スケルトン",
+    "name_zh": "骷髅",
+    "name_ru": "Скелет"
   },
   "prisoner": {
     "name": "부패한 죄수",
@@ -176,7 +206,10 @@
       72
     ],
     "move_ms": 1050,
-    "attack_ms": 1500
+    "attack_ms": 1500,
+    "name_ja": "腐敗した囚人",
+    "name_zh": "腐烂的囚犯",
+    "name_ru": "Гниющий узник"
   },
   "zombie": {
     "name": "좀비",
@@ -192,7 +225,10 @@
       75
     ],
     "move_ms": 1200,
-    "attack_ms": 1800
+    "attack_ms": 1800,
+    "name_ja": "ゾンビ",
+    "name_zh": "僵尸",
+    "name_ru": "Зомби"
   },
   "ghost": {
     "name": "망령",
@@ -208,7 +244,10 @@
       215
     ],
     "move_ms": 750,
-    "attack_ms": 1300
+    "attack_ms": 1300,
+    "name_ja": "亡霊",
+    "name_zh": "怨灵",
+    "name_ru": "Призрак"
   },
   "ghoul": {
     "name": "구울",
@@ -224,7 +263,10 @@
       85
     ],
     "move_ms": 920,
-    "attack_ms": 1450
+    "attack_ms": 1450,
+    "name_ja": "グール",
+    "name_zh": "食尸鬼",
+    "name_ru": "Гуль"
   },
   "corpse_flower": {
     "name": "시체꽃",
@@ -241,7 +283,10 @@
     ],
     "move_ms": 1500,
     "attack_ms": 2300,
-    "attack_range": 3
+    "attack_range": 3,
+    "name_ja": "死体花",
+    "name_zh": "尸花",
+    "name_ru": "Трупный цветок"
   },
   "jar_crawler": {
     "name": "항아리 괴물",
@@ -257,7 +302,10 @@
       98
     ],
     "move_ms": 1100,
-    "attack_ms": 1700
+    "attack_ms": 1700,
+    "name_ja": "壺の怪物",
+    "name_zh": "陶罐怪",
+    "name_ru": "Монстр-кувшин"
   },
   "chest_mimic": {
     "name": "상자 위장",
@@ -273,7 +321,10 @@
       78
     ],
     "move_ms": 950,
-    "attack_ms": 1600
+    "attack_ms": 1600,
+    "name_ja": "偽装した箱",
+    "name_zh": "伪装宝箱",
+    "name_ru": "Ложный сундук"
   },
   "chain_beast": {
     "name": "족쇄 괴물",
@@ -289,7 +340,10 @@
       128
     ],
     "move_ms": 1050,
-    "attack_ms": 1600
+    "attack_ms": 1600,
+    "name_ja": "足枷の怪物",
+    "name_zh": "镣铐怪",
+    "name_ru": "Кандальный монстр"
   },
   "iron_cage": {
     "name": "철창 괴물",
@@ -305,7 +359,10 @@
       138
     ],
     "move_ms": 1250,
-    "attack_ms": 1800
+    "attack_ms": 1800,
+    "name_ja": "鉄格子の怪物",
+    "name_zh": "铁栏怪",
+    "name_ru": "Решёточный монстр"
   },
   "rock_golem": {
     "name": "바위 괴물",
@@ -321,7 +378,10 @@
       95
     ],
     "move_ms": 1600,
-    "attack_ms": 2100
+    "attack_ms": 2100,
+    "name_ja": "岩の怪物",
+    "name_zh": "岩石怪",
+    "name_ru": "Каменный голем"
   },
   "torturer": {
     "name": "고문 보조병",
@@ -337,7 +397,10 @@
       58
     ],
     "move_ms": 860,
-    "attack_ms": 1400
+    "attack_ms": 1400,
+    "name_ja": "拷問助手",
+    "name_zh": "拷问助手",
+    "name_ru": "Подручный палача"
   },
   "whip_master": {
     "name": "채찍꾼",
@@ -354,7 +417,10 @@
     ],
     "move_ms": 820,
     "attack_ms": 1350,
-    "attack_range": 2
+    "attack_range": 2,
+    "name_ja": "鞭使い",
+    "name_zh": "鞭手",
+    "name_ru": "Кнутобоец"
   },
   "brand_man": {
     "name": "낙인꾼",
@@ -370,7 +436,10 @@
       48
     ],
     "move_ms": 880,
-    "attack_ms": 1400
+    "attack_ms": 1400,
+    "name_ja": "烙印師",
+    "name_zh": "烙印师",
+    "name_ru": "Клеймовщик"
   },
   "executioner_nov": {
     "name": "집행인 후보",
@@ -386,7 +455,10 @@
       42
     ],
     "move_ms": 1000,
-    "attack_ms": 1550
+    "attack_ms": 1550,
+    "name_ja": "執行人候補",
+    "name_zh": "见习刽子手",
+    "name_ru": "Подмастерье палача"
   },
   "goblin": {
     "name": "고블린",
@@ -402,7 +474,10 @@
       70
     ],
     "move_ms": 820,
-    "attack_ms": 1400
+    "attack_ms": 1400,
+    "name_ja": "ゴブリン",
+    "name_zh": "哥布林",
+    "name_ru": "Гоблин"
   },
   "poison_sprite": {
     "name": "독액 정령",
@@ -419,7 +494,10 @@
     ],
     "move_ms": 750,
     "attack_ms": 1700,
-    "attack_range": 4
+    "attack_range": 4,
+    "name_ja": "毒液の精霊",
+    "name_zh": "毒液精灵",
+    "name_ru": "Ядовитый дух"
   },
   "bone_wizard": {
     "name": "뼈 마법사",
@@ -436,7 +514,10 @@
     ],
     "move_ms": 900,
     "attack_ms": 1900,
-    "attack_range": 4
+    "attack_range": 4,
+    "name_ja": "骨の魔法使い",
+    "name_zh": "骸骨法师",
+    "name_ru": "Костяной маг"
   },
   "curse_mage": {
     "name": "저주술사",
@@ -453,7 +534,10 @@
     ],
     "move_ms": 950,
     "attack_ms": 1800,
-    "attack_range": 3
+    "attack_range": 3,
+    "name_ja": "呪術師",
+    "name_zh": "诅咒师",
+    "name_ru": "Проклинатель"
   },
   "illusionist": {
     "name": "환술사",
@@ -470,7 +554,10 @@
     ],
     "move_ms": 780,
     "attack_ms": 1550,
-    "attack_range": 3
+    "attack_range": 3,
+    "name_ja": "幻術師",
+    "name_zh": "幻术师",
+    "name_ru": "Иллюзионист"
   },
   "specter": {
     "name": "음산한 유령",
@@ -486,7 +573,10 @@
       198
     ],
     "move_ms": 820,
-    "attack_ms": 1650
+    "attack_ms": 1650,
+    "name_ja": "陰気な幽霊",
+    "name_zh": "阴森幽灵",
+    "name_ru": "Мрачный призрак"
   },
   "shadow_stalker": {
     "name": "그림자 스토커",
@@ -502,7 +592,10 @@
       52
     ],
     "move_ms": 710,
-    "attack_ms": 1300
+    "attack_ms": 1300,
+    "name_ja": "影のストーカー",
+    "name_zh": "暗影潜行者",
+    "name_ru": "Теневой сталкер"
   },
   "ambusher": {
     "name": "매복꾼",
@@ -518,7 +611,10 @@
       68
     ],
     "move_ms": 680,
-    "attack_ms": 1200
+    "attack_ms": 1200,
+    "name_ja": "待ち伏せ屋",
+    "name_zh": "伏击者",
+    "name_ru": "Засадник"
   },
   "assassin": {
     "name": "암살자",
@@ -534,7 +630,10 @@
       58
     ],
     "move_ms": 650,
-    "attack_ms": 1150
+    "attack_ms": 1150,
+    "name_ja": "暗殺者",
+    "name_zh": "刺客",
+    "name_ru": "Ассасин"
   },
   "thief": {
     "name": "도둑",
@@ -550,7 +649,10 @@
       98
     ],
     "move_ms": 750,
-    "attack_ms": 1350
+    "attack_ms": 1350,
+    "name_ja": "盗賊",
+    "name_zh": "盗贼",
+    "name_ru": "Вор"
   },
   "bandit": {
     "name": "약탈자",
@@ -566,7 +668,10 @@
       52
     ],
     "move_ms": 800,
-    "attack_ms": 1450
+    "attack_ms": 1450,
+    "name_ja": "略奪者",
+    "name_zh": "掠夺者",
+    "name_ru": "Мародёр"
   },
   "giant_spider": {
     "name": "거대 거미 여왕",
@@ -582,7 +687,10 @@
       78
     ],
     "move_ms": 900,
-    "attack_ms": 1650
+    "attack_ms": 1650,
+    "name_ja": "巨大クモの女王",
+    "name_zh": "巨型蜘蛛女王",
+    "name_ru": "Королева пауков"
   },
   "giant_zombie": {
     "name": "거대 좀비",
@@ -598,7 +706,10 @@
       70
     ],
     "move_ms": 1250,
-    "attack_ms": 2000
+    "attack_ms": 2000,
+    "name_ja": "巨大ゾンビ",
+    "name_zh": "巨型僵尸",
+    "name_ru": "Огромный зомби"
   },
   "steel_knight": {
     "name": "강철 해골 기사",
@@ -614,7 +725,10 @@
       188
     ],
     "move_ms": 1100,
-    "attack_ms": 1900
+    "attack_ms": 1900,
+    "name_ja": "鋼鉄の骸骨騎士",
+    "name_zh": "钢铁骷髅骑士",
+    "name_ru": "Стальной рыцарь-скелет"
   },
   "death_mage": {
     "name": "사망술사",
@@ -631,7 +745,10 @@
     ],
     "move_ms": 950,
     "attack_ms": 2100,
-    "attack_range": 5
+    "attack_range": 5,
+    "name_ja": "死霊術師",
+    "name_zh": "死灵法师",
+    "name_ru": "Некромант"
   },
   "orc": {
     "name": "오크",
@@ -647,7 +764,10 @@
       80
     ],
     "move_ms": 1100,
-    "attack_ms": 1700
+    "attack_ms": 1700,
+    "name_ja": "オーク",
+    "name_zh": "兽人",
+    "name_ru": "Орк"
   },
   "mimic": {
     "name": "미믹",
@@ -663,7 +783,10 @@
       78
     ],
     "move_ms": 900,
-    "attack_ms": 1600
+    "attack_ms": 1600,
+    "name_ja": "ミミック",
+    "name_zh": "宝箱怪",
+    "name_ru": "Мимик"
   },
   "blood_bat": {
     "name": "박쥐떼",
@@ -679,7 +802,10 @@
       68
     ],
     "move_ms": 580,
-    "attack_ms": 1200
+    "attack_ms": 1200,
+    "name_ja": "コウモリの群れ",
+    "name_zh": "蝙蝠群",
+    "name_ru": "Стая летучих мышей"
   },
   "soul_absorber": {
     "name": "영혼 흡수기",
@@ -696,7 +822,10 @@
     ],
     "move_ms": 850,
     "attack_ms": 1800,
-    "attack_range": 2
+    "attack_range": 2,
+    "name_ja": "魂の吸収者",
+    "name_zh": "噬魂者",
+    "name_ru": "Пожиратель душ"
   },
   "troll": {
     "name": "트롤",
@@ -712,7 +841,10 @@
       70
     ],
     "move_ms": 1400,
-    "attack_ms": 2100
+    "attack_ms": 2100,
+    "name_ja": "トロール",
+    "name_zh": "巨魔",
+    "name_ru": "Тролль"
   },
   "grave_titan": {
     "name": "무덤 거인",
@@ -728,7 +860,10 @@
       88
     ],
     "move_ms": 1350,
-    "attack_ms": 2100
+    "attack_ms": 2100,
+    "name_ja": "墓の巨人",
+    "name_zh": "墓穴巨人",
+    "name_ru": "Могильный великан"
   },
   "wizard": {
     "name": "마법사",
@@ -745,7 +880,10 @@
     ],
     "move_ms": 1200,
     "attack_ms": 1600,
-    "attack_range": 4
+    "attack_range": 4,
+    "name_ja": "魔法使い",
+    "name_zh": "法师",
+    "name_ru": "Маг"
   },
   "jail_captain": {
     "name": "간수장 대리",
@@ -761,7 +899,10 @@
       58
     ],
     "move_ms": 950,
-    "attack_ms": 1700
+    "attack_ms": 1700,
+    "name_ja": "看守長代理",
+    "name_zh": "代理狱长",
+    "name_ru": "Помощник надзирателя"
   },
   "mace_knight": {
     "name": "철퇴 기사 단장",
@@ -777,7 +918,10 @@
       148
     ],
     "move_ms": 1150,
-    "attack_ms": 2000
+    "attack_ms": 2000,
+    "name_ja": "鉄槌騎士団長",
+    "name_zh": "铁锤骑士团长",
+    "name_ru": "Магистр рыцарей булавы"
   },
   "stomp_exec": {
     "name": "사형집행인",
@@ -793,7 +937,10 @@
       48
     ],
     "move_ms": 900,
-    "attack_ms": 2100
+    "attack_ms": 2100,
+    "name_ja": "死刑執行人",
+    "name_zh": "刽子手",
+    "name_ru": "Палач"
   },
   "dragon": {
     "name": "드래곤",
@@ -809,7 +956,10 @@
       20
     ],
     "move_ms": 1100,
-    "attack_ms": 1900
+    "attack_ms": 1900,
+    "name_ja": "ドラゴン",
+    "name_zh": "巨龙",
+    "name_ru": "Дракон"
   },
   "dark_knight": {
     "name": "어둠의 기사",
@@ -832,7 +982,10 @@
       "whirlwind",
       "fear"
     ],
-    "skill_cd_ms": 4000
+    "skill_cd_ms": 4000,
+    "name_ja": "闇の騎士",
+    "name_zh": "黑暗骑士",
+    "name_ru": "Тёмный рыцарь"
   },
   "lich": {
     "name": "리치",
@@ -857,6 +1010,9 @@
       "curse",
       "slow"
     ],
-    "skill_cd_ms": 5000
+    "skill_cd_ms": 5000,
+    "name_ja": "リッチ",
+    "name_zh": "巫妖",
+    "name_ru": "Лич"
   }
 }

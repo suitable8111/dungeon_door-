@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.6.0 — Full Localization: 5 Languages
+
+The game now ships in **English, 한국어, 日本語, 简体中文, and Русский** — and English is the new default.
+
+### Localization
+- **Default language is now English** (first launch). Cycle languages anytime in Settings — the UI, fonts, and all in-game text switch instantly, mid-run included.
+- **Everything is translated**: all 319 UI strings, 10 equippable skills (names, descriptions, per-level stats), 4 combo skills, 2 ultimates, 4 enchants, 20 floor themes, 31 items, and 52 monsters.
+- **Fixed**: skill names/descriptions and item names previously showed Korean even in English mode.
+- **Per-language fonts**: Korean/English/Russian keep the bundled pixel font (it covers Cyrillic!); Japanese and Chinese fall back to system CJK fonts (Hiragino/PingFang on macOS, Yu Gothic/YaHei on Windows — preinstalled on both).
+
 ## v1.5.0 — The Dopamine Update (Game Feel 2.0)
 
 Every kill, crit, and level-up now *feels* like a reward. No balance changes — pure feedback juice.

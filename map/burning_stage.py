@@ -19,8 +19,14 @@ ARENA_WIDTH         = 52         # 아레나 타일 너비 (맵보다 좁음)
 ARENA_HEIGHT        = 40         # 아레나 타일 높이
 
 # 버닝 스테이지 바닥/배경용 테마
-BURNING_THEME = {
+from core.lang import LocalizedDict as _LocalizedDict
+
+BURNING_THEME = _LocalizedDict({
     'name':       '불타는 아레나',
+    'name_en':    'Burning Arena',
+    'name_ja':    '燃え盛るアリーナ',
+    'name_zh':    '燃烧竞技场',
+    'name_ru':    'Пылающая арена',
     'bg':         (15, 5, 0),
     'wall_lit':   (120, 40, 10),
     'wall_dim':   (60,  20, 5),
@@ -31,7 +37,7 @@ BURNING_THEME = {
     'floor_edge': (70,  30, 10),
     'stairs_lit': (255, 120, 30),
     'stairs_dim': (120, 60, 15),
-}
+})
 
 # 버닝 스테이지 전용 적 풀 (강한 적 위주)
 _HARD_KEYS = [

@@ -165,7 +165,7 @@ class Game:
             pass
 
         self._settings = load_settings()
-        set_lang(self._settings.get('language', 'ko'))
+        set_lang(self._settings.get('language', 'en'))
         flags = (pygame.FULLSCREEN | pygame.SCALED) if self._settings.get('fullscreen') else 0
         self.screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), flags)
         pygame.display.set_caption("Dungeon Door")
@@ -301,9 +301,10 @@ class Game:
         self._burning_floor       = 1        # 복귀용 원래 층
         self._burning_warned_10s  = False
 
-        # 버닝 HUD 폰트 캐시 (매 프레임 SysFont 생성 방지)
-        self._font_burning_big   = pygame.font.SysFont('Arial', 28, bold=True)
-        self._font_burning_small = pygame.font.SysFont('Arial', 13)
+        # 버닝 HUD 폰트 캐시 (매 프레임 생성 방지, 언어별 폰트)
+        from core.fonts import load_font as _lf
+        self._font_burning_big   = _lf(28, bold=True)
+        self._font_burning_small = _lf(13)
         # 화염 테두리용 재사용 Surface
         self._edge_surf = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
 
@@ -1088,10 +1089,19 @@ class Game:
             pygame.quit(); sys.exit()
 
     def _toggle_language(self):
-        cur = self._settings.get('language', 'ko')
-        self._settings['language'] = 'en' if cur == 'ko' else 'ko'
+        from core.lang import next_lang
+        from core import fonts
+        cur = self._settings.get('language', 'en')
+        self._settings['language'] = next_lang(cur)
         set_lang(self._settings['language'])
         save_settings(self._settings)
+        # 언어별 폰트 재생성 (ja/zh는 시스템 CJK 폰트로 전환)
+        fonts.clear_cache()
+        self.hud.reload_fonts()
+        self.animator.reload_fonts()
+        self._combo_font = None
+        self._font_burning_big   = fonts.load_font(28, bold=True)
+        self._font_burning_small = fonts.load_font(13)
 
     def _toggle_fullscreen(self):
         self._settings['fullscreen'] = not self._settings['fullscreen']
@@ -2117,15 +2127,6 @@ class Game:
                        0.6, 0.6, 0.6,                    # +9→+11
                        0.4, 0.4, 0.4,                    # +12→+14
                        0.2, 0.2, 0.2]                    # +15→+17
-
-    _ENHANCE_STAT = {
-        'weapon':    '공격력 +1',
-        'body':      '방어력 +1',
-        'off_hand':  '방어력 +1',
-        'head':      '회피율 +1%',
-        'feet':      '이동속도 +0.05',
-        'accessory': '스킬 데미지 +5%',
-    }
 
     def _skillbook_avail_skills(self):
         """현재 플레이어 레벨에서 사용 가능한 스킬 id 목록."""

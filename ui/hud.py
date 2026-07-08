@@ -10,7 +10,7 @@ try:
 except ImportError:
     ALL_SKILL_DEFS = {}
     DEFAULT_EQUIPPED = {'W': 'flash_dash', 'A': 'steel_whirl', 'S': 'regen_breath', 'D': 'judgment'}
-from core.lang import t
+from core.lang import t, LANG_NAMES
 from map.tile import TileType
 
 
@@ -52,48 +52,30 @@ def _assets_root():
         return sys._MEIPASS
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 
-_DUNGGEU_FONT = os.path.normpath(
-    os.path.join(_assets_root(), 'assets', 'fonts', 'DungGeunMo.ttf'))
+from core.fonts import load_font as _load_ui_font
 
-_KO_FONT_FALLBACKS = [
-    '/System/Library/Fonts/AppleSDGothicNeo.ttc',
-    '/System/Library/Fonts/Supplemental/AppleGothic.ttf',
-    'C:/Windows/Fonts/malgun.ttf',
-    '/usr/share/fonts/truetype/nanum/NanumGothic.ttf',
-]
-
-
+# 하위 호환 별칭 — 언어별 폰트는 core/fonts.py에서 처리
 def _load_ko_font(size, bold=False):
-    # 번들 폰트 우선
-    if os.path.exists(_DUNGGEU_FONT):
-        try:
-            return pygame.font.Font(_DUNGGEU_FONT, size)
-        except Exception:
-            pass
-    # 시스템 폰트 폴백
-    for path in _KO_FONT_FALLBACKS:
-        if os.path.exists(path):
-            try:
-                return pygame.font.Font(path, size)
-            except Exception:
-                pass
-    for name in ('applesdgothicneo', 'applegothic', 'malgunothic', 'nanumgothic'):
-        f = pygame.font.SysFont(name, size, bold=bold)
-        if f.size('가')[0] > 4:
-            return f
-    return pygame.font.SysFont('sans-serif', size, bold=bold)
+    return _load_ui_font(size, bold)
 
 
 class HUD:
     def __init__(self):
         pygame.font.init()
-        self.font_sm = _load_ko_font(13)
-        self.font_md = _load_ko_font(15)
-        self.font_lg = _load_ko_font(30)
-        self.font_xl = _load_ko_font(46)
+        self.reload_fonts()
 
         # PressStart2P 픽셀 폰트 (ASCII 전용)
         _base = os.path.join(_assets_root(), 'assets')
+        self._init_static_assets(_base)
+
+    def reload_fonts(self):
+        """언어 변경 후 호출 — 현재 언어에 맞는 폰트로 재생성."""
+        self.font_sm = _load_ui_font(13)
+        self.font_md = _load_ui_font(15)
+        self.font_lg = _load_ui_font(30)
+        self.font_xl = _load_ui_font(46)
+
+    def _init_static_assets(self, _base):
         _pf   = os.path.join(_base, 'fonts', 'PressStart2P-Regular.ttf')
         if os.path.exists(_pf):
             self.font_pixel_title = pygame.font.Font(_pf, 22)
@@ -313,7 +295,7 @@ class HUD:
             screen.blit(ts, (p_x + 58, p_y + 27 - ts.get_height()//2))
 
             # ── 설정 항목 ──────────────────────────────────────────
-            lang_val = t('lang_ko') if settings.get('language','ko') == 'ko' else t('lang_en')
+            lang_val = LANG_NAMES.get(settings.get('language', 'en'), 'English')
             fs_val   = t('pause_fs_on') if settings.get('fullscreen') else t('pause_fs_off')
             SITEMS = [
                 (t('pause_bgm'), 'bgm',  settings.get('bgm_vol', 0.5)),
@@ -465,7 +447,7 @@ class HUD:
         screen.blit(title_s, (bx + (bw - title_s.get_width()) // 2, by + 8))
         pygame.draw.line(screen, (60, 60, 95), (bx+12, by+44), (bx+bw-12, by+44))
 
-        lang_val = t('lang_ko') if settings.get('language', 'ko') == 'ko' else t('lang_en')
+        lang_val = LANG_NAMES.get(settings.get('language', 'en'), 'English')
         fs_val   = t('pause_fs_on') if settings['fullscreen'] else t('pause_fs_off')
 
         ITEMS = [

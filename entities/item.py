@@ -1,4 +1,4 @@
-from core.lang import t
+from core.lang import t, localized_name
 
 
 class Item:
@@ -6,12 +6,18 @@ class Item:
         self.x = x
         self.y = y
         self.key          = data.get('key', '')
-        self.name         = data['name']
+        # 다국어 이름 — name 프로퍼티가 현재 언어로 해석
+        self._names       = {k: v for k, v in data.items() if k.startswith('name')}
         self.color        = tuple(data['color'])
         self.item_type    = data['type']
         self.effect       = data.get('effect', '')
         self.value        = data.get('value', 0)
         self.enhance_level = data.get('enhance_level', 0)  # 0~18
+
+    @property
+    def name(self) -> str:
+        """현재 언어의 아이템 이름 (게임 중 언어 변경 즉시 반영)."""
+        return localized_name(self._names)
 
     # ── 장비 슬롯 이름 반환 (장비 아이템이 아니면 None) ───────────
     @property
