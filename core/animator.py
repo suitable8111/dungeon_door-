@@ -175,6 +175,81 @@ class HitFlashAnim(_Anim):
             surf.blit(num_surf, (nx, float_y))
 
 
+class GoldPopAnim(_Anim):
+    """골드 획득 팝업 — '+N G' 금색 텍스트가 살짝 늦게 떠오른다."""
+
+    def __init__(self, x, y, amount):
+        super().__init__(820)
+        self.x, self.y = x, y
+        self.amount = amount
+        self._jx = random.randint(-4, 4)
+
+    def draw(self, surf, cam_x, cam_y, font):
+        ts = TILE_SIZE
+        t = self.t
+        if t < 0.22:            # 데미지 숫자와 겹치지 않게 딜레이 후 등장
+            return
+        k = (t - 0.22) / 0.78
+        alpha = max(0, int(235 * (1 - k * k)))
+        if alpha < 8:
+            return
+        sy = (self.y - cam_y) * ts + ts // 2 - int(_smooth(k) * ts * 0.9)
+        txt = font.render(f"+{self.amount} G", True, (255, 214, 84))
+        txt.set_alpha(alpha)
+        surf.blit(txt, ((self.x - cam_x) * ts + ts // 2
+                        - txt.get_width() // 2 + self._jx, sy))
+
+
+class BannerAnim(_Anim):
+    """화면 상단 중앙 대형 콜아웃 — 'RAMPAGE!' 'LEVEL UP!' 등.
+
+    펀치 인(크게 등장 → 제자리) 후 유지, 마지막에 페이드아웃.
+    카메라와 무관한 스크린 좌표에 그린다.
+    """
+    _font_cache: dict[int, pygame.font.Font] = {}
+
+    def __init__(self, text, color, y=64, size=34, duration_ms=1300):
+        super().__init__(duration_ms)
+        self.text  = text
+        self.color = color
+        self.y     = y
+        self.size  = size
+
+    @classmethod
+    def _font(cls, size):
+        if size not in cls._font_cache:
+            cls._font_cache[size] = _load_font(size)
+        return cls._font_cache[size]
+
+    def draw(self, surf, cam_x, cam_y, font):
+        t = self.t
+        # 등장 펀치: 2.1배 → 1.0배 (첫 14%), 이후 미세 펄스
+        if t < 0.14:
+            scale = 2.1 - 1.1 * _smooth(t / 0.14)
+        else:
+            scale = 1.0 + 0.035 * math.sin((t - 0.14) * 22)
+        alpha = 255 if t < 0.72 else max(0, int(255 * (1 - (t - 0.72) / 0.28)))
+        if alpha < 8:
+            return
+        f = self._font(self.size)
+        base = f.render(self.text, True, self.color)
+        w, h = base.get_size()
+        sw, sh = max(1, int(w * scale)), max(1, int(h * scale))
+        cx = surf.get_width() // 2
+
+        # 외곽 그림자 (4방향) — 가독성 + 두께감
+        dark = f.render(self.text, True,
+                        tuple(max(0, c // 4) for c in self.color))
+        dark = pygame.transform.scale(dark, (sw, sh))
+        dark.set_alpha(alpha)
+        for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
+            surf.blit(dark, (cx - sw // 2 + dx, self.y - sh // 2 + dy))
+
+        main = pygame.transform.scale(base, (sw, sh))
+        main.set_alpha(alpha)
+        surf.blit(main, (cx - sw // 2, self.y - sh // 2))
+
+
 class DeathAnim(_Anim):
     """적 사망 잔상 — 스프라이트가 주저앉으며 페이드아웃."""
     _CKEY = (1, 2, 3)

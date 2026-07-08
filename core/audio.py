@@ -490,11 +490,34 @@ class AudioManager:
                 'crit':        lambda p: _square(200*p,40,0.40,rate=r)+_noise(60,0.25,rate=r)+_sine(1200*p,120,0.12,rate=r),
                 'menu_select': lambda p: _square(440*p,50,0.12,rate=r),
                 'menu_confirm':lambda p: _square(523*p,50,0.15,rate=r)+_square(659*p,80,0.15,rate=r),
+                # 콤보 티어 승급 팡파레 — 상승 아르페지오 + 임팩트 노이즈
+                'tier_up':     lambda p: _mix(_square(392*p,70,0.14,rate=r)+_square(523*p,70,0.16,rate=r)
+                                              +_square(659*p,80,0.18,rate=r)+_sine(1046*p,160,0.16,rate=r),
+                                              _noise(60,0.18,rate=r)),
+                # 레벨업 대형 팡파레 — 장조 화음 상승 + 고음 반짝임
+                'levelup_big': lambda p: _mix(_sine(523*p,110,0.28,rate=r)+_sine(659*p,110,0.28,rate=r)
+                                              +_sine(784*p,120,0.30,rate=r)+_sine(1046*p,200,0.26,rate=r),
+                                              _sine(1568*p,260,0.10,rate=r)),
             }
             for k, fn in defs.items():
                 self._sounds[k] = [_wave(fn(p), ch) for p in self._PITCH_VARIANTS]
+            # 연쇄 처치 피치 래더 — 킬마다 한 음씩 올라가는 펜타토닉 플링
+            for i, f in enumerate(self._COMBO_FREQS):
+                self._sounds[f'combo_{i}'] = [
+                    _wave(_mix(_sine(f*p, 70, 0.26, r), _sine(f*2*p, 110, 0.10, r)), ch)
+                    for p in self._PITCH_VARIANTS
+                ]
         except Exception:
             self.enabled = False
+
+    # C5 메이저 펜타토닉 상승 (8단계) — 콤보가 쌓일수록 높은 음
+    _COMBO_FREQS = (523.25, 587.33, 659.25, 783.99, 880.0,
+                    1046.5, 1174.7, 1318.5)
+
+    def play_combo(self, n: int):
+        """연쇄 처치 n번째 킬 사운드 — 콤보가 이어질수록 음이 올라간다."""
+        idx = max(0, min(n - 1, len(self._COMBO_FREQS) - 1))
+        self.play(f'combo_{idx}')
 
     def play(self, name):
         if not self.enabled:

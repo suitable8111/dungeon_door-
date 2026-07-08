@@ -383,6 +383,68 @@ class ParticleSystem:
                 sw=random.randint(6, 13), sh=1,
             ))
 
+    # ── 레벨업 축포 ───────────────────────────────────────────────────
+    def emit_levelup(self, tx: int, ty: int):
+        """레벨업 — 황금 파티클 분수 + 사방 반짝임 링."""
+        cx, cy = self._tile_px(tx, ty)
+        # 위로 솟구치는 황금 분수 (중력으로 다시 떨어짐)
+        for _ in range(26):
+            a = random.uniform(-0.55, 0.55) - math.pi / 2   # 위쪽 부채꼴
+            spd = random.uniform(220, 520)
+            self._add(Particle(
+                cx + random.uniform(-8, 8), cy + random.uniform(-4, 4),
+                math.cos(a) * spd, math.sin(a) * spd,
+                drag=1.2, grav=1.4, life_ms=random.randint(600, 1100),
+                r0=random.randint(2, 5), r1=1,
+                c0=(255, random.randint(200, 240), 80),
+                c1=(230, 140, 20),
+                a0=245, a1=0, glow=True,
+            ))
+        # 수평 확산 반짝임 링
+        for _ in range(16):
+            a = random.uniform(0, _TWO_PI)
+            spd = random.uniform(120, 300)
+            self._add(Particle(
+                cx, cy, math.cos(a) * spd, math.sin(a) * spd * 0.45,
+                drag=3.0, grav=0.0, life_ms=random.randint(350, 650),
+                r0=2, r1=1,
+                c0=(255, 245, 170), c1=(235, 170, 40),
+                a0=220, a1=0, glow=False,
+                shape='shard', angle=random.uniform(0, _TWO_PI),
+                spin=random.uniform(-8, 8),
+                sw=random.randint(5, 11), sh=random.randint(1, 2),
+            ))
+
+    # ── 콤보 티어 승급 ────────────────────────────────────────────────
+    def emit_combo_tier(self, tx: int, ty: int, color: tuple):
+        """콤보 티어 진입 — 티어 색 방사 버스트 (플레이어 중심)."""
+        cx, cy = self._tile_px(tx, ty)
+        c_lite = tuple(min(255, c + 80) for c in color)
+        c_dark = tuple(max(0, c - 80) for c in color)
+        for _ in range(20):
+            a = random.uniform(0, _TWO_PI)
+            spd = random.uniform(200, 560)
+            self._add(Particle(
+                cx, cy, math.cos(a) * spd, math.sin(a) * spd,
+                drag=2.8, grav=0.15, life_ms=random.randint(320, 620),
+                r0=random.randint(3, 6), r1=1,
+                c0=c_lite, c1=c_dark,
+                a0=250, a1=0, glow=True,
+            ))
+        for _ in range(10):
+            a = random.uniform(0, _TWO_PI)
+            spd = random.uniform(140, 380)
+            self._add(Particle(
+                cx, cy, math.cos(a) * spd, math.sin(a) * spd,
+                drag=3.2, grav=0.6, life_ms=random.randint(280, 520),
+                r0=2, r1=1,
+                c0=color, c1=c_dark,
+                a0=220, a1=0, glow=False,
+                shape='shard', angle=random.uniform(0, _TWO_PI),
+                spin=random.uniform(-14, 14),
+                sw=random.randint(5, 10), sh=random.randint(1, 3),
+            ))
+
     # ── 파이어볼 적중 ──────────────────────────────────────────────────
     def emit_fireball_hit(self, tx: int, ty: int):
         """파이어볼 폭발 — 불꽃 방사 + 불똥 파편 낙하."""

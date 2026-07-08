@@ -9,7 +9,7 @@ from core.camera import Camera
 from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
-                            DeathAnim)
+                            DeathAnim, GoldPopAnim, BannerAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
@@ -228,6 +228,14 @@ class Game:
         self._combo_ms: float = 0.0
         self._combo_font = None  # 첫 렌더 시 lazy 생성
 
+        # 펀치 줌 (크리티컬·보스킬 순간 화면 확대 임팩트)
+        self._punch_zoom_ms:  float = 0.0
+        self._punch_zoom_max: float = 1.0
+        self._punch_zoom_amt: float = 0.0
+
+        # 레벨업 골든 플래시
+        self._gold_flash_ms: float = 0.0
+
         # 인벤토리 / 장비 화면 선택 인덱스
         self._inv_sel   = 0
         self._equip_sel = 0
@@ -396,6 +404,10 @@ class Game:
                 world_dt = dt
             if self._hurt_flash_ms > 0:
                 self._hurt_flash_ms = max(0.0, self._hurt_flash_ms - dt)
+            if self._punch_zoom_ms > 0:
+                self._punch_zoom_ms = max(0.0, self._punch_zoom_ms - dt)
+            if self._gold_flash_ms > 0:
+                self._gold_flash_ms = max(0.0, self._gold_flash_ms - dt)
             self._update_fade(dt)
             self._update_shake(dt)
             self._update_move_anim(dt)
@@ -434,6 +446,29 @@ class Game:
         self._shake_intensity = intensity
         self._shake_timer     = duration_ms
         self._shake_max       = duration_ms
+
+    # ─────────────── 펀치 줌 (임팩트 순간 화면 확대) ──────────────────
+    def _start_punch_zoom(self, amount=0.045, duration_ms=110):
+        if duration_ms > self._punch_zoom_ms:
+            self._punch_zoom_ms  = duration_ms
+            self._punch_zoom_max = duration_ms
+            self._punch_zoom_amt = amount
+
+    # ─────────────── 처치 연쇄 티어 ──────────────────────────────────
+    # (진입 콤보 수, 콜아웃, 색상) — 내림차순
+    _COMBO_TIERS = (
+        (20, 'GODLIKE!!',    (255, 105, 255)),
+        (15, 'UNSTOPPABLE!', (195,  80, 255)),
+        (10, 'DOMINATING!',  (255,  70,  60)),
+        (5,  'RAMPAGE!',     (255, 150,  35)),
+    )
+
+    @classmethod
+    def _combo_tier(cls, n):
+        for th, name, color in cls._COMBO_TIERS:
+            if n >= th:
+                return (th, name, color)
+        return None
 
     def _update_shake(self, dt):
         self._shake_timer = max(0, self._shake_timer - dt)
@@ -1272,6 +1307,9 @@ class Game:
         enemy.take_damage(dmg)
         enemy.on_hurt(self.player.x, self.player.y)
         self._hitstop_ms = max(self._hitstop_ms, 70 if crit else 30)
+        if crit:
+            self._start_punch_zoom(0.05, 120)
+            self._start_shake(3, 130)
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80), crit=crit))
         self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
@@ -1302,6 +1340,8 @@ class Game:
         self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
         self._hitstop_ms = max(self._hitstop_ms, 60)
         self._start_shake(5 if enemy.is_boss else 2, 160)
+        if enemy.is_boss:
+            self._start_punch_zoom(0.07, 170)
         # 폭발 엘리트: 사망 시 1칸 폭발 — 인접 처치의 리스크
         if enemy.elite == 'volatile':
             self.animator.particles.emit_fireball_hit(enemy.x, enemy.y)
@@ -1315,14 +1355,27 @@ class Game:
             else:
                 self.messages.append((t('volatile_boom_safe', enemy.name), 'warn'))
         # 처치 연쇄: 4초 안에 이어 죽이면 오의 SP 보너스
+        prev_tier = self._combo_tier(self._combo_count)
         self._combo_count += 1
         self._combo_ms = 4000
+        # 킬마다 한 음씩 올라가는 콤보 플링
+        self.audio.play_combo(self._combo_count)
         if self._combo_count >= 2:
             bonus = min(self._combo_count, 8)
             self.player.arcane_sp = min(self.player.arcane_sp_max,
                                         self.player.arcane_sp + bonus)
             if self._combo_count % 5 == 0:
                 self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
+        # 티어 승급 — 배너 + 팡파레 + 플레이어 중심 버스트
+        new_tier = self._combo_tier(self._combo_count)
+        if new_tier and new_tier != prev_tier:
+            _, tier_name, tier_color = new_tier
+            self.animator.add(BannerAnim(tier_name, tier_color))
+            self.animator.particles.emit_combo_tier(
+                self.player.x, self.player.y, tier_color)
+            self.audio.play('tier_up')
+            self._start_shake(4, 200)
+            self._start_punch_zoom(0.05, 140)
         # 도전과제
         self._ach_stat('kills')
         if enemy.elite:
@@ -1336,6 +1389,7 @@ class Game:
             self._ach_unlock('ACH_RICH')
         if gold:
             self.player.gold += gold
+            self.animator.add(GoldPopAnim(enemy.x, enemy.y, gold))
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
         else:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
@@ -1345,7 +1399,14 @@ class Game:
                 self._ach_unlock('ACH_LEVEL_20')
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.messages.append((t('sp_gained', self._skill_points), 'info'))
-            self.audio.play('levelup')
+            # 레벨업 셀레브레이션 — 배너 + 황금 분수 + 골든 플래시 + 히트스톱
+            self.animator.add(BannerAnim(f"LEVEL UP!  Lv.{self.player.level}",
+                                         (255, 226, 110), y=104, size=30))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self._gold_flash_ms = 420
+            self._hitstop_ms = max(self._hitstop_ms, 110)
+            self._start_shake(3, 240)
+            self.audio.play('levelup_big')
             for cid, cdef in COMBO_SKILL_DEFS.items():
                 slv_req = cdef.get('skill_level_req', 1)
                 if (cid in self._skill_books and
@@ -2666,17 +2727,29 @@ class Game:
 
         self.animator.draw(self._game_surf, cx, cy)
 
-        # 처치 연쇄 카운터 (상단 중앙, 직후 팝 + 잔여 시간 페이드)
+        # 처치 연쇄 카운터 (상단 중앙) — 콤보가 쌓일수록 커지고 티어 색으로 발광
         if self._combo_count >= 2 and self._combo_ms > 0:
             if self._combo_font is None:
                 from core.animator import _load_font
                 self._combo_font = _load_font(24)
             alpha = min(255, int(255 * self._combo_ms / 1500))
-            txt = self._combo_font.render(f"COMBO x{self._combo_count}", True,
-                                          (255, 225, 80))
-            if self._combo_ms > 3800:  # 처치 직후 팝
-                w, h = txt.get_size()
-                txt = pygame.transform.scale(txt, (int(w * 1.3), int(h * 1.3)))
+            tier  = self._combo_tier(self._combo_count)
+            color = tier[2] if tier else (255, 225, 80)
+            txt = self._combo_font.render(f"COMBO x{self._combo_count}", True, color)
+            # 콤보 수 비례 확대 + 상시 펄스 + 처치 직후 펀치 팝
+            grow  = 1.0 + min(self._combo_count, 20) * 0.02
+            pulse = 1.0 + (0.05 * math.sin(pygame.time.get_ticks() * 0.02)
+                           if tier else 0.0)
+            pop   = 1.3 if self._combo_ms > 3800 else 1.0
+            scale = grow * pulse * pop
+            w, h = txt.get_size()
+            txt = pygame.transform.scale(txt, (int(w * scale), int(h * scale)))
+            # 티어 진입 시 뒤에 글로우 잔광 (확대 저알파 사본)
+            if tier:
+                glow = pygame.transform.scale(txt, (txt.get_width() + 12,
+                                                    txt.get_height() + 12))
+                glow.set_alpha(alpha // 4)
+                self._game_surf.blit(glow, ((GAME_W - glow.get_width()) // 2, 28))
             txt.set_alpha(alpha)
             self._game_surf.blit(txt, ((GAME_W - txt.get_width()) // 2, 34))
 
@@ -2688,9 +2761,37 @@ class Game:
             pygame.draw.rect(vig, (255, 30, 30, a // 2), (14, 14, GAME_W - 28, GAME_H - 28), 12)
             self._game_surf.blit(vig, (0, 0))
 
-        # 화면 흔들림 오프셋 적용
+        # 저체력 심장박동 비네트 (HP 25% 이하, 위기감 펄스)
+        if (self.player and self.player.is_alive()
+                and self.player.hp <= self.player.max_hp * 0.25):
+            beat = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.007)
+            a = int(35 + 55 * beat)
+            vig = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+            pygame.draw.rect(vig, (200, 15, 15, a),      (0, 0, GAME_W, GAME_H), 18)
+            pygame.draw.rect(vig, (200, 15, 15, a // 2), (18, 18, GAME_W - 36, GAME_H - 36), 14)
+            self._game_surf.blit(vig, (0, 0))
+
+        # 레벨업 골든 플래시 (짧은 전면 섬광)
+        if self._gold_flash_ms > 0:
+            a = int(80 * self._gold_flash_ms / 420)
+            flash = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+            flash.fill((255, 218, 100, a))
+            self._game_surf.blit(flash, (0, 0))
+
+        # 화면 흔들림 + 펀치 줌 적용
         sox, soy = self._shake_offset
-        self.screen.blit(self._game_surf, (GAME_X + sox, GAME_Y + soy))
+        if self._punch_zoom_ms > 0:
+            k  = self._punch_zoom_ms / self._punch_zoom_max
+            z  = 1.0 + self._punch_zoom_amt * k
+            zw, zh = int(GAME_W * z), int(GAME_H * z)
+            zoomed = pygame.transform.scale(self._game_surf, (zw, zh))
+            clip = self.screen.get_clip()
+            self.screen.set_clip(pygame.Rect(GAME_X, GAME_Y, GAME_W, GAME_H))
+            self.screen.blit(zoomed, (GAME_X - (zw - GAME_W) // 2 + sox,
+                                      GAME_Y - (zh - GAME_H) // 2 + soy))
+            self.screen.set_clip(clip)
+        else:
+            self.screen.blit(self._game_surf, (GAME_X + sox, GAME_Y + soy))
 
     def _draw_tile(self, tile, x, y, lit):
         ts = TILE_SIZE; s = self._game_surf; tt = tile.tile_type

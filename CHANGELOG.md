@@ -1,5 +1,23 @@
 # Changelog
 
+## v1.5.0 — The Dopamine Update (Game Feel 2.0)
+
+Every kill, crit, and level-up now *feels* like a reward. No balance changes — pure feedback juice.
+
+### Kill Combos, Amplified
+- **Rising-pitch kill chimes**: every kill in a combo chain plays a pentatonic note one step higher than the last (8-step ladder) — chaining kills literally sounds like a melody building up.
+- **Combo tiers with callouts**: reaching x5 / x10 / x15 / x20 triggers **RAMPAGE! → DOMINATING! → UNSTOPPABLE! → GODLIKE!!** — a full-width banner punches in, a tier-colored particle burst erupts from the player, a fanfare plays, and the screen kicks.
+- **Living combo counter**: the COMBO counter now grows with your streak, takes on the tier color, pulses with a glow halo, and pops on every kill.
+
+### Impact & Reward Feedback
+- **Punch zoom**: critical hits, boss kills, and tier-ups snap the camera in for a split second — hits land with real weight.
+- **Level-up celebration**: golden screen flash, a fountain of gold particles from the player, a "LEVEL UP!" banner, a richer fanfare, and a brief hit-stop. You will not miss a level-up again.
+- **Gold popups**: enemies now pop a floating "+N G" on death, right after the damage number.
+- **Crit shake**: critical hits add a short screen shake on top of the existing hit-stop.
+
+### Tension
+- **Heartbeat vignette**: below 25% HP the screen edge pulses red like a heartbeat — clutch escapes feel like clutch escapes.
+
 ## v1.3.0 — Elite Variants, Kill Combos & Achievements
 
 ### New Content
