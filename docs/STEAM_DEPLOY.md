@@ -26,6 +26,38 @@ secrets가 설정돼 있으면 **SteamPipe로 자동 업로드 후 `beta` 브랜
 CI가 steamcmd로 로그인할 자격 증명입니다. 본 계정을 써도 되지만
 권한을 좁힌 **빌더 전용 계정**(Upload to SteamPipe + Publish 권한만) 권장.
 
+#### 방식 A — TOTP (권장, 만료 없음)
+
+Steam Guard 모바일 인증기의 `shared_secret`으로 CI가 **매 실행마다 2FA 코드를 새로
+생성**해 로그인합니다. config.vdf처럼 저장된 토큰이 없으니 만료·수동 갱신이 없습니다.
+
+`shared_secret` 얻기 (인증기를 아래 도구로 등록해야 추출 가능):
+
+- **Steam Desktop Authenticator** (Windows): 계정 등록 후 `maFiles/<steamid>.maFile`
+  (JSON)의 `"shared_secret"` 값
+- **steamguard-cli** (macOS/Linux): `steamguard setup`으로 등록 후
+  `~/.config/steamguard-cli/maFiles/<계정>.maFile`의 `"shared_secret"` 값
+
+> ⚠ 인증기를 SDA/steamguard-cli로 등록하면 휴대폰 Steam 앱 인증기는 해제됩니다.
+> 빌더 전용 계정을 쓰면 본계정 인증기는 그대로 둘 수 있어 깔끔합니다.
+> maFile은 계정 탈취에 쓰일 수 있는 민감 파일 — 리포에 커밋 금지.
+
+GitHub 저장소 → Settings → Secrets and variables → Actions:
+
+| Secret | 값 |
+|---|---|
+| `STEAM_USERNAME` | 빌더 계정명 |
+| `STEAM_PASSWORD` | 빌더 계정 비밀번호 |
+| `STEAM_SHARED_SECRET` | maFile의 `shared_secret` 값 (base64 문자열 그대로) |
+
+`STEAM_SHARED_SECRET` + `STEAM_PASSWORD`가 설정돼 있으면 워크플로우가 자동으로
+TOTP 방식을 사용하고 `STEAM_CONFIG_VDF`는 무시합니다 (지워도 됨).
+
+#### 방식 B — config.vdf (폴백, 비권장)
+
+> ⚠ config.vdf의 리프레시 토큰은 **로그인할 때마다 회전**하므로 CI에서 한 번 쓰면
+> 다음 실행에서 `Access Denied`가 나기 쉽습니다. 매번 재추출해야 해서 비권장.
+
 이 맥에서:
 
 ```bash
@@ -35,14 +67,10 @@ steamcmd +login <계정명> +quit     # 비밀번호 + Steam Guard 코드 1회 �
 base64 -i ~/Library/Application\ Support/Steam/config/config.vdf | pbcopy
 ```
 
-GitHub 저장소 → Settings → Secrets and variables → Actions → New repository secret:
-
 | Secret | 값 |
 |---|---|
 | `STEAM_USERNAME` | 빌더 계정명 |
-| `STEAM_CONFIG_VDF` | **base64 인코딩된** `config.vdf` (위 명령의 클립보드 값 — 원문을 넣으면 `base64: invalid input` 오류 발생) |
-
-> Steam Guard가 캐시를 무효화하면(비밀번호 변경 등) config.vdf를 다시 추출해 갱신.
+| `STEAM_CONFIG_VDF` | **base64 인코딩된** `config.vdf` (원문을 넣으면 `base64: invalid input` 오류 발생) |
 
 ### ③ 끝. 이후 릴리스 흐름
 

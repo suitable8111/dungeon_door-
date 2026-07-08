@@ -157,7 +157,9 @@ jobs:
           generate_release_notes: true
 
   # ─── Steam 자동 업로드 (secrets 설정 시에만 동작) ─────────────────────
-  # 필요 secrets: STEAM_USERNAME, STEAM_CONFIG_VDF (docs/STEAM_DEPLOY.md 참고)
+  # 권장 secrets: STEAM_USERNAME, STEAM_PASSWORD, STEAM_SHARED_SECRET (TOTP 방식)
+  # 폴백 secrets: STEAM_USERNAME, STEAM_CONFIG_VDF (docs/STEAM_DEPLOY.md 참고)
+  # TOTP 방식은 매 실행마다 코드를 새로 생성하므로 토큰 만료/갱신이 없음.
   # 업로드 후 'beta' 브랜치에 자동 라이브 — default 브랜치 승격은
   # Valve 정책상 파트너 사이트에서 수동 (웹 2FA 필수)
   deploy-steam:
@@ -169,10 +171,17 @@ jobs:
       - name: Check Steam credentials
         id: creds
         run: |
-          if [ -n "${{ secrets.STEAM_CONFIG_VDF }}" ] || [ -n "${{ secrets.STEAM_PASSWORD }}" ]; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+          if [ -n "${{ secrets.STEAM_SHARED_SECRET }}" ] && [ -n "${{ secrets.STEAM_PASSWORD }}" ]; then
+            echo "ok=true"   >> "$GITHUB_OUTPUT"
+            echo "mode=totp" >> "$GITHUB_OUTPUT"
+            echo "인증 방식: TOTP (shared_secret 런타임 생성)"
+          elif [ -n "${{ secrets.STEAM_CONFIG_VDF }}" ]; then
+            echo "ok=true"  >> "$GITHUB_OUTPUT"
+            echo "mode=vdf" >> "$GITHUB_OUTPUT"
+            echo "인증 방식: config.vdf (⚠ 토큰 회전으로 만료될 수 있음 — TOTP 방식 권장)"
           else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "ok=false"  >> "$GITHUB_OUTPUT"
+            echo "mode=none" >> "$GITHUB_OUTPUT"
             echo "Steam credentials 없음 — Steam 업로드 건너뜀"
           fi
 
@@ -198,13 +207,23 @@ jobs:
           chmod +x build/macos/DungeonDoor.app/Contents/MacOS/game
           ls -la build/macos/DungeonDoor.app/Contents/MacOS/
 
+      # 매 실행마다 30초 유효 Steam Guard 코드를 shared_secret으로 생성 —
+      # config.vdf처럼 저장된 토큰이 없으므로 만료/수동 갱신이 원천적으로 없다
+      - name: Generate Steam Guard code (TOTP)
+        if: steps.creds.outputs.mode == 'totp'
+        id: steam-totp
+        uses: andriivitiv/steam-totp@v1
+        with:
+          shared_secret: ${{ secrets.STEAM_SHARED_SECRET }}
+
       - name: Deploy to Steam (App 4718470)
         if: steps.creds.outputs.ok == 'true'
         uses: game-ci/steam-deploy@v3
         with:
           username: ${{ secrets.STEAM_USERNAME }}
           password: ${{ secrets.STEAM_PASSWORD }}
-          totp: ${{ secrets.STEAM_TOTP }}
+          # totp가 있으면 configVdf는 무시됨 (steam-deploy 동작)
+          totp: ${{ steps.steam-totp.outputs.code }}
           configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
           appId: 4718470
           buildDescription: ${{ github.ref_name }} (auto)
@@ -212,15 +231,3 @@ jobs:
           depot1Path: windows
           depot2Path: macos
           releaseBranch: beta
-
-      - name: Refresh STEAM_CONFIG_VDF secret
-        if: steps.creds.outputs.ok == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
-        run: |
-          CONFIG_PATH="$HOME/.local/share/Steam/config/config.vdf"
-          if [ -f "$CONFIG_PATH" ] && [ -n "$GH_TOKEN" ]; then
-            NEW_VDF=$(base64 -w 0 "$CONFIG_PATH")
-            gh secret set STEAM_CONFIG_VDF --repo ${{ github.repository }} --body "$NEW_VDF"
-            echo "STEAM_CONFIG_VDF 자동 갱신 완료"
-          fi
