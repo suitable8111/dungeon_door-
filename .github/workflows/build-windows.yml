@@ -169,11 +169,11 @@ jobs:
       - name: Check Steam credentials
         id: creds
         run: |
-          if [ -n "${{ secrets.STEAM_CONFIG_VDF }}" ]; then
+          if [ -n "${{ secrets.STEAM_CONFIG_VDF }}" ] || [ -n "${{ secrets.STEAM_PASSWORD }}" ]; then
             echo "ok=true" >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
-            echo "STEAM_CONFIG_VDF secret 없음 — Steam 업로드 건너뜀"
+            echo "Steam credentials 없음 — Steam 업로드 건너뜀"
           fi
 
       - name: Download Windows build
@@ -195,17 +195,32 @@ jobs:
         run: |
           mkdir -p build/macos
           unzip -q mac_zip/DungeonDoor-mac-${{ github.ref_name }}.zip -d build/macos
-          ls -la build/macos
+          chmod +x build/macos/DungeonDoor.app/Contents/MacOS/game
+          ls -la build/macos/DungeonDoor.app/Contents/MacOS/
 
       - name: Deploy to Steam (App 4718470)
         if: steps.creds.outputs.ok == 'true'
         uses: game-ci/steam-deploy@v3
         with:
           username: ${{ secrets.STEAM_USERNAME }}
+          password: ${{ secrets.STEAM_PASSWORD }}
+          totp: ${{ secrets.STEAM_TOTP }}
           configVdf: ${{ secrets.STEAM_CONFIG_VDF }}
           appId: 4718470
           buildDescription: ${{ github.ref_name }} (auto)
           rootPath: build
-          depot1Path: windows     # depot 4718471 (Windows)
-          depot2Path: macos       # depot 4718472 (macOS)
+          depot1Path: windows
+          depot2Path: macos
           releaseBranch: beta
+
+      - name: Refresh STEAM_CONFIG_VDF secret
+        if: steps.creds.outputs.ok == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          CONFIG_PATH="$HOME/.local/share/Steam/config/config.vdf"
+          if [ -f "$CONFIG_PATH" ] && [ -n "$GH_TOKEN" ]; then
+            NEW_VDF=$(base64 -w 0 "$CONFIG_PATH")
+            gh secret set STEAM_CONFIG_VDF --repo ${{ github.repository }} --body "$NEW_VDF"
+            echo "STEAM_CONFIG_VDF 자동 갱신 완료"
+          fi
