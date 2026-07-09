@@ -177,6 +177,11 @@ class Game:
         self.audio    = AudioManager()
         self.skills   = SkillManager()
 
+        # 도파민 VFX 계층 (core/vfx.py) — 상태와 분리된 연출 오버레이
+        from core.vfx import JuiceManager, LootFXManager
+        self.juice    = JuiceManager(self)
+        self.vfx_loot = LootFXManager(self.audio)
+
         # 오디오 볼륨 적용
         if self.audio.bgm:
             self.audio.bgm.set_volume(self._settings['bgm_vol'])
@@ -415,6 +420,8 @@ class Game:
             if not self._is_fading:
                 self._handle_events(dt)
             self.animator.update(world_dt)
+            if self.state == 'playing' and self.player:
+                self.vfx_loot.update(world_dt, self)   # 히트스톱 시 함께 정지
             self._update_atk_anim(dt)
             # 공격 쿨다운 감소
             if self._atk_cd_timer > 0:
@@ -667,6 +674,7 @@ class Game:
             self._skill_enchants[sid] = enc
         self._apply_skill_level_cds()
         self._run_kills       = 0
+        self.vfx_loot.clear()
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
         self.dungeon = dungeon
@@ -681,6 +689,7 @@ class Game:
 
     def _load_floor(self, is_new_game=False):
         self.floor = min(self.floor, MAX_FLOOR)
+        self.vfx_loot.clear()          # 이전 층 전리품 연출 정리
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
         self.dungeon  = dungeon
@@ -1099,6 +1108,7 @@ class Game:
         fonts.clear_cache()
         self.hud.reload_fonts()
         self.animator.reload_fonts()
+        self.vfx_loot.reload_fonts()
         self._combo_font = None
         self._font_burning_big   = fonts.load_font(28, bold=True)
         self._font_burning_small = fonts.load_font(13)
@@ -1155,7 +1165,9 @@ class Game:
 
         d = dict(self._item_data[key])
         d['key'] = key
-        self.dungeon.items.append(Item(enemy.x, enemy.y, d))
+        it = Item(enemy.x, enemy.y, d)
+        self.dungeon.items.append(it)          # 상태: 즉시 배치 (밟으면 바로 픽업)
+        self.vfx_loot.spawn_drop(it)            # 연출: 등급별 reveal + 자석
 
     # 슬롯 순서: head=0, body=1, weapon=2, off_hand=3, accessory=4
     _EQUIP_SLOTS = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
@@ -1316,10 +1328,10 @@ class Game:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
         enemy.on_hurt(self.player.x, self.player.y)
-        self._hitstop_ms = max(self._hitstop_ms, 70 if crit else 30)
         if crit:
-            self._start_punch_zoom(0.05, 120)
-            self._start_shake(3, 130)
+            self.juice.crit()
+        else:
+            self.juice.hit()
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80), crit=crit))
         self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
@@ -1348,10 +1360,7 @@ class Game:
                                     _SPRITE_FN.get(enemy.key, draw_generic),
                                     enemy.color, enemy.is_boss))
         self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
-        self._hitstop_ms = max(self._hitstop_ms, 60)
-        self._start_shake(5 if enemy.is_boss else 2, 160)
-        if enemy.is_boss:
-            self._start_punch_zoom(0.07, 170)
+        self.juice.kill(boss=enemy.is_boss)
         # 폭발 엘리트: 사망 시 1칸 폭발 — 인접 처치의 리스크
         if enemy.elite == 'volatile':
             self.animator.particles.emit_fireball_hit(enemy.x, enemy.y)
@@ -1384,8 +1393,7 @@ class Game:
             self.animator.particles.emit_combo_tier(
                 self.player.x, self.player.y, tier_color)
             self.audio.play('tier_up')
-            self._start_shake(4, 200)
-            self._start_punch_zoom(0.05, 140)
+            self.juice.tier_up()
         # 도전과제
         self._ach_stat('kills')
         if enemy.elite:
@@ -1398,7 +1406,8 @@ class Game:
         if self.player.gold + (gold or 0) >= 2000:
             self._ach_unlock('ACH_RICH')
         if gold:
-            self.player.gold += gold
+            self.player.gold += gold                      # 상태: 즉시 지급
+            self.vfx_loot.spawn_gold(enemy.x, enemy.y, gold)  # 연출: 코인 산탄→흡입
             self.animator.add(GoldPopAnim(enemy.x, enemy.y, gold))
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
         else:
@@ -1413,9 +1422,7 @@ class Game:
             self.animator.add(BannerAnim(f"LEVEL UP!  Lv.{self.player.level}",
                                          (255, 226, 110), y=104, size=30))
             self.animator.particles.emit_levelup(self.player.x, self.player.y)
-            self._gold_flash_ms = 420
-            self._hitstop_ms = max(self._hitstop_ms, 110)
-            self._start_shake(3, 240)
+            self.juice.levelup()
             self.audio.play('levelup_big')
             for cid, cdef in COMBO_SKILL_DEFS.items():
                 slv_req = cdef.get('skill_level_req', 1)
@@ -2689,7 +2696,10 @@ class Game:
 
         for item in self.dungeon.items:
             if self.dungeon.tiles[item.y][item.x].visible:
-                self._draw_item(item, (item.x-cx)*TILE_SIZE, (item.y-cy)*TILE_SIZE)
+                iox, ioy, draw_glyph = self.vfx_loot.item_render_state(item)
+                if draw_glyph:
+                    self._draw_item(item, (item.x-cx)*TILE_SIZE + int(iox),
+                                    (item.y-cy)*TILE_SIZE + int(ioy))
 
         # 보스 스킬 위험 구역 (예고 중 붉게 점멸)
         for enemy in self.dungeon.enemies:
@@ -2727,6 +2737,7 @@ class Game:
             self._fortify_effect.draw_above(self._game_surf, px, py)
 
         self.animator.draw(self._game_surf, cx, cy)
+        self.vfx_loot.draw(self._game_surf, cx, cy)   # 코인·등급 오브·이름 팝업
 
         # 처치 연쇄 카운터 (상단 중앙) — 콤보가 쌓일수록 커지고 티어 색으로 발광
         if self._combo_count >= 2 and self._combo_ms > 0:

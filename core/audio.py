@@ -498,6 +498,16 @@ class AudioManager:
                 'levelup_big': lambda p: _mix(_sine(523*p,110,0.28,rate=r)+_sine(659*p,110,0.28,rate=r)
                                               +_sine(784*p,120,0.30,rate=r)+_sine(1046*p,200,0.26,rate=r),
                                               _sine(1568*p,260,0.10,rate=r)),
+                # 코인 흡입 — 아주 짧은 고음 플링
+                'coin':        lambda p: _sine(1320*p,35,0.16,rate=r)+_sine(1760*p,45,0.10,rate=r),
+                # 전리품 등급 reveal — 등급 오를수록 길고 화려한 차임
+                'loot_r0':     lambda p: _sine(660*p,60,0.16,rate=r),
+                'loot_r1':     lambda p: _sine(660*p,60,0.18,rate=r)+_sine(880*p,90,0.16,rate=r),
+                'loot_r2':     lambda p: _sine(660*p,60,0.18,rate=r)+_sine(880*p,70,0.18,rate=r)
+                                         +_sine(1175*p,130,0.16,rate=r),
+                'loot_r3':     lambda p: _mix(_sine(660*p,70,0.18,rate=r)+_sine(880*p,70,0.18,rate=r)
+                                              +_sine(1175*p,90,0.18,rate=r)+_sine(1568*p,200,0.16,rate=r),
+                                              _sine(3136*p,240,0.05,rate=r)),
             }
             for k, fn in defs.items():
                 self._sounds[k] = [_wave(fn(p), ch) for p in self._PITCH_VARIANTS]

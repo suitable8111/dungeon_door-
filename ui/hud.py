@@ -562,11 +562,20 @@ class HUD:
         pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
         x += 10
 
-        # ── 골드 ──
-        gold_label = self.font_sm.render("G", True, GOLD_COLOR)
+        # ── 골드 (표시값 롤업 — 실제 player.gold는 항상 정확, 연출만 지연) ──
+        shown = getattr(self, '_gold_shown', None)
+        if shown is None or abs(shown - player.gold) > 500:
+            shown = float(player.gold)          # 첫 렌더/큰 점프는 즉시 동기화
+        shown += (player.gold - shown) * 0.12
+        if abs(shown - player.gold) < 0.6:
+            shown = float(player.gold)
+        self._gold_shown = shown
+        rolling = int(shown) != player.gold
+        g_col = (255, 235, 130) if rolling else GOLD_COLOR   # 롤업 중 반짝
+        gold_label = self.font_sm.render("G", True, g_col)
         screen.blit(gold_label, (x, cy - gold_label.get_height() // 2))
         x += gold_label.get_width() + 5
-        gold_val = self.font_md.render(str(player.gold), True, GOLD_COLOR)
+        gold_val = self.font_md.render(str(int(shown)), True, g_col)
         screen.blit(gold_val, (x, cy - gold_val.get_height() // 2))
         x += gold_val.get_width() + 16
 
