@@ -241,6 +241,13 @@ class Game:
         # 레벨업 골든 플래시
         self._gold_flash_ms: float = 0.0
 
+        # 슬로모션 (보스 막타·층 클리어·잭팟) — world_dt에 배율 적용
+        self._slowmo_ms:     float = 0.0
+        self._slowmo_factor: float = 1.0
+
+        # 오버킬 콜아웃 쿨다운 (배너 스팸 방지)
+        self._last_overkill_t: int = -99999
+
         # 인벤토리 / 장비 화면 선택 인덱스
         self._inv_sel   = 0
         self._equip_sel = 0
@@ -406,6 +413,10 @@ class Game:
             if self._hitstop_ms > 0:
                 self._hitstop_ms = max(0.0, self._hitstop_ms - dt)
                 world_dt = 0
+            elif self._slowmo_ms > 0:
+                # 슬로모션: 월드만 느려지고 입력·연출 타이머는 실시간
+                self._slowmo_ms = max(0.0, self._slowmo_ms - dt)
+                world_dt = dt * self._slowmo_factor
             else:
                 world_dt = dt
             if self._hurt_flash_ms > 0:
@@ -721,9 +732,70 @@ class Game:
         else:
             self.dungeon.update_visibility(self.player.x, self.player.y)
 
-        # 리스폰 설정: 보스 제외 초기 몬스터 수를 최대치로 고정
-        self._respawn_max      = sum(1 for e in self.dungeon.enemies if not e.is_boss)
+        # 파괴 가능 프롭 + 보물 고블린 (리스폰 카운트 산정 전에 스폰)
+        self._spawn_floor_props()
+
+        # 리스폰 설정: 보스·프롭·고블린 제외 초기 몬스터 수를 최대치로 고정
+        self._respawn_max      = sum(1 for e in self.dungeon.enemies
+                                     if not e.is_boss and not e.is_prop and not e.flee)
         self._respawn_timer_ms = self._RESPAWN_INTERVAL
+
+    def _emit_goblin_sparkle(self, enemy):
+        """보물 고블린 주변 금색 반짝임 파티클 (순수 연출)."""
+        from core.particles import Particle
+        ts = TILE_SIZE
+        wx = enemy.x * ts + ts * 0.5 + random.uniform(-8, 8)
+        wy = enemy.y * ts + ts * 0.4 + random.uniform(-6, 6)
+        self.animator.particles._add(Particle(
+            wx, wy, random.uniform(-15, 15), random.uniform(-45, -15),
+            drag=2.0, grav=-0.15, life_ms=random.randint(280, 480),
+            r0=2, r1=1, c0=(255, 230, 120), c1=(230, 160, 30),
+            a0=220, a1=0, glow=True,
+        ))
+
+    # ─────────────── 프롭 / 보물 고블린 스폰 ─────────────────────────
+    def _spawn_floor_props(self):
+        """항아리·나무상자 3~6개 + 8% 확률 보물 고블린 배치."""
+        from entities.enemy import Enemy
+        dungeon = self.dungeon
+
+        def _free_tile(min_player_dist=0):
+            for _ in range(60):
+                room = random.choice(dungeon.rooms)
+                x = random.randint(room.x + 1, room.x + room.w - 2)
+                y = random.randint(room.y + 1, room.y + room.h - 2)
+                if (dungeon.is_walkable(x, y)
+                        and not dungeon.get_enemy_at(x, y)
+                        and not dungeon.get_item_at(x, y)
+                        and (x, y) != (self.player.x, self.player.y)
+                        and (x, y) != dungeon.stairs_pos
+                        and abs(x - self.player.x) + abs(y - self.player.y) >= min_player_dist):
+                    return x, y
+            return None
+
+        if not dungeon.rooms:
+            return
+        # ── 항아리/상자 (밟아 부수는 소소한 보상) ──
+        for _ in range(random.randint(3, 6)):
+            pos = _free_tile()
+            if pos is None:
+                continue
+            key = random.choice(('pot', 'pot', 'crate'))
+            d = dict(self._enemy_data[key])
+            d['key'] = key
+            d['gold_drop'] = random.randint(2, 6) + self.floor // 3
+            dungeon.enemies.append(Enemy(pos[0], pos[1], d))
+        # ── 보물 고블린 (8%, 보스층 제외) ──
+        if not dungeon.is_boss_floor and random.random() < 0.08:
+            pos = _free_tile(min_player_dist=12)
+            if pos:
+                d = dict(self._enemy_data['treasure_goblin'])
+                d['key'] = 'treasure_goblin'
+                d['hp'] = 12 + self.floor * 3          # 층 비례 — 몇 대는 맞아야 잡힘
+                d['gold_drop'] = 60 + self.floor * 25 + random.randint(0, 40)
+                dungeon.enemies.append(Enemy(pos[0], pos[1], d))
+                self.messages.append((t('goblin_spawn'), 'warn'))
+                self.audio.play('shop_open')
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
@@ -1145,7 +1217,7 @@ class Game:
                 self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
 
     # ------------------------------------------------------------------ #
-    def _try_enemy_drop(self, enemy):
+    def _try_enemy_drop(self, enemy, force=False):
         import random
         from map.generator import drop_pool
         from entities.item import Item
@@ -1153,7 +1225,7 @@ class Game:
         is_boss = getattr(enemy, 'is_boss', False)
         # 엘리트는 70% 드랍 (일반 28%) — 위험을 감수할 이유
         drop_chance = 0.70 if getattr(enemy, 'elite', None) else 0.28
-        if not is_boss and random.random() >= drop_chance:
+        if not is_boss and not force and random.random() >= drop_chance:
             return
 
         pool = drop_pool(self.floor)
@@ -1353,6 +1425,16 @@ class Game:
             self.achievements.add_stat(stat, amount)
 
     def _on_enemy_killed(self, enemy):
+        # 프롭(항아리/나무상자): 파괴 연출 + 콤보 유지 + 소소한 보상 후 종료
+        if enemy.is_prop:
+            self.animator.add(DeathAnim(enemy.x, enemy.y,
+                                        _SPRITE_FN.get(enemy.key, draw_generic),
+                                        enemy.color, False))
+            self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
+            self.juice.kill()
+            self._bump_kill_combo()
+            self._on_prop_broken(enemy)
+            return
         gold = enemy.gold_drop
         self._run_kills += 1
         # 사망 연출: 시체 잔상 + 적 색 파편 버스트 + 히트스톱 + 흔들림
@@ -1373,27 +1455,19 @@ class Game:
                 self.messages.append((t('volatile_boom', enemy.name, dmg), 'bad'))
             else:
                 self.messages.append((t('volatile_boom_safe', enemy.name), 'warn'))
-        # 처치 연쇄: 4초 안에 이어 죽이면 오의 SP 보너스
-        prev_tier = self._combo_tier(self._combo_count)
-        self._combo_count += 1
-        self._combo_ms = 4000
-        # 킬마다 한 음씩 올라가는 콤보 플링
-        self.audio.play_combo(self._combo_count)
-        if self._combo_count >= 2:
-            bonus = min(self._combo_count, 8)
-            self.player.arcane_sp = min(self.player.arcane_sp_max,
-                                        self.player.arcane_sp + bonus)
-            if self._combo_count % 5 == 0:
-                self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
-        # 티어 승급 — 배너 + 팡파레 + 플레이어 중심 버스트
-        new_tier = self._combo_tier(self._combo_count)
-        if new_tier and new_tier != prev_tier:
-            _, tier_name, tier_color = new_tier
-            self.animator.add(BannerAnim(tier_name, tier_color))
-            self.animator.particles.emit_combo_tier(
-                self.player.x, self.player.y, tier_color)
-            self.audio.play('tier_up')
-            self.juice.tier_up()
+        # 처치 연쇄 + 티어 승급 (프롭 파괴와 공유)
+        self._bump_kill_combo()
+        # 오버킬: 초과 피해가 최대 HP의 1.5배 이상 (4초 쿨다운, 보스 제외)
+        now = pygame.time.get_ticks()
+        if (not enemy.is_boss
+                and getattr(enemy, 'last_overkill', 0) >= enemy.max_hp * 1.5
+                and now - self._last_overkill_t > 4000):
+            self._last_overkill_t = now
+            self.animator.add(BannerAnim('OVERKILL!', (255, 95, 40),
+                                         y=140, size=26, duration_ms=900))
+            self.animator.particles.emit_power_hit(enemy.x, enemy.y)
+            self.audio.play('crit')
+            self.juice.overkill()
         # 도전과제
         self._ach_stat('kills')
         if enemy.elite:
@@ -1433,9 +1507,65 @@ class Game:
                     self._unlocked_combos.add(cid)
                     self.messages.append((t('combo_unlock', cdef['name']), 'good'))
         self.dungeon.enemies.remove(enemy)
+        # 드라마틱 마무리 슬로모션: 보스 막타 / 층의 마지막 몬스터
+        if enemy.is_boss:
+            self.juice.slowmo(500, 0.2)
+        elif (not self._burning_active
+              and not any(e.is_alive() and not e.is_prop and not e.flee
+                          for e in self.dungeon.enemies)):
+            self.juice.slowmo(350, 0.3)
         self._check_boss_cleared()
         # ── 아이템 드랍 ───────────────────────────────────────────
-        self._try_enemy_drop(enemy)
+        if enemy.key == 'treasure_goblin':
+            # 잭팟! — 골드 2연타 + 확정 드랍 3개 + 슬로모
+            self.animator.add(BannerAnim('JACKPOT!', (255, 215, 70), size=36))
+            self.vfx_loot.spawn_gold(enemy.x, enemy.y, 60)   # 추가 코인 비주얼
+            self.audio.play('loot_r3')
+            self.juice.slowmo(400, 0.25)
+            for _ in range(3):
+                self._try_enemy_drop(enemy, force=True)
+        else:
+            self._try_enemy_drop(enemy)
+
+    # ── 처치 연쇄 (몬스터·프롭 공용): 카운트 + 피치 래더 + 티어 배너 ──
+    def _bump_kill_combo(self):
+        prev_tier = self._combo_tier(self._combo_count)
+        self._combo_count += 1
+        self._combo_ms = 4000
+        self.audio.play_combo(self._combo_count)   # 킬마다 한 음씩 상승
+        if self._combo_count >= 2:
+            bonus = min(self._combo_count, 8)
+            self.player.arcane_sp = min(self.player.arcane_sp_max,
+                                        self.player.arcane_sp + bonus)
+            if self._combo_count % 5 == 0:
+                self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
+        new_tier = self._combo_tier(self._combo_count)
+        if new_tier and new_tier != prev_tier:
+            _, tier_name, tier_color = new_tier
+            self.animator.add(BannerAnim(tier_name, tier_color))
+            self.animator.particles.emit_combo_tier(
+                self.player.x, self.player.y, tier_color)
+            self.audio.play('tier_up')
+            self.juice.tier_up()
+
+    # ── 프롭 파괴 (항아리/나무상자): 소소하지만 즉각적인 보상 ─────────
+    def _on_prop_broken(self, prop):
+        gold = prop.gold_drop
+        if gold:
+            self.player.gold += gold                          # 상태: 즉시 지급
+            self.vfx_loot.spawn_gold(prop.x, prop.y, gold)    # 연출: 코인 산탄
+            self.messages.append((t('prop_break_gold', prop.name, gold), 'good'))
+        else:
+            self.messages.append((t('prop_break', prop.name), 'info'))
+        # 18% 확률 물약 서프라이즈 (등급 reveal 연출 포함)
+        if random.random() < 0.18:
+            from entities.item import Item
+            key = 'large_health_potion' if random.random() < 0.25 else 'health_potion'
+            d = dict(self._item_data[key]); d['key'] = key
+            it = Item(prop.x, prop.y, d)
+            self.dungeon.items.append(it)
+            self.vfx_loot.spawn_drop(it)
+        self.dungeon.enemies.remove(prop)
 
     def _pickup(self, item):
         if item.effect == 'enhance_stone':
@@ -2530,6 +2660,19 @@ class Game:
         for enemy in list(self.dungeon.enemies):
             if not (enemy.is_alive() and self.player.is_alive()):
                 continue
+            # 보물 고블린: 수명 만료 시 도주 성공 (연출과 함께 소멸)
+            if enemy.lifetime_ms > 0:
+                enemy.lifetime_ms -= dt
+                if enemy.lifetime_ms <= 0:
+                    self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
+                    self.dungeon.enemies.remove(enemy)
+                    self.messages.append((t('goblin_escape'), 'bad'))
+                    self.audio.play('teleport')
+                    continue
+                # 황금 반짝임 잔상 — 시야에 들어오면 눈에 확 띄게
+                if (dt > 0 and random.random() < dt / 150.0
+                        and self.dungeon.tiles[enemy.y][enemy.x].visible):
+                    self._emit_goblin_sparkle(enemy)
             prev_hp = self.player.hp
             result  = enemy.update(dt, self.dungeon, self.player, self.messages)
             if self.player.hp < prev_hp:
@@ -3111,7 +3254,8 @@ class Game:
                 _r(self._game_surf, col, blit_x + 2, blit_y + 2, max(1, int(bw*ratio)), 5)
         else:
             fn(self._game_surf, x, y, col, pygame.time.get_ticks())
-            draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
+            if not enemy.is_prop:            # 프롭은 HP 바 없음
+                draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
         # 공격 전조 '!' 마커 (회피 타이밍 안내)
         if telegraphing:
             mx = x + ts // 2

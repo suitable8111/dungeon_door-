@@ -73,6 +73,19 @@ class JuiceManager:
         """피격 — 피해 규모별 흔들림."""
         self._g._start_shake(5 if heavy else 3, 220 if heavy else 150)
 
+    def slowmo(self, ms=400, factor=0.25):
+        """슬로모션 — 보스 막타·층 클리어·잭팟의 드라마틱 마무리."""
+        g = self._g
+        if ms > g._slowmo_ms:
+            g._slowmo_ms = ms
+            g._slowmo_factor = factor
+        g._start_punch_zoom(0.06, min(300, ms))
+
+    def overkill(self):
+        """오버킬 — 강한 흔들림 + 펀치 줌 (배너는 호출부에서)."""
+        self._g._start_shake(4, 180)
+        self._g._start_punch_zoom(0.06, 150)
+
 
 # ═════════════════════════════════════════════════════════════════════════
 #  ③ Variable Reward — 아이템 등급 판정

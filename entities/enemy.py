@@ -49,6 +49,11 @@ class Enemy(Entity):
         self.aware_range  = data.get('aware_range',  20 if data.get('is_boss') else 14)
         self.chase_range  = data.get('chase_range',  18 if data.get('is_boss') else 10)
 
+        # 프롭(항아리 등): AI 없음 / flee(보물 고블린): 도망 + 수명 제한
+        self.is_prop      = data.get('is_prop', False)
+        self.flee         = data.get('flee', False)
+        self.lifetime_ms  = data.get('lifetime_ms', 0)
+
         self.boss_skills  = data.get('boss_skills', [])
         self._skill_cd_ms = data.get('skill_cd_ms', 5000)
         self._skill_t     = random.uniform(3000, 6000)
@@ -122,6 +127,16 @@ class Enemy(Entity):
 
         self._move_t   -= dt_ms
         self._attack_t -= dt_ms
+
+        # 도망 AI (보물 고블린): 공격하지 않고 플레이어 반대편으로 달아난다
+        if self.flee:
+            if self._move_t <= 0:
+                if dist <= self.chase_range:
+                    self._move_away(player.x, player.y, dungeon, player)
+                elif random.random() < 0.5:
+                    self._move_random(dungeon, player)
+                self._move_t = self.move_ms
+            return None
 
         # 보스 스킬 쿨다운
         boss_result = None
@@ -314,6 +329,20 @@ class Enemy(Entity):
         else:
             if dy: steps.append((0, 1 if dy > 0 else -1))
             if dx: steps.append((1 if dx > 0 else -1, 0))
+        self._try_steps(steps, dungeon, player)
+
+    def _move_away(self, tx, ty, dungeon, player):
+        """플레이어 반대 방향 우선 이동 (막히면 수직 방향으로 우회)."""
+        dx, dy = self.x - tx, self.y - ty
+        steps = []
+        if abs(dx) >= abs(dy):
+            steps.append(((1 if dx >= 0 else -1), 0))
+            steps.append((0, (1 if dy >= 0 else -1)))
+            steps.append((0, (-1 if dy >= 0 else 1)))
+        else:
+            steps.append((0, (1 if dy >= 0 else -1)))
+            steps.append(((1 if dx >= 0 else -1), 0))
+            steps.append(((-1 if dx >= 0 else 1), 0))
         self._try_steps(steps, dungeon, player)
 
     def _move_random(self, dungeon, player):

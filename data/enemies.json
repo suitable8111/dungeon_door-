@@ -1014,5 +1014,72 @@
     "name_ja": "リッチ",
     "name_zh": "巫妖",
     "name_ru": "Лич"
+  },
+  "pot": {
+    "name": "항아리",
+    "name_en": "Clay Pot",
+    "name_ja": "壺",
+    "name_zh": "陶罐",
+    "name_ru": "Глиняный горшок",
+    "hp": 1,
+    "attack": 0,
+    "defense": 0,
+    "xp": 0,
+    "gold_drop": 0,
+    "color": [
+      196,
+      148,
+      96
+    ],
+    "move_ms": 999999,
+    "attack_ms": 999999,
+    "aware_range": 0,
+    "chase_range": 0,
+    "is_prop": true
+  },
+  "crate": {
+    "name": "나무 상자",
+    "name_en": "Wooden Crate",
+    "name_ja": "木箱",
+    "name_zh": "木箱",
+    "name_ru": "Деревянный ящик",
+    "hp": 1,
+    "attack": 0,
+    "defense": 0,
+    "xp": 0,
+    "gold_drop": 0,
+    "color": [
+      160,
+      118,
+      66
+    ],
+    "move_ms": 999999,
+    "attack_ms": 999999,
+    "aware_range": 0,
+    "chase_range": 0,
+    "is_prop": true
+  },
+  "treasure_goblin": {
+    "name": "보물 고블린",
+    "name_en": "Treasure Goblin",
+    "name_ja": "宝物ゴブリン",
+    "name_zh": "宝藏哥布林",
+    "name_ru": "Гоблин-сокровищник",
+    "hp": 14,
+    "attack": 0,
+    "defense": 0,
+    "xp": 20,
+    "gold_drop": 80,
+    "color": [
+      255,
+      208,
+      70
+    ],
+    "move_ms": 300,
+    "attack_ms": 999999,
+    "aware_range": 12,
+    "chase_range": 12,
+    "flee": true,
+    "lifetime_ms": 14000
   }
 }

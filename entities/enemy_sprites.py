@@ -788,8 +788,55 @@ def draw_generic(s, x, y, col, t):
     _c(s, (0, 0, 0),       cx + 2, cy - 2, 1)
 
 
+def draw_pot(s, x, y, col, t):
+    """항아리 — 파괴 가능 프롭 (호흡 애니메이션 없음, 정적)."""
+    cx, cy = x + 16, y + 18
+    dk, lt = _D(col, 45), _L(col, 40)
+    pygame.draw.ellipse(s, dk,  (cx - 9, cy - 8, 18, 18))     # 몸통 외곽
+    pygame.draw.ellipse(s, col, (cx - 8, cy - 7, 16, 16))     # 몸통
+    pygame.draw.ellipse(s, lt,  (cx - 5, cy - 6, 5, 7))       # 하이라이트
+    pygame.draw.rect(s, dk,  (cx - 5, cy - 12, 10, 5))        # 목
+    pygame.draw.rect(s, col, (cx - 6, cy - 13, 12, 3))        # 테두리 입구
+    pygame.draw.line(s, dk, (cx - 3, cy - 1), (cx + 1, cy + 4), 1)  # 금
+
+def draw_crate(s, x, y, col, t):
+    """나무 상자 — 파괴 가능 프롭."""
+    cx, cy = x + 16, y + 17
+    dk, lt = _D(col, 45), _L(col, 35)
+    pygame.draw.rect(s, dk,  (cx - 10, cy - 9, 20, 20))
+    pygame.draw.rect(s, col, (cx - 9,  cy - 8, 18, 18))
+    pygame.draw.rect(s, lt,  (cx - 9,  cy - 8, 18, 3))        # 윗판 하이라이트
+    pygame.draw.line(s, dk, (cx - 9, cy - 8), (cx + 9, cy + 10), 2)   # X 보강대
+    pygame.draw.line(s, dk, (cx + 8, cy - 8), (cx - 10, cy + 10), 2)
+    pygame.draw.rect(s, dk, (cx - 9, cy - 1, 18, 2))          # 가로대
+
+def draw_treasure_goblin(s, x, y, col, t):
+    """보물 고블린 — 금화 자루를 진 도망자. 반짝임은 게임 쪽 파티클."""
+    T = t * 0.001
+    cx, cy = x + 16, y + 17
+    bob = math.sin(T * 9) * 1.5                                # 허둥지둥 뜀박질
+    gb = (110, 190, 90)                                        # 고블린 녹색 몸
+    _c(s, _D(gb, 40), cx - 3, cy + bob + 2, 6)                 # 몸
+    _c(s, gb,         cx - 3, cy + bob + 1, 5)
+    _c(s, _L(gb, 30), cx - 3, cy + bob - 6, 4)                 # 머리
+    _c(s, (255, 60, 60), cx - 5, cy + bob - 7, 1)              # 눈 (빨강)
+    _c(s, (255, 60, 60), cx - 1, cy + bob - 7, 1)
+    # 금화 자루 (등 뒤, 색상 = data color 골드)
+    _c(s, _D(col, 60), cx + 6, cy + bob - 1, 7)
+    _c(s, col,         cx + 6, cy + bob - 2, 6)
+    _c(s, _L(col, 60), cx + 4, cy + bob - 4, 2)
+    pygame.draw.line(s, _D(col, 80), (cx + 2, cy + bob - 6), (cx + 6, cy + bob - 8), 2)
+    # 발 (달리는 애니메이션)
+    lo = 2 if math.sin(T * 18) > 0 else -2
+    _c(s, _D(gb, 60), cx - 6 + lo, cy + bob + 7, 2)
+    _c(s, _D(gb, 60), cx - 0 - lo, cy + bob + 7, 2)
+
+
 # ── registry ──────────────────────────────────────────────────────────────────
 ENEMY_SPRITE_FNS = {
+    'pot':              draw_pot,
+    'crate':            draw_crate,
+    'treasure_goblin':  draw_treasure_goblin,
     'rat':              draw_rat,
     'bat':              draw_bat,
     'centipede':        draw_centipede,
