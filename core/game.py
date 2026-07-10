@@ -1237,7 +1237,18 @@ class Game:
 
         d = dict(self._item_data[key])
         d['key'] = key
-        it = Item(enemy.x, enemy.y, d)
+        # 같은 타일에 아이템이 겹치면 이름 팝업/글리프가 뭉개짐 → 인접 타일로 산개
+        dx, dy = enemy.x, enemy.y
+        if self.dungeon.get_item_at(dx, dy):
+            neighbors = [(dx+ox, dy+oy) for ox, oy in
+                         ((0,-1),(0,1),(-1,0),(1,0),(-1,-1),(1,-1),(-1,1),(1,1))]
+            random.shuffle(neighbors)
+            for nx, ny in neighbors:
+                if (self.dungeon.is_walkable(nx, ny)
+                        and not self.dungeon.get_item_at(nx, ny)):
+                    dx, dy = nx, ny
+                    break
+        it = Item(dx, dy, d)
         self.dungeon.items.append(it)          # 상태: 즉시 배치 (밟으면 바로 픽업)
         self.vfx_loot.spawn_drop(it)            # 연출: 등급별 reveal + 자석
 

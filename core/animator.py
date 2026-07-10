@@ -30,6 +30,10 @@ class Animator:
         BannerAnim._font_cache.clear()
 
     def add(self, anim):
+        # 배너는 같은 y 슬롯에 겹치면 글자가 뭉개져 보인다 → 기존 것 교체
+        if isinstance(anim, BannerAnim):
+            self._anims = [a for a in self._anims
+                           if not (isinstance(a, BannerAnim) and a.y == anim.y)]
         self._anims.append(anim)
 
     def update(self, dt_ms):

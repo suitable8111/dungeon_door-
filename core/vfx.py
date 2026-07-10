@@ -297,9 +297,12 @@ class LootFXManager:
                     color, _, n_part, snd = RARITY_DEFS[fx.rarity]
                     game.animator.particles.emit_combo_tier(item.x, item.y, color)
                     self._audio.play(snd)
-                    self._pops.append([item.name, color,
-                                       item.x * ts + ts * 0.5,
-                                       item.y * ts + ts * 0.2, 0.0])
+                    # 근접한 기존 팝업과 겹치지 않게 세로 스태거
+                    wx = item.x * ts + ts * 0.5
+                    wy = item.y * ts + ts * 0.2
+                    near = sum(1 for p in self._pops
+                               if abs(p[2] - wx) < ts * 1.5 and abs(p[3] - wy) < ts)
+                    self._pops.append([item.name, color, wx, wy - near * 13, 0.0])
             elif fx.state == 'idle':
                 # 자석: 접근 + 수납 가능 시 발동
                 if game.state == 'playing' and self._can_pickup(game, item):
@@ -351,11 +354,13 @@ class LootFXManager:
                     a = int(120 * frac * (1 - i / pillar_h))
                     pygame.draw.line(pillar, (*color, a), (0, i), (pw, i))
                 surf.blit(pillar, (cx - pw // 2, cy - pillar_h))
-                # 떠오르는 오브 (펄스)
+                # 떠오르는 오브 (펄스, aacircle로 부드럽게)
                 oy = int(frac * ts * 0.45)
-                r = 4 + int(2 * math.sin(ticks * 0.02))
-                pygame.draw.circle(surf, color, (cx, cy - oy), r)
-                pygame.draw.circle(surf, (255, 255, 255), (cx, cy - oy), max(1, r - 2))
+                r = 4 + 2 * math.sin(ticks * 0.02)
+                pygame.draw.aacircle(surf, tuple(c // 2 for c in color),
+                                     (cx, cy - oy), r + 2.5)
+                pygame.draw.aacircle(surf, color, (cx, cy - oy), r)
+                pygame.draw.aacircle(surf, (255, 255, 255), (cx, cy - oy), max(1.0, r - 2))
             elif fx.state == 'idle' and fx.rarity != 'common':
                 # 바닥 등급 글로우 (레어 이상 눈에 띄게)
                 pulse = 0.6 + 0.4 * math.sin(ticks * 0.004 + fx.bob)
@@ -364,11 +369,12 @@ class LootFXManager:
                 pygame.draw.ellipse(glow, (*color, int(70 * pulse)), (0, 0, gw, gh))
                 surf.blit(glow, (cx - gw // 2, cy + ts // 2 - gh + 2))
 
-        # 코인
+        # 코인 (aacircle — 저반경 draw.circle은 각져 보임)
         for c in self._coins:
             x, y = int(c.x - ox_cam), int(c.y - oy_cam)
-            pygame.draw.circle(surf, (255, 205, 60), (x, y), c.r)
-            pygame.draw.circle(surf, (255, 240, 160), (x - 1, y - 1), 1)
+            pygame.draw.aacircle(surf, (200, 150, 30), (x, y), c.r + 0.8)
+            pygame.draw.aacircle(surf, (255, 205, 60), (x, y), c.r)
+            pygame.draw.aacircle(surf, (255, 240, 160), (x - 1, y - 1), max(1.0, c.r * 0.45))
 
         # 등급색 이름 팝업
         if self._pops:

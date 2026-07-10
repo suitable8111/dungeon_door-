@@ -165,12 +165,16 @@ class ParticleSystem:
                 if max(gc) < 4:
                     continue
                 if p.shape == 'dot':
-                    pygame.draw.circle(g_surf, gc, (sx, sy), r)
-                    # 외곽 부드러운 할로
-                    if r >= 3:
-                        og = (gc[0] // 3, gc[1] // 3, gc[2] // 3)
-                        if max(og) > 2:
-                            pygame.draw.circle(g_surf, og, (sx, sy), r + r // 2)
+                    # 동심원 3겹 additive 누적 → 부드러운 라디얼 글로우.
+                    # (draw.circle은 저반경에서 각진 팔각형으로 렌더되어
+                    #  '네모 파티클'로 보이는 아티팩트가 있었음 → aacircle)
+                    o_col = (gc[0] * 3 // 10, gc[1] * 3 // 10, gc[2] * 3 // 10)
+                    m_col = (gc[0] // 2,      gc[1] // 2,      gc[2] // 2)
+                    if max(o_col) > 2:
+                        pygame.draw.aacircle(g_surf, o_col, (sx, sy), r * 1.8)
+                    if max(m_col) > 2:
+                        pygame.draw.aacircle(g_surf, m_col, (sx, sy), r * 1.15)
+                    pygame.draw.aacircle(g_surf, gc, (sx, sy), max(1.0, r * 0.6))
                 else:
                     pts = _shard_pts(sx, sy, max(1.0, p.sw * frac), p.sh, p.angle)
                     try:
@@ -181,7 +185,7 @@ class ParticleSystem:
                 # ── SRCALPHA 일반 알파 ───────────────────────────
                 rgba = (*col, alpha)
                 if p.shape == 'dot':
-                    pygame.draw.circle(n_surf, rgba, (sx, sy), r)
+                    pygame.draw.aacircle(n_surf, rgba, (sx, sy), r)
                 else:
                     pts = _shard_pts(sx, sy, max(1.0, p.sw * frac), p.sh, p.angle)
                     try:
