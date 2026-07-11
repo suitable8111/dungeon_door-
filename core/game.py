@@ -9,7 +9,8 @@ from core.camera import Camera
 from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
-                            DeathAnim, GoldPopAnim, BannerAnim)
+                            DeathAnim, GoldPopAnim, BannerAnim,
+                            SmearAnim, ThrustSmearAnim, AfterimageAnim, CalloutAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
@@ -224,6 +225,13 @@ class Game:
         # 공격 쿨다운 타이머 (ms) — 0 이하일 때만 공격 가능
         self._atk_cd_timer: float = 0.0
 
+        # 액션 콤보 전투 상태
+        self._atk_variant:     str   = 'slash1'  # 현재 공격 포즈 변형
+        self._chain_step:      int   = 0         # 3단 콤보 단계 (0/1/2)
+        self._chain_window_ms: float = 0.0       # 체인 유지 잔여 시간
+        self._cancel_bonus_ms: float = 0.0       # 드라이브 캔슬 데미지 보너스 창
+        self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
+
         # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
         self._hitstop_ms: float = 0.0
         self._hurt_flash_ms: float = 0.0
@@ -425,6 +433,18 @@ class Game:
                 self._punch_zoom_ms = max(0.0, self._punch_zoom_ms - dt)
             if self._gold_flash_ms > 0:
                 self._gold_flash_ms = max(0.0, self._gold_flash_ms - dt)
+            if self._white_flash_ms > 0:
+                self._white_flash_ms = max(0.0, self._white_flash_ms - dt)
+            if self._cancel_bonus_ms > 0:
+                self._cancel_bonus_ms = max(0.0, self._cancel_bonus_ms - dt)
+            if self._chain_window_ms > 0:
+                self._chain_window_ms = max(0.0, self._chain_window_ms - dt)
+                if self._chain_window_ms == 0:
+                    self._chain_step = 0
+            # 드라이브 게이지 회복 (1칸 / 2.5초)
+            if self.state == 'playing' and self.player:
+                self.player.drive = min(self.player.drive_max,
+                                        self.player.drive + dt * 0.0004)
             self._update_fade(dt)
             self._update_shake(dt)
             self._update_move_anim(dt)
@@ -709,6 +729,7 @@ class Game:
             self.player = Player(*start)
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
+            self.messages.append((t('combat_hint'), 'info'))
         else:
             self.player.x, self.player.y = start
             self.messages.append((t('floor_arrive', self.floor), 'good'))
@@ -1313,10 +1334,7 @@ class Game:
         if enemy:
             if self._atk_cd_timer > 0:
                 return False  # 쿨다운 중: 이동 범프 공격 불가
-            self._trigger_atk_anim()
-            self._player_attack(enemy)
-            self._atk_cd_timer = self.player.atk_cooldown_ms
-            return True
+            return self._chain_attack(dx, dy, enemy)  # 범프도 콤보 체인에 합류
         target_tile = self.dungeon.tiles[ny][nx]
 
         # 버닝 스테이지 문
@@ -1359,20 +1377,159 @@ class Game:
 
         return True
 
+    _DIRS = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
+    _DIR_NAME = {(1, 0): 'right', (-1, 0): 'left', (0, 1): 'down', (0, -1): 'up'}
+
+    def _held_move_dir(self):
+        """현재 눌려 있는 방향키 (커맨드 액션 판정용). 없으면 None."""
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_UP] or keys[pygame.K_KP8]:    return (0, -1)
+        if keys[pygame.K_DOWN] or keys[pygame.K_KP2]:  return (0, 1)
+        if keys[pygame.K_LEFT] or keys[pygame.K_KP4]:  return (-1, 0)
+        if keys[pygame.K_RIGHT] or keys[pygame.K_KP6]: return (1, 0)
+        return None
+
+    def _snapshot_player(self):
+        """잔상용 현재 플레이어 실루엣 스냅샷."""
+        tmp = pygame.Surface((TILE_SIZE, TILE_SIZE))
+        tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
+        draw_player(tmp, 0, 0, self._facing, self._walk_frame)
+        return tmp
+
+    def _spawn_afterimage(self, x, y):
+        self.animator.add(AfterimageAnim(self._snapshot_player(), x, y))
+
+    # ── 기본 공격: 3단 콤보 체인 + 방향키 커맨드 ──────────────────────
+    _CHAIN_MUL   = (1.0, 1.1, 1.6)     # 단계별 데미지 배율
+    _CHAIN_CD    = (1.0, 0.82, 1.25)   # 단계별 쿨다운 배율
+    _CHAIN_VAR   = ('slash1', 'slash2', 'finisher')
+    _CHAIN_WINDOW_MS = 900
+
     def _player_basic_attack(self):
-        """Space bar: 바라보는 방향 인접 타일 공격. 적 없으면 허공 스윙."""
+        """Space: 커맨드 판정 → 3단 콤보 체인.
+
+        - 방향키(전방) + Space  : 런지 스러스트 (전진 관통)
+        - 방향키(후방) + Space  : 백스텝 슬래시 (베고 이탈)
+        - 방향키(측면) + Space  : 그쪽으로 방향 전환 후 체인
+        - Space 연타            : 베기 → 역베기 → 피니셔
+        """
         if self._atk_cd_timer > 0:
             return False  # 쿨다운 중
+        held = self._held_move_dir()
+        fdx, fdy = self._DIRS.get(self._facing, (0, 1))
+        if held:
+            if held == (fdx, fdy):
+                return self._cmd_lunge()
+            if held == (-fdx, -fdy):
+                return self._cmd_backstep()
+            # 측면: 방향 전환 후 일반 체인
+            self._facing = self._DIR_NAME[held]
+            fdx, fdy = held
+        return self._chain_attack(fdx, fdy)
+
+    def _chain_attack(self, dx, dy, enemy=None):
+        """3단 콤보 본체 (Space 공격·이동 범프 공격 공용)."""
+        step = self._chain_step if self._chain_window_ms > 0 else 0
+        variant = self._CHAIN_VAR[step]
+        self._atk_variant = variant
         self._trigger_atk_anim()
-        dirs = {'right':(1,0),'left':(-1,0),'down':(0,1),'up':(0,-1)}
-        dx, dy = dirs.get(self._facing, (0,1))
-        tx, ty = self.player.x + dx, self.player.y + dy
-        enemy = self.dungeon.get_enemy_at(tx, ty)
+
+        if enemy is None:
+            enemy = self.dungeon.get_enemy_at(self.player.x + dx,
+                                              self.player.y + dy)
+        finisher = (step == 2)
+        self.animator.add(SmearAnim(
+            self.player.x, self.player.y, self._facing, variant,
+            (255, 190, 90) if finisher else (255, 240, 180)))
         if enemy:
-            self._player_attack(enemy)
+            self._player_attack(enemy, dmg_mul=self._CHAIN_MUL[step])
+            if finisher:
+                self._finisher_impact(enemy, dx, dy)
+        else:
+            self.audio.play('finisher' if finisher else 'swing')
+
+        self._atk_cd_timer = self.player.atk_cooldown_ms * self._CHAIN_CD[step]
+        self._chain_step = (step + 1) % 3
+        self._chain_window_ms = self._CHAIN_WINDOW_MS
+        return True
+
+    def _finisher_impact(self, enemy, dx, dy):
+        """피니셔 적중 — 넉백 + 경직 + 임팩트 프레임 + 충격파."""
+        if enemy.is_alive():
+            nx, ny = enemy.x + dx, enemy.y + dy
+            if (self.dungeon.is_walkable(nx, ny)
+                    and not self.dungeon.get_enemy_at(nx, ny)
+                    and (nx, ny) != (self.player.x, self.player.y)):
+                ox, oy = enemy.x, enemy.y
+                enemy.x, enemy.y = nx, ny
+                enemy._slide_from(ox, oy)
+            enemy.staggered_ms = max(enemy.staggered_ms, 500)
+        self.animator.particles.emit_power_hit(enemy.x, enemy.y)
+        self._white_flash_ms = 55            # 임팩트 프레임
+        self._hitstop_ms = max(self._hitstop_ms, 90)
+        self._start_shake(4, 180)
+        self.audio.play('finisher')
+
+    # ── 커맨드: 런지 스러스트 (전방키 + Space) ────────────────────────
+    def _cmd_lunge(self):
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        self._atk_variant = 'lunge'
+        self._trigger_atk_anim()
+        self._spawn_afterimage(sx, sy)
+        # 1타일 전진 (막히면 제자리)
+        nx, ny = sx + dx, sy + dy
+        if (self.dungeon.is_walkable(nx, ny)
+                and not self.dungeon.get_enemy_at(nx, ny)):
+            self.player.x, self.player.y = nx, ny
+            self._move_anim_offset[0] -= dx * TILE_SIZE
+            self._move_anim_offset[1] -= dy * TILE_SIZE
+            item = self.dungeon.get_item_at(nx, ny)
+            if item:
+                self._pickup(item)
+        # 전방 2타일 관통 (1.3배)
+        hit = 0
+        for i in (1, 2):
+            e = self.dungeon.get_enemy_at(self.player.x + dx * i,
+                                          self.player.y + dy * i)
+            if e:
+                self._player_attack(e, dmg_mul=1.3)
+                hit += 1
+        self.animator.add(ThrustSmearAnim(self.player.x, self.player.y,
+                                          self._facing))
+        self.audio.play('lunge' if hit == 0 else 'crit')
+        self._atk_cd_timer = self.player.atk_cooldown_ms * 1.5
+        # 런지는 체인 스타터: 바로 2타로 이어진다
+        self._chain_step = 1
+        self._chain_window_ms = self._CHAIN_WINDOW_MS
+        return True
+
+    # ── 커맨드: 백스텝 슬래시 (후방키 + Space) ────────────────────────
+    def _cmd_backstep(self):
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        self._atk_variant = 'backstep'
+        self._trigger_atk_anim()
+        self.animator.add(SmearAnim(sx, sy, self._facing, 'backstep',
+                                    (180, 235, 255)))
+        enemy = self.dungeon.get_enemy_at(sx + dx, sy + dy)
+        if enemy:
+            self._player_attack(enemy, dmg_mul=1.15)
         else:
             self.audio.play('swing')
-        self._atk_cd_timer = self.player.atk_cooldown_ms
+        # 1타일 후퇴 (히트앤런) + 잔상
+        bx, by = sx - dx, sy - dy
+        if (self.dungeon.is_walkable(bx, by)
+                and not self.dungeon.get_enemy_at(bx, by)):
+            self._spawn_afterimage(sx, sy)
+            self.player.x, self.player.y = bx, by
+            self._move_anim_offset[0] += dx * TILE_SIZE
+            self._move_anim_offset[1] += dy * TILE_SIZE
+            item = self.dungeon.get_item_at(bx, by)
+            if item:
+                self._pickup(item)
+        self.audio.play('skill_dash')
+        self._atk_cd_timer = self.player.atk_cooldown_ms * 1.2
         return True
 
     def _do_use_inventory_item(self, item):
@@ -1397,13 +1554,19 @@ class Game:
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
 
-    def _player_attack(self, enemy):
+    def _player_attack(self, enemy, dmg_mul=1.0):
         # 두려움: 명중률 40%
         if getattr(self.player, 'feared_ms', 0) > 0 and random.random() > 0.4:
             self.messages.append((t('fear_miss'), 'bad'))
             return
         crit = random.random() < 0.1
-        dmg  = roll_damage(self.player.total_attack, enemy.defense)
+        # 체인 단계/커맨드 배율 + 드라이브 캔슬 보너스(+15%)
+        if self._cancel_bonus_ms > 0:
+            dmg_mul *= 1.15
+        dmg = max(1, int(roll_damage(self.player.total_attack, enemy.defense)
+                         * dmg_mul))
+        # 타격 시 드라이브 소폭 회복
+        self.player.drive = min(self.player.drive_max, self.player.drive + 0.15)
         if crit:
             dmg *= 2
             self.messages.append((t('crit_hit', enemy.name, dmg), 'warn'))
@@ -1666,6 +1829,25 @@ class Game:
         """스킬 데미지 기준 공격력 (장신구 강화 + 위력 인챈트 포함)."""
         return int(self.player.total_attack * self.player.skill_damage_mul * self._enchant_dmg_mul)
 
+    # ── 드라이브 캔슬 ────────────────────────────────────────────────
+    def _can_drive_cancel(self) -> bool:
+        """공격 후딜(쿨다운/스윙) 중 + 드라이브 1칸 이상."""
+        return ((self._atk_cd_timer > 0 or self._atk_phase != 0)
+                and self.player.drive >= 1.0)
+
+    def _do_drive_cancel(self):
+        """후딜 삭제 + 게이지 소모 + CANCEL! 연출. 이어지는 공격도 보너스."""
+        self.player.drive -= 1.0
+        self._atk_cd_timer = 0.0
+        self._atk_phase = 0
+        self._atk_timer = 0
+        self._cancel_bonus_ms = 1200
+        self._spawn_afterimage(self.player.x, self.player.y)
+        self.animator.add(CalloutAnim(self.player.x, self.player.y,
+                                      'CANCEL!', (120, 230, 255)))
+        self._start_punch_zoom(0.035, 90)
+        self.audio.play('cancel')
+
     def _use_skill(self, slot):
         skill_id = self._equipped_skills.get(slot)
         if not skill_id:
@@ -1695,10 +1877,14 @@ class Game:
         if not fn:
             return False
 
+        # 드라이브 캔슬: 공격 후딜 중 스킬 발동 시 후딜 삭제 + 데미지 +15%
+        cancel_ok = self._can_drive_cancel()
         final = self._get_skill_final_stats(skill_id)
-        self._enchant_dmg_mul = final['dmg_mul']
+        self._enchant_dmg_mul = final['dmg_mul'] * (1.15 if cancel_ok else 1.0)
         result = fn(slot)
         self._enchant_dmg_mul = 1.0
+        if result and cancel_ok:
+            self._do_drive_cancel()
 
         if result:
             self.player.arcane_sp = min(
@@ -2108,6 +2294,9 @@ class Game:
         if not self.skills.ready(combo_id):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(combo_id)), 'info'))
             return False
+        cancel_ok = self._can_drive_cancel()
+        if cancel_ok:
+            self._do_drive_cancel()
         if combo_id == 'WS': return self._skill_fortify()
         if combo_id == 'AD': return self._skill_thunder()
         if combo_id == 'WA': return self._skill_frost()
@@ -2937,6 +3126,13 @@ class Game:
             pygame.draw.rect(vig, (200, 15, 15, a // 2), (18, 18, GAME_W - 36, GAME_H - 36), 14)
             self._game_surf.blit(vig, (0, 0))
 
+        # 피니셔 임팩트 프레임 (한순간 흰 섬광)
+        if self._white_flash_ms > 0:
+            a = int(120 * self._white_flash_ms / 55)
+            flash = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+            flash.fill((255, 255, 255, min(255, a)))
+            self._game_surf.blit(flash, (0, 0))
+
         # 레벨업 골든 플래시 (짧은 전면 섬광)
         if self._gold_flash_ms > 0:
             a = int(80 * self._gold_flash_ms / 420)
@@ -3230,6 +3426,7 @@ class Game:
             self._game_surf, x, y,
             facing, self._walk_frame, phase,
             self.player.equipment,
+            atk_variant=self._atk_variant,
         )
 
     def _draw_enemy(self, enemy, x, y):

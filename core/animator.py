@@ -176,6 +176,146 @@ class HitFlashAnim(_Anim):
             surf.blit(num_surf, (nx, float_y))
 
 
+_FACING_ANGLE = {'right': 0.0, 'down': 90.0, 'left': 180.0, 'up': 270.0}
+
+# variant: (시작각 오프셋°, 끝각 오프셋°, 반경 배율, 지속 ms)
+_SMEAR_DEFS = {
+    'slash1':   (-75,  75, 1.00, 140),
+    'slash2':   ( 75, -75, 1.00, 130),
+    'finisher': (-105, 105, 1.30, 190),
+    'backstep': ( 55, -55, 0.85, 120),
+}
+
+
+class SmearAnim(_Anim):
+    """검 궤적 스미어 — 부채꼴 초승달이 진행 방향으로 와이프되는 잔상.
+
+    포즈 2~3장짜리 절차 애니메이션의 '스미어 프레임' 역할.
+    로직과 무관한 순수 연출 (플레이어 타일 기준 월드 좌표).
+    """
+
+    def __init__(self, x, y, facing, variant='slash1', color=(255, 240, 180)):
+        a0, a1, rmul, dur = _SMEAR_DEFS.get(variant, _SMEAR_DEFS['slash1'])
+        super().__init__(dur)
+        self.x, self.y = x, y
+        base = _FACING_ANGLE.get(facing, 90.0)
+        self.a0 = math.radians(base + a0)
+        self.a1 = math.radians(base + a1)
+        self.radius = TILE_SIZE * rmul
+        self.color = color
+
+    def draw(self, surf, cam_x, cam_y, font):
+        t = self.t
+        wipe = _smooth(min(1.0, t * 1.35))          # 와이프 진행
+        fade = max(0.0, 1.0 - t * 1.15)
+        if fade <= 0.02 or wipe <= 0.03:
+            return
+        ts = TILE_SIZE
+        cx = (self.x - cam_x) * ts + ts // 2
+        cy = (self.y - cam_y) * ts + ts // 2
+        # 현재 와이프 구간의 초승달 (뒤꼬리가 좁아짐)
+        a_head = self.a0 + (self.a1 - self.a0) * wipe
+        a_tail = self.a0 + (self.a1 - self.a0) * max(0.0, wipe - 0.45)
+        steps = 7
+        r_out, r_in = self.radius, self.radius * 0.45
+        outer, inner = [], []
+        for i in range(steps + 1):
+            a = a_tail + (a_head - a_tail) * (i / steps)
+            k = i / steps                            # 꼬리→머리 폭 증가
+            ro = r_in + (r_out - r_in) * (0.35 + 0.65 * k)
+            outer.append((cx + math.cos(a) * ro, cy + math.sin(a) * ro))
+            inner.append((cx + math.cos(a) * r_in, cy + math.sin(a) * r_in))
+        pts = outer + inner[::-1]
+        ov = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+        r, g, b = self.color
+        pygame.draw.polygon(ov, (r, g, b, int(120 * fade)), pts)
+        # 흰 코어 라인 (머리쪽 가장자리)
+        core = outer[-3:]
+        if len(core) >= 2:
+            pygame.draw.lines(ov, (255, 255, 255, int(200 * fade)), False,
+                              [(int(px), int(py)) for px, py in core], 3)
+        surf.blit(ov, (0, 0))
+
+
+class ThrustSmearAnim(_Anim):
+    """찌르기(런지) 스미어 — 전방 직선 스트릭."""
+
+    def __init__(self, x, y, facing, length_tiles=2.2, color=(200, 235, 255)):
+        super().__init__(150)
+        self.x, self.y = x, y
+        a = math.radians(_FACING_ANGLE.get(facing, 90.0))
+        self.dx, self.dy = math.cos(a), math.sin(a)
+        self.length = TILE_SIZE * length_tiles
+        self.color = color
+
+    def draw(self, surf, cam_x, cam_y, font):
+        t = self.t
+        fade = max(0.0, 1.0 - t * 1.2)
+        if fade <= 0.02:
+            return
+        ts = TILE_SIZE
+        cx = (self.x - cam_x) * ts + ts // 2
+        cy = (self.y - cam_y) * ts + ts // 2
+        reach = self.length * _smooth(min(1.0, t * 2.2))
+        px, py = -self.dy, self.dx                   # 수직 벡터
+        hw = 5 * fade + 1                            # 반폭 (좁아지며 소멸)
+        tipx, tipy = cx + self.dx * reach, cy + self.dy * reach
+        pts = [(cx + px * hw, cy + py * hw),
+               (tipx + px * 1.5, tipy + py * 1.5),
+               (tipx - px * 1.5, tipy - py * 1.5),
+               (cx - px * hw, cy - py * hw)]
+        ov = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+        r, g, b = self.color
+        pygame.draw.polygon(ov, (r, g, b, int(130 * fade)), pts)
+        pygame.draw.line(ov, (255, 255, 255, int(210 * fade)),
+                         (cx, cy), (tipx, tipy), 2)
+        surf.blit(ov, (0, 0))
+
+
+class AfterimageAnim(_Anim):
+    """플레이어 잔상 — 스폰 시점 실루엣 스냅샷이 제자리에서 페이드아웃."""
+
+    def __init__(self, snapshot: pygame.Surface, x, y, tint=None, dur=220):
+        super().__init__(dur)
+        self.snap = snapshot
+        self.x, self.y = x, y                        # 타일 좌표
+        self.tint = tint
+
+    def draw(self, surf, cam_x, cam_y, font):
+        alpha = int(150 * (1 - self.t))
+        if alpha < 6:
+            return
+        ts = TILE_SIZE
+        self.snap.set_alpha(alpha)
+        surf.blit(self.snap, ((self.x - cam_x) * ts, (self.y - cam_y) * ts))
+
+
+class CalloutAnim(_Anim):
+    """월드 좌표 소형 콜아웃 텍스트 — 'CANCEL!' 등 (빠른 팝 + 상승)."""
+
+    def __init__(self, x, y, text, color=(120, 230, 255)):
+        super().__init__(620)
+        self.x, self.y = x, y
+        self.text = text
+        self.color = color
+
+    def draw(self, surf, cam_x, cam_y, font):
+        t = self.t
+        alpha = max(0, int(255 * (1 - t * t)))
+        if alpha < 8:
+            return
+        ts = TILE_SIZE
+        txt = font.render(self.text, True, self.color)
+        if t < 0.18:                                  # 등장 펀치
+            w, h = txt.get_size()
+            k = 1.6 - 0.6 * (t / 0.18)
+            txt = pygame.transform.scale(txt, (int(w * k), int(h * k)))
+        txt.set_alpha(alpha)
+        sx = (self.x - cam_x) * ts + ts // 2 - txt.get_width() // 2
+        sy = (self.y - cam_y) * ts - 6 - int(_smooth(t) * 16)
+        surf.blit(txt, (sx, sy))
+
+
 class GoldPopAnim(_Anim):
     """골드 획득 팝업 — '+N G' 금색 텍스트가 살짝 늦게 떠오른다."""
 

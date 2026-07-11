@@ -579,6 +579,24 @@ class HUD:
         screen.blit(gold_val, (x, cy - gold_val.get_height() // 2))
         x += gold_val.get_width() + 16
 
+        # ── 드라이브 게이지 (캔슬 자원 3칸 — ◆) ──
+        drive = getattr(player, 'drive', 0.0)
+        drive_max = getattr(player, 'drive_max', 3)
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
+        for i in range(drive_max):
+            fill = max(0.0, min(1.0, drive - i))
+            pts = [(x + 5, cy - 6), (x + 10, cy), (x + 5, cy + 6), (x, cy)]
+            if fill >= 1.0:
+                pygame.draw.polygon(screen, (90, 220, 255), pts)      # 가득
+            elif fill > 0:
+                pygame.draw.polygon(screen, (40, 95, 120), pts)       # 회복 중
+                pygame.draw.polygon(screen, (90, 220, 255), pts, 1)
+            else:
+                pygame.draw.polygon(screen, (45, 55, 80), pts, 1)     # 빈 칸
+            x += 14
+        x += 8
+
         # ── 상태이상 배지 ──
         _debuffs = [
             ('cursed_ms',  t('debuff_curse'), (220, 100, 255), (45,  10,  60), (160,  50, 220)),

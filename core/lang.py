@@ -220,6 +220,11 @@ _T: dict[str, dict[str, str]] = {
     # ── 인게임 메시지 ──────────────────────────────────────────────────────
     'welcome':      {'ko': 'Dungeon Door에 오신 걸 환영합니다!', 'en': 'Welcome to Dungeon Door!',
                      'ja': 'Dungeon Doorへようこそ!', 'zh': '欢迎来到 Dungeon Door!', 'ru': 'Добро пожаловать в Dungeon Door!'},
+    'combat_hint':  {'ko': 'Space 연타: 3단 콤보 / 방향+Space: 런지·백스텝 / 후딜 중 스킬: 드라이브 캔슬(◆)',
+                     'en': 'Space rapid: 3-hit combo / Dir+Space: Lunge·Backstep / Skill in recovery: Drive Cancel (◆)',
+                     'ja': 'Space連打: 3段コンボ / 方向+Space: 突進·後退斬り / 硬直中スキル: ドライブキャンセル(◆)',
+                     'zh': '连按Space: 三段连击 / 方向+Space: 突刺·后撤斩 / 后摇中技能: 驱动取消(◆)',
+                     'ru': 'Space подряд: комбо ×3 / Напр.+Space: выпад·отскок / Навык в откате: драйв-отмена (◆)'},
     'wasd_hint':    {'ko': '↑↓←→ 이동 / Space 공격 / W·A·S·D 스킬 / ESC 저장·메뉴',
                      'en': 'Arrows Move / Space Attack / W·A·S·D Skills / ESC Save·Menu',
                      'ja': '↑↓←→ 移動 / Space 攻撃 / W·A·S·D スキル / ESC 保存·メニュー',

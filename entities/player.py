@@ -28,6 +28,10 @@ class Player(Entity):
         self.arcane_sp:     int = 0
         self.arcane_sp_max: int = 100
 
+        # 드라이브 게이지 (캔슬 자원): 3칸, 시간·타격으로 회복
+        self.drive:     float = 3.0
+        self.drive_max: int   = 3
+
         # 버프
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가

@@ -498,6 +498,16 @@ class AudioManager:
                 'levelup_big': lambda p: _mix(_sine(523*p,110,0.28,rate=r)+_sine(659*p,110,0.28,rate=r)
                                               +_sine(784*p,120,0.30,rate=r)+_sine(1046*p,200,0.26,rate=r),
                                               _sine(1568*p,260,0.10,rate=r)),
+                # 피니셔 — 묵직한 베기 (저음 임팩트 + 노이즈 + 고음 핑)
+                'finisher':    lambda p: _mix(_square(160*p,90,0.35,rate=r),
+                                              _noise(90,0.30,rate=r),
+                                              _sine(1100*p,140,0.12,rate=r)),
+                # 드라이브 캔슬 — 전기 스파크 집(상승 saw)
+                'cancel':      lambda p: _saw(500*p,40,0.16,rate=r)+_saw(900*p,45,0.16,rate=r)
+                                         +_sine(1600*p,70,0.12,rate=r),
+                # 런지 — 휙 바람 가름
+                'lunge':       lambda p: _mix(_noise(110,0.22,rate=r),
+                                              _sine(700*p,60,0.10,rate=r)+_sine(1000*p,70,0.08,rate=r)),
                 # 코인 흡입 — 아주 짧은 고음 플링
                 'coin':        lambda p: _sine(1320*p,35,0.16,rate=r)+_sine(1760*p,45,0.10,rate=r),
                 # 전리품 등급 reveal — 등급 오를수록 길고 화려한 차임

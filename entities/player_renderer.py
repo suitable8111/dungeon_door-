@@ -32,11 +32,23 @@ EQUIPMENT_OFFSETS = {
 _FORWARD_ANGLE = {'down': 90, 'up': 270, 'right': 0, 'left': 180}
 
 
+# ── 액션 변형(variant)별 무기 포즈 키프레임 ─────────────────────────────────
+# (선딜 각도차, 선딜 당김px, 스윙 각도차, 스윙 밀기px)
+_VARIANT_POSE = {
+    'slash1':   (-65, 3,  +25, 4),    # 정베기 (기존)
+    'slash2':   (+65, 3,  -25, 4),    # 역베기 (반대 궤적)
+    'finisher': (-100, 4, +35, 7),    # 내려찍기 (크게 들어 강하게)
+    'lunge':    (-15, 5,    0, 9),    # 찌르기 (정면 관통)
+    'backstep': (+45, 2,  -30, 3),    # 이탈 베기
+}
+
+
 # ── update_equipment_pos ─────────────────────────────────────────────────────
-def update_equipment_pos(facing, phase, walk_frame):
+def update_equipment_pos(facing, phase, walk_frame, variant='slash1'):
     """
     무기 레이어의 (dx, dy, angle_deg)를 반환한다.
     phase 0=대기, 1=선딜(풍업), 2=스윙
+    variant : 액션 종류별 포즈 키프레임 (_VARIANT_POSE)
     walk_frame 0/1 로 유휴 보핑 연출.
     """
     fwd  = _FORWARD_ANGLE.get(facing, 90)
@@ -46,16 +58,19 @@ def update_equipment_pos(facing, phase, walk_frame):
     if phase == 0:
         return (0, bob, fwd - 25)
 
+    wind_a, wind_pull, swing_a, swing_push = _VARIANT_POSE.get(
+        variant, _VARIANT_POSE['slash1'])
+
     if phase == 1:
         # 후방으로 당기기
-        pull_x = -math.cos(frad) * 3
-        pull_y = -math.sin(frad) * 3 - 2
-        return (pull_x, pull_y, fwd - 65)
+        pull_x = -math.cos(frad) * wind_pull
+        pull_y = -math.sin(frad) * wind_pull - 2
+        return (pull_x, pull_y, fwd + wind_a)
 
     # phase == 2: 스윙 완료
-    push_x = math.cos(frad) * 4
-    push_y = math.sin(frad) * 4 + 2
-    return (push_x, push_y, fwd + 25)
+    push_x = math.cos(frad) * swing_push
+    push_y = math.sin(frad) * swing_push + 2
+    return (push_x, push_y, fwd + swing_a)
 
 
 # ── 개별 장비 드로우 함수 ────────────────────────────────────────────────────
@@ -226,7 +241,7 @@ def _draw_shield(surf, col, cx, cy, facing):
 
 # ── 메인 레이어드 드로우 ──────────────────────────────────────────────────────
 def draw_player_layered(surf, tile_x, tile_y, facing,
-                        walk_frame, atk_phase, equipment):
+                        walk_frame, atk_phase, equipment, atk_variant='slash1'):
     """
     이미 body(draw_player 또는 스프라이트)가 그려진 surf 위에
     장비 5 레이어를 순서대로 덧그린다.
@@ -264,7 +279,8 @@ def draw_player_layered(surf, tile_x, tile_y, facing,
     weapon_item = equipment.get('weapon')
     if weapon_item is not None:
         wox, woy = off['weapon']
-        dx, dy, angle = update_equipment_pos(facing, atk_phase, walk_frame)
+        dx, dy, angle = update_equipment_pos(facing, atk_phase, walk_frame,
+                                             atk_variant)
         wx = cx + wox + dx
         wy = cy + woy + dy
         _draw_weapon(surf, weapon_item.color, wx, wy, angle)
