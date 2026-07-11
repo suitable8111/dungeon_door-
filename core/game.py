@@ -232,6 +232,10 @@ class Game:
         self._cancel_bonus_ms: float = 0.0       # 드라이브 캔슬 데미지 보너스 창
         self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
 
+        # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
+        self._stamina_delay_ms: float = 0.0      # 회복 시작까지 대기
+        self._last_exhaust_msg: int   = -9999    # 탈진 메시지 쿨다운
+
         # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
         self._hitstop_ms: float = 0.0
         self._hurt_flash_ms: float = 0.0
@@ -445,6 +449,12 @@ class Game:
             if self.state == 'playing' and self.player:
                 self.player.drive = min(self.player.drive_max,
                                         self.player.drive + dt * 0.0004)
+                # 스태미나: 마지막 소모 후 0.9초 지나면 초당 22 회복
+                if self._stamina_delay_ms > 0:
+                    self._stamina_delay_ms = max(0.0, self._stamina_delay_ms - dt)
+                else:
+                    self.player.stamina = min(self.player.stamina_max,
+                                              self.player.stamina + dt * 0.022)
             self._update_fade(dt)
             self._update_shake(dt)
             self._update_move_anim(dt)
@@ -1399,6 +1409,27 @@ class Game:
     def _spawn_afterimage(self, x, y):
         self.animator.add(AfterimageAnim(self._snapshot_player(), x, y))
 
+    # ── 스태미나 SP: 공격 자원 (남발하면 지친다) ──────────────────────
+    _STAMINA_COST = {'slash': 10, 'finisher': 14, 'lunge': 18,
+                     'backstep': 14, 'combo_skill': 25}
+    _STAMINA_REGEN_DELAY = 900   # 마지막 소모 후 회복 시작까지 ms
+
+    def _spend_stamina(self, cost: float) -> bool:
+        """스태미나 소모 시도. 부족하면 탈진 피드백 후 False."""
+        p = self.player
+        if p.stamina < cost:
+            now = pygame.time.get_ticks()
+            if now - self._last_exhaust_msg > 1500:
+                self._last_exhaust_msg = now
+                self.messages.append((t('exhausted'), 'warn'))
+                self.animator.add(CalloutAnim(p.x, p.y, '···',
+                                              (200, 200, 140)))
+            self.audio.play('exhaust')
+            return False
+        p.stamina -= cost
+        self._stamina_delay_ms = self._STAMINA_REGEN_DELAY
+        return True
+
     # ── 기본 공격: 3단 콤보 체인 + 방향키 커맨드 ──────────────────────
     _CHAIN_MUL   = (1.0, 1.1, 1.6)     # 단계별 데미지 배율
     _CHAIN_CD    = (1.0, 0.82, 1.25)   # 단계별 쿨다운 배율
@@ -1430,6 +1461,9 @@ class Game:
     def _chain_attack(self, dx, dy, enemy=None):
         """3단 콤보 본체 (Space 공격·이동 범프 공격 공용)."""
         step = self._chain_step if self._chain_window_ms > 0 else 0
+        cost = self._STAMINA_COST['finisher' if step == 2 else 'slash']
+        if not self._spend_stamina(cost):
+            return False
         variant = self._CHAIN_VAR[step]
         self._atk_variant = variant
         self._trigger_atk_anim()
@@ -1472,6 +1506,8 @@ class Game:
 
     # ── 커맨드: 런지 스러스트 (전방키 + Space) ────────────────────────
     def _cmd_lunge(self):
+        if not self._spend_stamina(self._STAMINA_COST['lunge']):
+            return False
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         sx, sy = self.player.x, self.player.y
         self._atk_variant = 'lunge'
@@ -1506,6 +1542,8 @@ class Game:
 
     # ── 커맨드: 백스텝 슬래시 (후방키 + Space) ────────────────────────
     def _cmd_backstep(self):
+        if not self._spend_stamina(self._STAMINA_COST['backstep']):
+            return False
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         sx, sy = self.player.x, self.player.y
         self._atk_variant = 'backstep'
@@ -2293,6 +2331,9 @@ class Game:
             return False
         if not self.skills.ready(combo_id):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(combo_id)), 'info'))
+            return False
+        # 조합 스킬은 스태미나 소모 (쿨다운 통과 후, 드라이브 소모 전)
+        if not self._spend_stamina(self._STAMINA_COST['combo_skill']):
             return False
         cancel_ok = self._can_drive_cancel()
         if cancel_ok:

@@ -542,6 +542,36 @@ class HUD:
         pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
         x += 10
 
+        # ── SP (스태미나) 바 — 공격 자원, 낮으면 붉게 펄스 ──
+        st = getattr(player, 'stamina', 100.0)
+        st_max = getattr(player, 'stamina_max', 100)
+        sp_ratio = max(0.0, min(1.0, st / st_max))
+        low = sp_ratio < 0.25
+        if low:
+            pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() * 0.012)
+            sp_label_col = (255, int(120 + 80 * pulse), 60)
+        else:
+            sp_label_col = (170, 220, 80)
+        sp_label = self.font_sm.render("SP", True, sp_label_col)
+        screen.blit(sp_label, (x, cy - sp_label.get_height() // 2))
+        x += sp_label.get_width() + 6
+
+        sp_bw = 90; sp_bh = 10
+        sp_by = cy - sp_bh // 2
+        pygame.draw.rect(screen, (35, 45, 18), (x, sp_by, sp_bw, sp_bh))
+        if sp_ratio > 0:
+            if low:
+                bar_col = (230, 90, 50)
+            else:
+                bar_col = (int(120 + 90 * (1 - sp_ratio)), 210, 60)
+            pygame.draw.rect(screen, bar_col,
+                             (x, sp_by, max(1, int(sp_bw * sp_ratio)), sp_bh))
+        pygame.draw.rect(screen, (70, 90, 40), (x, sp_by, sp_bw, sp_bh), 1)
+        x += sp_bw + 14
+
+        pygame.draw.line(screen, (50, 50, 75), (x, 6), (x, TOP_BAR_H - 6))
+        x += 10
+
         # ── XP 바 ──
         xp_label = self.font_sm.render("XP", True, XP_COLOR)
         screen.blit(xp_label, (x, cy - xp_label.get_height() // 2))

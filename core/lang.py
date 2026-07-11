@@ -220,6 +220,11 @@ _T: dict[str, dict[str, str]] = {
     # ── 인게임 메시지 ──────────────────────────────────────────────────────
     'welcome':      {'ko': 'Dungeon Door에 오신 걸 환영합니다!', 'en': 'Welcome to Dungeon Door!',
                      'ja': 'Dungeon Doorへようこそ!', 'zh': '欢迎来到 Dungeon Door!', 'ru': 'Добро пожаловать в Dungeon Door!'},
+    'exhausted':    {'ko': '⚠ 지쳤다... 숨을 고르자 (SP 부족)',
+                     'en': '⚠ Exhausted... catch your breath (no SP)',
+                     'ja': '⚠ 疲れた... 息を整えろ (SP不足)',
+                     'zh': '⚠ 太累了... 喘口气 (SP不足)',
+                     'ru': '⚠ Выдохся... переведи дух (нет SP)'},
     'combat_hint':  {'ko': 'Space 연타: 3단 콤보 / 방향+Space: 런지·백스텝 / 후딜 중 스킬: 드라이브 캔슬(◆)',
                      'en': 'Space rapid: 3-hit combo / Dir+Space: Lunge·Backstep / Skill in recovery: Drive Cancel (◆)',
                      'ja': 'Space連打: 3段コンボ / 方向+Space: 突進·後退斬り / 硬直中スキル: ドライブキャンセル(◆)',

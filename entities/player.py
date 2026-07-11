@@ -32,6 +32,10 @@ class Player(Entity):
         self.drive:     float = 3.0
         self.drive_max: int   = 3
 
+        # 스태미나 SP (공격 자원): 공격마다 소모, 잠시 쉬면 회복
+        self.stamina:     float = 100.0
+        self.stamina_max: int   = 100
+
         # 버프
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가
