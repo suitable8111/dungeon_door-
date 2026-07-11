@@ -30,7 +30,7 @@ _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_ru
 # ── 세이브 ──────────────────────────────────────────────────────────
 def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
               skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None,
-              skill_enchants=None):
+              skill_enchants=None, quests=None):
     data = {
         'floor': floor,
         'player': {
@@ -61,6 +61,7 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'skill_points':  skill_points,
         'equipped_skills': equipped_skills or {},
         'skill_enchants':  skill_enchants  or {},
+        'quests':          quests or {},
     }
     try:
         with open(SAVE_PATH, 'w', encoding='utf-8') as f:

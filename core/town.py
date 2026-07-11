@@ -45,6 +45,10 @@ class TownScene:
             {'id': 'chest',    'x': 3,  'y': 4,  'name_key': 'npc_chest'},
             {'id': 'smith',    'x': 24, 'y': 6,  'name_key': 'npc_smith'},
             {'id': 'merchant', 'x': 8,  'y': 14, 'name_key': 'npc_merchant'},
+            # 시민 (퀘스트 의뢰인) — 광장 주변
+            {'id': 'villager_boy',    'x': 12, 'y': 12, 'quest': 'rat_hunt'},
+            {'id': 'villager_farmer', 'x': 20, 'y': 11, 'quest': 'centipede_menace'},
+            {'id': 'villager_granny', 'x': 24, 'y': 14, 'quest': 'rescue_girl'},
         ]
         self.portal_pos = (TOWN_W // 2, TOWN_H - 4)
         self.spawn_pos  = (TOWN_W // 2, 13)      # 우물 남쪽 광장
@@ -109,13 +113,18 @@ class TownScene:
             self._draw_lamp(surf, (lx - cam_x) * ts, (ly - cam_y) * ts, ticks)
 
         _SPRITES = {'inn': self._draw_storage_npc, 'smith': self._draw_smith_npc,
-                    'merchant': self._draw_merchant_npc, 'chest': self._draw_chest}
+                    'merchant': self._draw_merchant_npc, 'chest': self._draw_chest,
+                    'villager_boy': self._draw_boy,
+                    'villager_farmer': self._draw_farmer,
+                    'villager_granny': self._draw_granny}
+        from core.quests import giver_name
         for npc in self.npcs:
             sx = (npc['x'] - cam_x) * ts
             sy = (npc['y'] - cam_y) * ts
             _SPRITES[npc['id']](surf, sx, sy, ticks)
-            # 이름표 + 근접 시 [E] 프롬프트
-            label = t(npc['name_key'])
+            # 이름표 + 근접 시 [E] 프롬프트 (+퀘스트 상태 마커는 게임이 그림)
+            label = (t(npc['name_key']) if 'name_key' in npc
+                     else giver_name(npc['id']))
             near = max(abs(npc['x'] - px), abs(npc['y'] - py)) <= 1
             if near:
                 label = t('interact_hint') + ' ' + label
@@ -211,6 +220,35 @@ class TownScene:
         pygame.draw.rect(s, (150, 150, 165), (cx + 7, hy - 4, 8, 5))
         if abs(swing) < 0.15:                                       # 타격 스파크
             pygame.draw.circle(s, (255, 210, 90), (cx + 11, hy + 2), 2)
+
+    @staticmethod
+    def _draw_boy(s, x, y, tk):
+        hop = int(abs(math.sin(tk * 0.006)) * -3)              # 폴짝폴짝
+        cx, cy = x + 16, y + 19 + hop
+        pygame.draw.circle(s, (90, 130, 70), (cx, cy + 1), 6)   # 초록 옷
+        pygame.draw.circle(s, (240, 205, 170), (cx, cy - 7), 5) # 얼굴
+        pygame.draw.circle(s, (150, 100, 50), (cx, cy - 10), 4) # 갈색 머리
+        pygame.draw.rect(s, (120, 90, 60), (cx + 5, cy - 4, 3, 9))  # 나무 막대기
+
+    @staticmethod
+    def _draw_farmer(s, x, y, tk):
+        bob = int(math.sin(tk * 0.0028) * 1.5)
+        cx, cy = x + 16, y + 16 + bob
+        pygame.draw.circle(s, (130, 105, 60), (cx, cy + 2), 8)  # 작업복
+        pygame.draw.circle(s, (225, 185, 150), (cx, cy - 8), 5) # 얼굴
+        pygame.draw.ellipse(s, (200, 165, 80), (cx - 9, cy - 15, 18, 7))  # 밀짚모자
+        pygame.draw.rect(s, (140, 105, 60), (cx - 11, cy - 8, 3, 20))     # 쇠스랑 자루
+        for i in range(3):
+            pygame.draw.rect(s, (160, 160, 175), (cx - 13 + i * 3, cy - 12, 2, 5))
+
+    @staticmethod
+    def _draw_granny(s, x, y, tk):
+        bob = int(math.sin(tk * 0.002) * 1.0)
+        cx, cy = x + 16, y + 17 + bob
+        pygame.draw.circle(s, (120, 90, 130), (cx, cy + 2), 8)  # 보라 숄
+        pygame.draw.circle(s, (235, 200, 175), (cx, cy - 7), 5) # 얼굴
+        pygame.draw.circle(s, (215, 215, 220), (cx, cy - 11), 4)  # 흰 머리
+        pygame.draw.rect(s, (140, 105, 60), (cx + 7, cy - 6, 3, 16))  # 지팡이
 
     @staticmethod
     def _draw_merchant_npc(s, x, y, tk):

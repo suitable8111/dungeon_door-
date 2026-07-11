@@ -247,6 +247,11 @@ class Game:
         self._storage_pane     = 0               # 0=소지품  1=창고
         self._enhance_mode     = 'stone'         # 'stone'(P키) | 'gold'(대장장이)
 
+        # ── 퀘스트 (시민 의뢰) — 런 단위, 세이브에 포함 ──────────────
+        from core.quests import fresh_states
+        self._quests: dict = fresh_states()
+        self._dialog: dict | None = None         # 하단 대화창 상태
+
         # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
         self._hitstop_ms: float = 0.0
         self._hurt_flash_ms: float = 0.0
@@ -645,6 +650,9 @@ class Game:
         # 마을 세션 초기화 (사망 시 던전 소지품만 소실 — 창고는 파일로 유지)
         self._in_town         = False
         self._dungeon_session = None
+        from core.quests import fresh_states
+        self._quests = fresh_states()
+        self._dialog = None
         self._load_floor(is_new_game=True)
         # 시작 지원: 귀환 주문서 1장 (창고에 모아둔 유산을 찾으러 갈 수 있게)
         from entities.item import Item
@@ -723,6 +731,12 @@ class Game:
         self.skills           = SkillManager()
         self.skills.from_dict(data.get('skills', {}))
         self._unlocked_combos = set(data.get('unlocked_combos', []))
+        from core.quests import fresh_states as _fresh_q
+        _saved_q = data.get('quests') or {}
+        self._quests = _fresh_q()
+        for _qid, _qs in _saved_q.items():
+            if _qid in self._quests and isinstance(_qs, dict):
+                self._quests[_qid].update(_qs)
         self._skill_books     = set(data.get('skill_books', []))
         # migrate old slot-keyed saves to skill_id-keyed
         _raw_levels = data.get('skill_levels', {})
@@ -764,6 +778,7 @@ class Game:
 
     def _load_floor(self, is_new_game=False):
         self.floor = min(self.floor, MAX_FLOOR)
+        self._quest_on_floor(self.floor)   # reach_floor 퀘스트 추적
         self.vfx_loot.clear()          # 이전 층 전리품 연출 정리
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
@@ -787,7 +802,7 @@ class Game:
             if not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                               self._skill_levels, self._skill_xp, self._skill_points,
-                              self._equipped_skills, self._skill_enchants)
+                              self._equipped_skills, self._skill_enchants, self._quests)
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -946,8 +961,10 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
-                elif self.state in ('storage', 'inn'):
+                elif self.state in ('storage', 'inn', 'questlog'):
                     self.state = 'playing'
+                elif self.state == 'dialog':
+                    self._dialog_close(declined=True)
                 elif self.state == 'paused':
                     self.state = 'playing'
                 elif self.state == 'playing':
@@ -972,6 +989,12 @@ class Game:
                 self._handle_storage_action(action)
             elif self.state == 'inn':
                 self._handle_inn_action(action)
+            elif self.state == 'dialog':
+                if t in ('confirm', 'attack', 'interact'):
+                    self._dialog_confirm()
+            elif self.state == 'questlog':
+                if t == 'questlog':
+                    self.state = 'playing'
             elif self.state == 'inventory':
                 self._handle_inventory_action(action)
             elif self.state == 'equipment':
@@ -990,6 +1013,9 @@ class Game:
                 elif t == 'interact':
                     if self._in_town:
                         self._town_interact()
+                elif t == 'questlog':
+                    self.state = 'questlog'
+                    self.audio.play('menu_select')
                 elif t == 'skillbook':
                     self._skillbook_open   = not self._skillbook_open
                     self._skillbook_cursor = 0
@@ -1230,7 +1256,7 @@ class Game:
             if self.player and not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                           self._skill_levels, self._skill_xp, self._skill_points,
-                          self._equipped_skills, self._skill_enchants)
+                          self._equipped_skills, self._skill_enchants, self._quests)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -1760,6 +1786,8 @@ class Game:
             self.animator.particles.emit_power_hit(enemy.x, enemy.y)
             self.audio.play('crit')
             self.juice.overkill()
+        # 퀘스트 진행 (kill_any / kill_key)
+        self._quest_on_kill(enemy)
         # 도전과제
         self._ach_stat('kills')
         if enemy.elite:
@@ -2081,10 +2109,150 @@ class Game:
             self._enhance_open = True
             self._enhance_cursor = 0
             self.audio.play('shop_open')
+        elif 'quest' in npc:
+            self._open_quest_dialog(npc)
 
     def _smith_cost(self, item) -> int:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
         return 40 + item.enhance_level * 35
+
+    # ═════════════════ 퀘스트 (시민 의뢰) ═════════════════════════════
+    def _open_quest_dialog(self, npc):
+        """시민 상호작용 — 상태별 대사 + 수락/거절 하단 대화창."""
+        from core.quests import QUESTS, qtext, giver_name
+        qid = npc['quest']
+        st = self._quests[qid]['state']
+        if st == 'done':
+            # 목표 달성 후 보고 — 보상 지급 (연출: 코인 분수 + 팡파레)
+            self._grant_quest_reward(qid)
+            self._quests[qid]['state'] = 'claimed'
+            text, mode = qtext(qid, 'done'), 'info'
+        else:
+            text = qtext(qid, {'available': 'offer', 'active': 'active',
+                               'claimed': 'claimed'}[st])
+            mode = 'offer' if st == 'available' else 'info'
+        self._dialog = {'qid': qid, 'mode': mode,
+                        'npc_name': giver_name(QUESTS[qid]['giver']),
+                        'text': text, 'start': pygame.time.get_ticks()}
+        self.state = 'dialog'
+        self.audio.play('menu_select')
+
+    def _dialog_confirm(self):
+        """대화창 Enter/Space — 제안이면 수락, 아니면 닫기."""
+        if not self._dialog:
+            self.state = 'playing'
+            return
+        if self._dialog['mode'] == 'offer':
+            qid = self._dialog['qid']
+            self._quests[qid]['state'] = 'active'
+            from core.quests import qtext
+            self.messages.append((t('quest_accepted', qtext(qid, 'name')), 'good'))
+            self.audio.play('menu_confirm')
+            # 이미 목표 층까지 내려가 있던 경우 즉시 반영
+            cur_floor = (self._dungeon_session['floor']
+                         if self._dungeon_session else self.floor)
+            self._quest_on_floor(cur_floor)
+        self._dialog_close()
+
+    def _dialog_close(self, declined=False):
+        if declined and self._dialog and self._dialog['mode'] == 'offer':
+            self.audio.play('menu_select')
+        self._dialog = None
+        self.state = 'playing'
+
+    def _grant_quest_reward(self, qid):
+        from core.quests import QUESTS, qtext
+        from entities.item import Item
+        r = QUESTS[qid]['reward']
+        gold = r.get('gold', 0)
+        if gold:
+            self.player.gold += gold
+            self.vfx_loot.spawn_gold(self.player.x, self.player.y, gold)
+        stones = r.get('stones', 0)
+        if stones:
+            self.player.enhance_stones += stones
+        for key in r.get('items', ()):
+            if key in self._item_data and \
+                    len(self.player.inventory) < self.player.max_inventory:
+                d = dict(self._item_data[key]); d['key'] = key
+                self.player.inventory.append(Item(0, 0, d))
+        self.messages.append((t('quest_reward', qtext(qid, 'name'), gold), 'good'))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self.audio.play('levelup_big')
+
+    def _quest_complete_toast(self, qid):
+        from core.quests import qtext
+        self._quests[qid]['state'] = 'done'
+        self.messages.append((t('quest_complete', qtext(qid, 'name')), 'good'))
+        self.animator.add(BannerAnim(t('quest_complete_banner'),
+                                     (140, 255, 170), y=140, size=24,
+                                     duration_ms=1100))
+        self.audio.play('tier_up')
+
+    def _quest_on_kill(self, enemy):
+        """킬 추적 — kill_any / kill_key 퀘스트 진행."""
+        from core.quests import QUESTS
+        for qid, qs in self._quests.items():
+            if qs['state'] != 'active':
+                continue
+            q = QUESTS[qid]
+            if q['kind'] == 'kill_any' or \
+                    (q['kind'] == 'kill_key' and enemy.key == q.get('key')):
+                qs['progress'] += 1
+                if qs['progress'] >= q['count']:
+                    self._quest_complete_toast(qid)
+
+    def _quest_on_floor(self, floor):
+        """층 도달 추적 — reach_floor 퀘스트 진행."""
+        from core.quests import QUESTS
+        for qid, qs in self._quests.items():
+            if qs['state'] != 'active':
+                continue
+            q = QUESTS[qid]
+            if q['kind'] == 'reach_floor':
+                qs['progress'] = max(qs['progress'], floor)
+                if qs['progress'] >= q['floor']:
+                    if qid == 'rescue_girl':
+                        self.messages.append((t('quest_girl_found'), 'good'))
+                    self._quest_complete_toast(qid)
+
+    def _draw_quest_markers(self, cx, cy):
+        """시민 머리 위 퀘스트 마커 — ! 노랑(제안) / ? 초록(보고 가능)."""
+        ts = TILE_SIZE
+        bob = int(math.sin(pygame.time.get_ticks() * 0.006) * 2)
+        for npc in self._town.npcs:
+            qid = npc.get('quest')
+            if not qid:
+                continue
+            st = self._quests[qid]['state']
+            if st == 'available':
+                mark, col = '!', (255, 220, 60)
+            elif st == 'done':
+                mark, col = '?', (120, 255, 150)
+            else:
+                continue
+            mx = (npc['x'] - cx) * ts + ts // 2
+            my = (npc['y'] - cy) * ts - 26 + bob
+            txt = self.hud.font_md.render(mark, True, col)
+            self._game_surf.blit(txt, (mx - txt.get_width() // 2, my))
+
+    def _draw_quest_tracker(self):
+        """뷰포트 좌상단 실시간 퀘스트 목표 (active/done만)."""
+        from core.quests import qtext, objective_str
+        y = 8
+        for qid, qs in self._quests.items():
+            if qs['state'] not in ('active', 'done'):
+                continue
+            done = qs['state'] == 'done'
+            obj = objective_str(qid, qs['progress'])
+            line = f"{'✔' if done else '▸'} {qtext(qid, 'name')}  {obj}"
+            txt = self.hud.font_sm.render(
+                line, True, (130, 255, 160) if done else (235, 225, 180))
+            bg = pygame.Surface((txt.get_width() + 10, 16), pygame.SRCALPHA)
+            bg.fill((0, 0, 0, 110))
+            self._game_surf.blit(bg, (6, y - 2))
+            self._game_surf.blit(txt, (11, y))
+            y += 18
 
     # ── 잡화점 (마을 상인): 소모품 위주, 던전 상점보다 저렴 ───────────
     def _make_town_stock(self):
@@ -3445,6 +3613,10 @@ class Game:
                                     upgrade_cost=self._STORAGE_UPGRADES.get(self._storage_cap))
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
+        elif self.state == 'dialog' and self._dialog:
+            self.hud.render_dialog(self.screen, self._dialog)
+        elif self.state == 'questlog':
+            self.hud.render_questlog(self.screen, self._quests)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel,
                                    mouse_pos=pygame.mouse.get_pos())
@@ -3539,6 +3711,7 @@ class Game:
         if self._in_town and self._town:
             self._town.draw(self._game_surf, cx, cy,
                             self.player.x, self.player.y, self.hud.font_sm)
+            self._draw_quest_markers(cx, cy)
         else:
             portal = getattr(self.dungeon, 'town_portal_pos', None)
             if portal and self.dungeon.tiles[portal[1]][portal[0]].visible:
@@ -3563,6 +3736,9 @@ class Game:
 
         self.animator.draw(self._game_surf, cx, cy)
         self.vfx_loot.draw(self._game_surf, cx, cy)   # 코인·등급 오브·이름 팝업
+
+        # 실시간 퀘스트 트래커 (좌상단)
+        self._draw_quest_tracker()
 
         # 처치 연쇄 카운터 (상단 중앙) — 콤보가 쌓일수록 커지고 티어 색으로 발광
         if self._combo_count >= 2 and self._combo_ms > 0:

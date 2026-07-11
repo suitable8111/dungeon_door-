@@ -1133,6 +1133,101 @@ class HUD:
 
     # ------------------------------------------------------------------ #
     # ------------------------------------------------------------------ #
+    def _wrap_text(self, text, font, max_w):
+        words, lines, cur = text.split(' '), [], ''
+        for w in words:
+            trial = (cur + ' ' + w).strip()
+            if font.size(trial)[0] <= max_w:
+                cur = trial
+            else:
+                if cur:
+                    lines.append(cur)
+                cur = w
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def render_dialog(self, screen, dialog):
+        """하단 대화창 — NPC 대사 (타자기 효과) + 수락/거절 힌트."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        pw, ph = W - 24, 132
+        bx, by = 12, H - ph - 8
+        pygame.draw.rect(screen, (14, 11, 20), (bx, by, pw, ph), border_radius=8)
+        pygame.draw.rect(screen, (190, 160, 90), (bx, by, pw, ph), 2, border_radius=8)
+
+        name_s = self.font_md.render(dialog['npc_name'], True, (255, 215, 130))
+        pygame.draw.rect(screen, (40, 30, 16),
+                         (bx + 12, by - 10, name_s.get_width() + 16, 22),
+                         border_radius=5)
+        screen.blit(name_s, (bx + 20, by - 8))
+
+        # 타자기 효과 — 대사가 한 글자씩 흐른다
+        elapsed = pygame.time.get_ticks() - dialog.get('start', 0)
+        visible = dialog['text'][:max(1, int(elapsed / 16))]
+        y = by + 20
+        for line in self._wrap_text(visible, self.font_md, pw - 40)[:4]:
+            line_s = self.font_md.render(line, True, (230, 225, 210))
+            screen.blit(line_s, (bx + 20, y))
+            y += 22
+        hint_key = 'dialog_offer_hint' if dialog['mode'] == 'offer' else 'dialog_close_hint'
+        hint = self.font_sm.render(t(hint_key), True, (170, 150, 110))
+        screen.blit(hint, (bx + pw - hint.get_width() - 16, by + ph - 22))
+
+    def render_questlog(self, screen, quests):
+        """Q — 퀘스트 목록: 이름/의뢰인/목표 진행바/보상/상태."""
+        from core.quests import QUESTS, qtext, giver_name, objective_str
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 205))
+        screen.blit(ov, (0, 0))
+        pw, ph = 560, 420
+        bx, by = W // 2 - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (13, 16, 26), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (120, 170, 120), (bx, by, pw, ph), 2, border_radius=6)
+        title = self.font_lg.render(t('quest_title'), True, (150, 230, 160))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
+
+        _ST_COL = {'available': (150, 150, 160), 'active': (255, 225, 120),
+                   'done': (120, 255, 150), 'claimed': (90, 100, 90)}
+        y = by + 56
+        for qid, q in QUESTS.items():
+            qs = quests.get(qid, {'state': 'available', 'progress': 0})
+            st = qs['state']
+            col = _ST_COL[st]
+            pygame.draw.rect(screen, (22, 26, 40), (bx + 14, y, pw - 28, 104),
+                             border_radius=5)
+            name_s = self.font_md.render(qtext(qid, 'name'), True, col)
+            screen.blit(name_s, (bx + 26, y + 8))
+            st_s = self.font_sm.render(t(f'quest_st_{st}'), True, col)
+            screen.blit(st_s, (bx + pw - st_s.get_width() - 26, y + 10))
+            giver_s = self.font_sm.render(giver_name(q['giver']), True, (140, 140, 160))
+            screen.blit(giver_s, (bx + 26, y + 30))
+            desc_s = self.font_sm.render(qtext(qid, 'desc'), True, (200, 200, 190))
+            screen.blit(desc_s, (bx + 26, y + 48))
+            # 진행바 (수락 후)
+            if st in ('active', 'done'):
+                total = q['count'] if q['kind'] != 'reach_floor' else q['floor']
+                frac = min(1.0, qs['progress'] / max(1, total))
+                pygame.draw.rect(screen, (30, 36, 30), (bx + 26, y + 70, 300, 8))
+                pygame.draw.rect(screen, col, (bx + 26, y + 70,
+                                               max(1, int(300 * frac)), 8))
+                obj_s = self.font_sm.render(objective_str(qid, qs['progress']),
+                                            True, col)
+                screen.blit(obj_s, (bx + 334, y + 66))
+            # 보상
+            r = q['reward']
+            parts = []
+            if r.get('gold'):   parts.append(f"{r['gold']} G")
+            if r.get('stones'): parts.append(t('quest_rw_stones', r['stones']))
+            if r.get('items'):  parts.append('+' + str(len(r['items'])) + ' item')
+            rw_s = self.font_sm.render(t('quest_rw', '  ·  '.join(parts)),
+                                       True, (215, 185, 110))
+            screen.blit(rw_s, (bx + pw - rw_s.get_width() - 26, y + 84))
+            y += 114
+        hint = self.font_sm.render(t('quest_hint'), True, (110, 130, 110))
+        screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 24))
+
+    # ------------------------------------------------------------------ #
     def render_inn(self, screen, player, rest_cost):
         """여관(주모) — [1] 휴식 / [2] 여관밥."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT

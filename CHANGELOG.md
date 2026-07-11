@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.0.0 — The Town & Action Overhaul
+
+The biggest update yet: real action combat, a living town hub, quests, durability, and a full loot-dopamine layer. The game loop is transformed.
+
+### Action Combat 2.0
+- **3-hit combo chains**: rapid Space attacks flow slash → reverse slash → **finisher** (160% + knockback + impact frame). Bump attacks join the chain.
+- **Command actions**: forward+Space = **Lunge Thrust** (dash-in, 2-tile pierce), back+Space = **Backstep Slash** (hit & retreat with afterimages).
+- **Drive Cancel**: 3-pip gauge — cancel attack recovery into any skill for +15% damage. "CANCEL!" callout, afterimages, spark.
+- **Stamina (SP) system**: every attack/skill costs SP shown next to HP; regen is delayed 0.9s (spam = exhaustion). **Kills refund SP** (15% / elite 30% / boss 100%) — skilled aggression sustains itself. W/A/S/D skills now cost SP instead of cooldowns; Efficiency enchant reduces SP costs; SP cost reduction also scales with level and light gear.
+- Procedural action poses + sword smear frames + screen-wide impact flash — no sprite sheets needed.
+
+### Town Hub & Quests
+- **Town**: buildings, well, lamps, trees — Inn (rest + max-HP meal buff), Smithy (gold enhance + repair), General Store (cheap consumables), and a **Personal Stash** (permanent storage that survives death, expandable 30→90 slots).
+- **Portals**: Return Scrolls or boss kills open a town portal; your dungeon (enemies, map, position) is preserved exactly and resumes on re-entry. Loot auto-banks on arrival.
+- **Quests**: villagers offer story quests via a dialogue box (accept/decline, typewriter text) — monster culling, centipede menace, rescue the girl on floor 10. Press **Q** for the quest log; objectives track in real time on screen.
+
+### Durability
+- Armor wears when you get hit (dodges don't), weapons wear when you land hits. Broken gear stays but stops working until repaired (smith gold repair / field Repair Kits). Durability bars everywhere: equipment screen, side panel, smithy, inventory, stash.
+
+### Dopamine Layer
+- Loot explosions with **coin magnetism** and rolling gold counter; item drops reveal with **rarity ceremonies** (common→epic light pillars, chimes, colored name pops) and magnet pickup.
+- **Treasure Goblins** (catch before they flee = JACKPOT), breakable pots/crates, **OVERKILL!** callouts, boss/last-kill **slow motion**, soft radial glow particles.
+
+### Balance & Misc
+- Arcane SP gauge removed (superseded by Stamina); arcane chain now costs 50 SP.
+- Equipment overlay visuals removed per feedback — replaced by equip burst effects.
+- New sounds (14), new items (Return Scroll, Repair Kit), 374 UI strings × 5 languages.
+
 ## v1.6.0 — Full Localization: 5 Languages
 
 The game now ships in **English, 한국어, 日本語, 简体中文, and Русский** — and English is the new default.

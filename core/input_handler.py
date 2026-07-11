@@ -24,7 +24,7 @@ class InputHandler:
         pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
         pygame.K_r, pygame.K_ESCAPE, pygame.K_RETURN,
         pygame.K_l, pygame.K_i, pygame.K_o, pygame.K_p, pygame.K_k,
-        pygame.K_e,
+        pygame.K_e, pygame.K_q,
     }
     # WASD → 스킬 키 문자
     _WASD = {
@@ -88,6 +88,8 @@ class InputHandler:
                 actions.append({'type': 'skillbook'})
             elif k == pygame.K_e:
                 actions.append({'type': 'interact'})
+            elif k == pygame.K_q:
+                actions.append({'type': 'questlog'})
             elif k == pygame.K_ESCAPE:
                 actions.append({'type': 'escape'})
 
