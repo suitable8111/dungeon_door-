@@ -804,18 +804,7 @@ class HUD:
             y += 13
         y += 2
 
-        # ── 오의 SP 바 ──────────────────────────────────────────────
-        arcane_sp     = getattr(player, 'arcane_sp', 0)
-        arcane_sp_max = getattr(player, 'arcane_sp_max', 100)
-        if arcane_sp_max > 0:
-            sec_header('sec_arcane_sp', (200, 100, 255))
-            frac_asp = arcane_sp / arcane_sp_max
-            arc_col  = (200, 100, 255) if frac_asp < 1.0 else (255, 200, 80)
-            _bar(screen, rx+8, y, bw, 7, int(bw * frac_asp), bw, arc_col, (20, 10, 35))
-            y += 9
-            asp_s = self.font_sm.render(f'{arcane_sp}/{arcane_sp_max}', True, arc_col)
-            screen.blit(asp_s, (rx + pw - asp_s.get_width() - 8, y - 9))
-            y += 2
+        # (오의 SP 바 제거 — 스태미나 SP 체제로 통합)
 
         # ── 궁극기 ──────────────────────────────────────────────────
         from core.skills import ULTIMATE_SKILL_DEFS

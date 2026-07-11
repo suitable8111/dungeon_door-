@@ -1619,7 +1619,6 @@ class Game:
         self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80), crit=crit))
         self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
         self.audio.play('crit' if crit else 'attack')
-        self.player.arcane_sp = min(self.player.arcane_sp_max, self.player.arcane_sp + 3)
         if not enemy.is_alive():
             self._on_enemy_killed(enemy)
 
@@ -1649,6 +1648,10 @@ class Game:
             return
         gold = enemy.gold_drop
         self._run_kills += 1
+        # 처치 SP 회복: 일반 15% / 엘리트 30% / 보스 전량 — 전투를 이어가는 연료
+        pct = 1.0 if enemy.is_boss else (0.30 if enemy.elite else 0.15)
+        self.player.stamina = min(self.player.stamina_max,
+                                  self.player.stamina + self.player.stamina_max * pct)
         # 사망 연출: 시체 잔상 + 적 색 파편 버스트 + 히트스톱 + 흔들림
         self.animator.add(DeathAnim(enemy.x, enemy.y,
                                     _SPRITE_FN.get(enemy.key, draw_generic),
@@ -1746,9 +1749,10 @@ class Game:
         self._combo_ms = 4000
         self.audio.play_combo(self._combo_count)   # 킬마다 한 음씩 상승
         if self._combo_count >= 2:
+            # 연쇄 보너스: 스태미나 SP 추가 회복 (콤보가 공격 지속력을 만든다)
             bonus = min(self._combo_count, 8)
-            self.player.arcane_sp = min(self.player.arcane_sp_max,
-                                        self.player.arcane_sp + bonus)
+            self.player.stamina = min(self.player.stamina_max,
+                                      self.player.stamina + bonus)
             if self._combo_count % 5 == 0:
                 self.messages.append((t('combo_kill', self._combo_count, bonus), 'good'))
         new_tier = self._combo_tier(self._combo_count)
@@ -1762,6 +1766,8 @@ class Game:
 
     # ── 프롭 파괴 (항아리/나무상자): 소소하지만 즉각적인 보상 ─────────
     def _on_prop_broken(self, prop):
+        self.player.stamina = min(self.player.stamina_max,
+                                  self.player.stamina + 5)   # 소량 SP 회복
         gold = prop.gold_drop
         if gold:
             self.player.gold += gold                          # 상태: 즉시 지급
@@ -1886,6 +1892,13 @@ class Game:
         self._start_punch_zoom(0.035, 90)
         self.audio.play('cancel')
 
+    # W/A/S/D 스킬 쿨다운 시스템 비활성화 — SP(스태미나) 소모 체제로 전환.
+    # True로 되돌리면 기존 쿨다운 게이트가 다시 활성화된다.
+    _SKILL_COOLDOWNS_ENABLED = False
+
+    # 스킬 카테고리별 SP 소모량
+    _SKILL_STAMINA_COST = {'mobility': 15, 'defense': 20, 'attack': 22, 'buff': 20}
+
     def _use_skill(self, slot):
         skill_id = self._equipped_skills.get(slot)
         if not skill_id:
@@ -1896,7 +1909,7 @@ class Game:
         if self.player.level < sdef['level_req']:
             self.messages.append((t('skill_need_level', sdef['name'], sdef['level_req']), 'warn'))
             return False
-        if not self.skills.ready(slot):
+        if self._SKILL_COOLDOWNS_ENABLED and not self.skills.ready(slot):
             self.messages.append((t('skill_cd', self.skills.remaining_sec(slot)), 'info'))
             return False
         _exec_map = {
@@ -1915,9 +1928,15 @@ class Game:
         if not fn:
             return False
 
+        # SP 소모 (절약 인챈트가 소모량 절감)
+        final = self._get_skill_final_stats(skill_id)
+        cost = (self._SKILL_STAMINA_COST.get(sdef.get('category'), 20)
+                * final['stamina_mul'])
+        if not self._spend_stamina(cost):
+            return False
+
         # 드라이브 캔슬: 공격 후딜 중 스킬 발동 시 후딜 삭제 + 데미지 +15%
         cancel_ok = self._can_drive_cancel()
-        final = self._get_skill_final_stats(skill_id)
         self._enchant_dmg_mul = final['dmg_mul'] * (1.15 if cancel_ok else 1.0)
         result = fn(slot)
         self._enchant_dmg_mul = 1.0
@@ -1925,11 +1944,15 @@ class Game:
             self._do_drive_cancel()
 
         if result:
-            self.player.arcane_sp = min(
-                self.player.arcane_sp_max, self.player.arcane_sp + 10)
+            if not self._SKILL_COOLDOWNS_ENABLED:
+                self.skills.reset(slot)   # 실행부가 건 쿨다운 즉시 해제
             if final['arcane_eligible']:
                 self._arcane_window_ms = 2000
                 self._arcane_last_skill = skill_id
+        else:
+            # 스킬 불발 시 SP 환불
+            self.player.stamina = min(self.player.stamina_max,
+                                      self.player.stamina + cost)
 
         return result
 
@@ -2228,7 +2251,8 @@ class Game:
         """인챈트 반영 최종 스킬 스탯을 반환."""
         sdef = ALL_SKILL_DEFS.get(skill_id)
         if not sdef:
-            return {'dmg_mul': 1.0, 'cd_ms': 0, 'sp_threshold': 100, 'arcane_eligible': False}
+            return {'dmg_mul': 1.0, 'cd_ms': 0, 'sp_threshold': 100,
+                    'stamina_mul': 1.0, 'arcane_eligible': False}
         lvl = self._skill_levels.get(skill_id, 1)
         upgrades = sdef['upgrades']
         udata = upgrades[min(lvl - 1, len(upgrades) - 1)]
@@ -2240,11 +2264,12 @@ class Game:
         arcane_lvl = enc.get('arcane', 0)
         dmg_mul      = 1.0 + power_lvl * 0.15
         cd_ms        = max(500, int(base_cd * (1.0 - haste_lvl * 0.10)))
-        sp_threshold = max(40, 100 - effi_lvl * 15)
+        sp_threshold = max(40, 100 - effi_lvl * 15)   # (구) 오의 임계값 — 미사용
         return {
             'dmg_mul':        dmg_mul,
             'cd_ms':          cd_ms,
             'sp_threshold':   sp_threshold,
+            'stamina_mul':    max(0.4, 1.0 - effi_lvl * 0.15),  # 절약: SP 소모 절감
             'arcane_eligible': arcane_lvl >= 1,
         }
 
@@ -2298,7 +2323,11 @@ class Game:
         self.audio.play('levelup')
 
     def _try_arcane_art(self) -> bool:
-        """오의 연계 시도 — SP가 임계치 이상이고 오의 스킬이 사용된 직후여야 함."""
+        """오의 연계 시도 — 오의 인챈트 스킬 직후 2초 창 안에 R.
+
+        (구 오의 SP 임계값 시스템은 스태미나 SP 도입과 함께 제거 —
+         이제 스태미나를 크게 소모하는 것으로 대가를 치른다)
+        """
         skill_id = self._arcane_last_skill
         if not skill_id:
             self.messages.append((t('arcane_no_skill'), 'warn'))
@@ -2307,11 +2336,8 @@ class Game:
         if not stats['arcane_eligible']:
             self.messages.append((t('arcane_no_enc'), 'warn'))
             return False
-        threshold = stats['sp_threshold']
-        if self.player.arcane_sp < threshold:
-            self.messages.append((t('arcane_no_sp', self.player.arcane_sp, threshold), 'warn'))
+        if not self._spend_stamina(50):
             return False
-        self.player.arcane_sp = 0
         self._arcane_window_ms = 0
         self._arcane_last_skill = None
         self.messages.append((t('arcane_trigger'), 'warn'))

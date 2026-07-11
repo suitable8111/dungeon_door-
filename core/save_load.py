@@ -42,7 +42,6 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
-            'arcane_sp':    getattr(player, 'arcane_sp', 0),
             'inventory': [
                 {'key': item.key, 'enhance_level': item.enhance_level}
                 for item in player.inventory

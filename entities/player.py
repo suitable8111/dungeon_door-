@@ -24,10 +24,6 @@ class Player(Entity):
         self.slowed_ms  = 0   # 이동속도 30% 감소
         self.feared_ms  = 0   # 명중률 40%로 저하
 
-        # 오의 SP
-        self.arcane_sp:     int = 0
-        self.arcane_sp_max: int = 100
-
         # 드라이브 게이지 (캔슬 자원): 3칸, 시간·타격으로 회복
         self.drive:     float = 3.0
         self.drive_max: int   = 3
@@ -202,7 +198,6 @@ class Player(Entity):
         p.attack_speed  = data.get('attack_speed', 1.0)
         p.evasion       = data.get('evasion', 0)
         p.move_speed    = data.get('move_speed', 1.0)
-        p.arcane_sp     = data.get('arcane_sp', 0)
 
         def _make_item(entry, idd):
             # entry: 구 포맷 str or 신 포맷 {'key':..,'enhance_level':..}
