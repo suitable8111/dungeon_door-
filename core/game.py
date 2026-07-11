@@ -1415,8 +1415,12 @@ class Game:
     _STAMINA_REGEN_DELAY = 900   # 마지막 소모 후 회복 시작까지 ms
 
     def _spend_stamina(self, cost: float) -> bool:
-        """스태미나 소모 시도. 부족하면 탈진 피드백 후 False."""
+        """스태미나 소모 시도. 부족하면 탈진 피드백 후 False.
+
+        레벨·장비 SP 경감(total_sp_reduce)이 모든 소모에 일괄 적용된다.
+        """
         p = self.player
+        cost *= (1.0 - p.total_sp_reduce)
         if p.stamina < cost:
             now = pygame.time.get_ticks()
             if now - self._last_exhaust_msg > 1500:
@@ -1950,9 +1954,10 @@ class Game:
                 self._arcane_window_ms = 2000
                 self._arcane_last_skill = skill_id
         else:
-            # 스킬 불발 시 SP 환불
-            self.player.stamina = min(self.player.stamina_max,
-                                      self.player.stamina + cost)
+            # 스킬 불발 시 SP 환불 (실제 차감액 = 경감 적용 후)
+            self.player.stamina = min(
+                self.player.stamina_max,
+                self.player.stamina + cost * (1.0 - self.player.total_sp_reduce))
 
         return result
 

@@ -81,6 +81,13 @@ class Player(Entity):
         return self.defense + bonus + enhance + heal_buf
 
     @property
+    def total_sp_reduce(self) -> float:
+        """SP 소모 경감 — 레벨 0.4%/Lv + 장비 sp_reduce 합 (총 45% 상한)."""
+        equip = sum(getattr(it, 'sp_reduce', 0.0)
+                    for it in self.equipment.values() if it)
+        return min(0.45, self.level * 0.004 + equip)
+
+    @property
     def total_evasion(self) -> int:
         """투구 강화 포함 총 회피율 (0~80%)."""
         enhance = sum(

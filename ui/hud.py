@@ -690,6 +690,8 @@ class HUD:
             (t('stat_aspd'), f"{player.attack_speed:.2f}",    (255, 200, 80)),
             (t('stat_eva'),  f"{player.evasion}%",            (80, 220, 160)),
             (t('stat_mspd'), f"{player.move_speed:.2f}",      (160, 160, 255)),
+            (t('stat_spred'), f"-{getattr(player, 'total_sp_reduce', 0.0) * 100:.0f}%",
+             (170, 220, 80)),
         ]
         for label, val, col in stats:
             lbl_s = self.font_sm.render(label, True, (100, 100, 130))

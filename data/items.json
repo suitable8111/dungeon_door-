@@ -102,7 +102,8 @@
     "name_en": "Leather Armor",
     "name_ja": "革の鎧",
     "name_zh": "皮甲",
-    "name_ru": "Кожаная броня"
+    "name_ru": "Кожаная броня",
+    "sp_reduce": 0.03
   },
   "chain_mail": {
     "name": "사슬 갑옷",
@@ -162,7 +163,8 @@
     "name_en": "Leather Helm",
     "name_ja": "革の兜",
     "name_zh": "皮盔",
-    "name_ru": "Кожаный шлем"
+    "name_ru": "Кожаный шлем",
+    "sp_reduce": 0.02
   },
   "iron_helm": {
     "name": "철 투구",
@@ -252,7 +254,8 @@
     "name_en": "Silver Ring",
     "name_ja": "銀の指輪",
     "name_zh": "银戒指",
-    "name_ru": "Серебряное кольцо"
+    "name_ru": "Серебряное кольцо",
+    "sp_reduce": 0.04
   },
   "war_pendant": {
     "name": "전투 목걸이",
@@ -267,7 +270,8 @@
     "name_en": "Battle Necklace",
     "name_ja": "戦いの首飾り",
     "name_zh": "战斗项链",
-    "name_ru": "Боевое ожерелье"
+    "name_ru": "Боевое ожерелье",
+    "sp_reduce": 0.03
   },
   "magic_stone": {
     "name": "마법석",
@@ -282,7 +286,8 @@
     "name_en": "Magic Stone",
     "name_ja": "魔法石",
     "name_zh": "魔法石",
-    "name_ru": "Магический камень"
+    "name_ru": "Магический камень",
+    "sp_reduce": 0.06
   },
   "teleport_scroll": {
     "name": "텔레포트 두루마리",
@@ -342,7 +347,8 @@
     "name_en": "Leather Boots",
     "name_ja": "革のブーツ",
     "name_zh": "皮靴",
-    "name_ru": "Кожаные сапоги"
+    "name_ru": "Кожаные сапоги",
+    "sp_reduce": 0.02
   },
   "iron_boots": {
     "name": "철제 장화",
@@ -372,7 +378,8 @@
     "name_en": "Gale Boots",
     "name_ja": "疾風のブーツ",
     "name_zh": "疾风靴",
-    "name_ru": "Сапоги вихря"
+    "name_ru": "Сапоги вихря",
+    "sp_reduce": 0.03
   },
   "shadow_boots": {
     "name": "그림자 장화",
@@ -387,7 +394,8 @@
     "name_en": "Shadow Boots",
     "name_ja": "影のブーツ",
     "name_zh": "暗影靴",
-    "name_ru": "Теневые сапоги"
+    "name_ru": "Теневые сапоги",
+    "sp_reduce": 0.04
   },
   "skillbook_wind": {
     "name": "바람 스킬북",

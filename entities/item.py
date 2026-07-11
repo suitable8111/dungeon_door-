@@ -13,6 +13,7 @@ class Item:
         self.effect       = data.get('effect', '')
         self.value        = data.get('value', 0)
         self.enhance_level = data.get('enhance_level', 0)  # 0~18
+        self.sp_reduce     = data.get('sp_reduce', 0.0)    # SP 소모 경감 비율
 
     @property
     def name(self) -> str:
