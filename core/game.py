@@ -236,6 +236,17 @@ class Game:
         self._stamina_delay_ms: float = 0.0      # 회복 시작까지 대기
         self._last_exhaust_msg: int   = -9999    # 탈진 메시지 쿨다운
 
+        # ── 마을 시스템 (GameManager 역할: 던전 세션 통째 보존) ──────
+        from core.town import TownScene
+        from core.save_load import load_storage
+        self._in_town          = False
+        self._town: TownScene | None = None      # lazy 생성
+        self._dungeon_session  = None            # {'dungeon','floor','px','py',...}
+        self._storage: list    = load_storage()  # 영구 창고 (사망해도 유지)
+        self._storage_cursor   = 0               # 창고 UI 커서
+        self._storage_pane     = 0               # 0=소지품  1=창고
+        self._enhance_mode     = 'stone'         # 'stone'(P키) | 'gold'(대장장이)
+
         # 히트스톱 (타격 순간 게임 월드 잠깐 정지) / 피격 비네트
         self._hitstop_ms: float = 0.0
         self._hurt_flash_ms: float = 0.0
@@ -588,10 +599,12 @@ class Game:
             return
         if self.state == 'menu':
             self.audio.bgm.play('menu')
-        elif self.state in ('playing', 'shop', 'paused', 'dead'):
+        elif self.state in ('playing', 'shop', 'storage', 'paused', 'dead'):
             if self.dungeon is None:
                 return
-            if self.dungeon.is_boss_floor:
+            if self._in_town:
+                self.audio.bgm.play('shop')      # 마을 = 평화로운 상점 트랙
+            elif self.dungeon.is_boss_floor:
                 self.audio.bgm.play('boss')
             elif self.dungeon.has_shop:
                 self.audio.bgm.play('shop')
@@ -621,7 +634,15 @@ class Game:
         self._arcane_last_skill = None
         self._combo_count = 0
         self._combo_ms    = 0.0
+        # 마을 세션 초기화 (사망 시 던전 소지품만 소실 — 창고는 파일로 유지)
+        self._in_town         = False
+        self._dungeon_session = None
         self._load_floor(is_new_game=True)
+        # 시작 지원: 귀환 주문서 1장 (창고에 모아둔 유산을 찾으러 갈 수 있게)
+        from entities.item import Item
+        if 'return_scroll' in self._item_data:
+            d = dict(self._item_data['return_scroll']); d['key'] = 'return_scroll'
+            self.player.inventory.append(Item(0, 0, d))
         self.state = 'playing'
 
     # ─────────────── 테스트 모드 ──────────────────────────────────────
@@ -671,6 +692,11 @@ class Game:
         self.state = 'playing'
         self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
+
+    def start_town_test(self, floor: int = 1):
+        """python3 test_main.py town [층] — 던전 세션 생성 후 곧장 마을 진입."""
+        self.start_test_mode(floor)
+        self._enter_town()
 
     def start_burning_mode(self):
         """python3 test_main.py bunning — 버닝 스테이지 직행."""
@@ -910,6 +936,8 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
+                elif self.state == 'storage':
+                    self.state = 'playing'
                 elif self.state == 'paused':
                     self.state = 'playing'
                 elif self.state == 'playing':
@@ -930,6 +958,8 @@ class Game:
                 self._handle_pause_action(action)
             elif self.state == 'shop':
                 self._handle_shop_action(action)
+            elif self.state == 'storage':
+                self._handle_storage_action(action)
             elif self.state == 'inventory':
                 self._handle_inventory_action(action)
             elif self.state == 'equipment':
@@ -942,8 +972,12 @@ class Game:
                     self._equip_sel = 0
                     self.state = 'equipment'
                 elif t == 'enhance':
+                    self._enhance_mode = 'stone'   # P키 = 강화석 모드
                     self._enhance_open = True
                     self._enhance_cursor = 0
+                elif t == 'interact':
+                    if self._in_town:
+                        self._town_interact()
                 elif t == 'skillbook':
                     self._skillbook_open   = not self._skillbook_open
                     self._skillbook_cursor = 0
@@ -1328,7 +1362,7 @@ class Game:
         elif action['type'] == 'combo_skill': acted = self._use_combo_skill(action['combo'])
         elif action['type'] == 'ultimate':    acted = self._use_ultimate(action['key'])
         if acted:
-            if not self._is_test_mode:
+            if not self._is_test_mode and not self._in_town:
                 self.dungeon.update_visibility(self.player.x, self.player.y)
             self.camera.center_on(self.player.x, self.player.y)
 
@@ -1378,6 +1412,15 @@ class Game:
         item = self.dungeon.get_item_at(nx, ny)
         if item:
             self._pickup(item)
+
+        # ── 포탈 밟기: 마을 ↔ 던전 ──────────────────────────────────
+        if self._in_town:
+            if self._town and (nx, ny) == self._town.portal_pos:
+                self._start_fade(self._return_from_town)
+                return True
+        elif (nx, ny) == getattr(self.dungeon, 'town_portal_pos', None):
+            self._start_fade(self._enter_town)
+            return True
 
         tile = self.dungeon.tiles[ny][nx]
         if tile.tile_type == TileType.SHOP and self.dungeon.has_shop:
@@ -1582,6 +1625,13 @@ class Game:
             if item in self.player.inventory:
                 self.player.inventory.remove(item)
             self._use_teleport()
+        elif item.effect == 'town_portal':
+            if self._in_town:
+                return
+            if item in self.player.inventory:
+                self.player.inventory.remove(item)
+            self._spawn_town_portal()
+            self.state = 'playing'             # 인벤 닫고 포탈 확인
         elif item.effect == 'whirlwind':
             if item in self.player.inventory:
                 self.player.inventory.remove(item)
@@ -1836,6 +1886,11 @@ class Game:
         elif item.effect == 'teleport':
             self.player.inventory.pop(slot)
             self._use_teleport()
+        elif item.effect == 'town_portal':
+            if self._in_town:
+                return False                   # 마을에서는 사용 불가
+            self.player.inventory.pop(slot)
+            self._spawn_town_portal()
         elif item.effect == 'whirlwind':
             self.player.inventory.pop(slot)
             self._skill_whirl(no_cooldown=True)
@@ -1844,6 +1899,150 @@ class Game:
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
         return True
+
+    # ═════════════════ 마을 시스템 ═══════════════════════════════════
+    def _spawn_town_portal(self, x=None, y=None):
+        """귀환 포탈 생성 — 주문서 사용 또는 보스 클리어 시."""
+        if self._in_town:
+            return
+        px = x if x is not None else self.player.x
+        py = y if y is not None else self.player.y
+        self.dungeon.town_portal_pos = (px, py)
+        # 연출: 포탈 개방 버스트 (자리: 여기에 히트스톱/사운드 추가 가능)
+        self.animator.particles.emit_combo_tier(px, py, (170, 110, 255))
+        self.audio.play('teleport')
+        self.messages.append((t('portal_open'), 'good'))
+
+    def _enter_town(self):
+        """포탈 진입: 던전 세션(맵·적·좌표) 임시 저장 → 마을 전환.
+
+        인벤토리 세션 분리 규칙: 소지품(dungeon_inventory)은 마을에
+        무사히 도착하는 순간 영구 창고(permanent)로 이전 — 이후 사망해도
+        창고(storage.json)는 유지된다.
+        """
+        from core.town import TownScene, TOWN_THEME
+        if self._town is None:
+            self._town = TownScene()
+        # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
+        self._dungeon_session = {
+            'dungeon': self.dungeon,
+            'floor': self.floor,
+            'px': self.player.x, 'py': self.player.y,
+            'theme': self._theme,
+            'respawn_max': self._respawn_max,
+        }
+        # ② 소지품 → 영구 창고 이전 (Transfer)
+        moved = self._deposit_all_to_storage()
+        # ③ 씬 전환
+        self._in_town = True
+        self.vfx_loot.clear()
+        self.dungeon = self._town.dungeon
+        self._theme = TOWN_THEME
+        self.player.x, self.player.y = self._town.spawn_pos
+        self.camera.center_on(self.player.x, self.player.y)
+        self.messages.append((t('town_enter'), 'good'))
+        if moved:
+            self.messages.append((t('town_deposit', moved), 'info'))
+        self.audio.play('stairs')
+
+    def _return_from_town(self):
+        """마을 포탈 재진입: 저장해 둔 던전 세션 복원 (사냥터 그 자리)."""
+        s = self._dungeon_session
+        self._in_town = False
+        if s:
+            self.dungeon = s['dungeon']
+            self.floor   = s['floor']
+            self._theme  = s['theme']
+            self._respawn_max = s['respawn_max']
+            self.player.x, self.player.y = s['px'], s['py']
+            self._dungeon_session = None
+            if not self._is_test_mode:
+                self.dungeon.update_visibility(self.player.x, self.player.y)
+            self.camera.center_on(self.player.x, self.player.y)
+            self.messages.append((t('town_return', self.floor), 'good'))
+            self.audio.play('teleport')
+        else:
+            # 세션 없음 (마을에서 시작한 경우) → 현재 층 새로 생성
+            self._load_floor()
+
+    def _deposit_all_to_storage(self) -> int:
+        """소지품 전량을 영구 창고로 이전하고 저장. 이전 개수 반환."""
+        from core.save_load import save_storage
+        moved = 0
+        for it in list(self.player.inventory):
+            self._storage.append({'key': it.key,
+                                  'enhance_level': it.enhance_level})
+            self.player.inventory.remove(it)
+            moved += 1
+        if moved:
+            save_storage(self._storage)
+        return moved
+
+    def _storage_transfer(self):
+        """창고 UI: 선택 항목을 반대편으로 이동 (즉시 디스크 저장)."""
+        from core.save_load import save_storage
+        from entities.item import Item
+        if self._storage_pane == 0:                       # 소지품 → 창고
+            inv = self.player.inventory
+            if not inv:
+                return
+            i = min(self._storage_cursor, len(inv) - 1)
+            it = inv.pop(i)
+            self._storage.append({'key': it.key,
+                                  'enhance_level': it.enhance_level})
+            self.audio.play('pickup')
+        else:                                             # 창고 → 소지품
+            if not self._storage:
+                return
+            if len(self.player.inventory) >= self.player.max_inventory:
+                self.messages.append((t('inv_full'), 'warn'))
+                return
+            i = min(self._storage_cursor, len(self._storage) - 1)
+            entry = self._storage.pop(i)
+            key = entry.get('key', '')
+            if key in self._item_data:
+                d = dict(self._item_data[key])
+                d['key'] = key
+                d['enhance_level'] = entry.get('enhance_level', 0)
+                self.player.inventory.append(Item(0, 0, d))
+            self.audio.play('pickup')
+        save_storage(self._storage)                       # 영구 반영
+        self._storage_cursor = max(0, self._storage_cursor - 0)
+
+    def _handle_storage_action(self, action):
+        ty = action['type']
+        cur_list = self.player.inventory if self._storage_pane == 0 else self._storage
+        if ty == 'move':
+            if action.get('dx'):
+                self._storage_pane ^= 1
+                self._storage_cursor = 0
+            elif action.get('dy'):
+                if cur_list:
+                    self._storage_cursor = ((self._storage_cursor + action['dy'])
+                                            % len(cur_list))
+        elif ty in ('confirm', 'attack'):                 # Enter/Space 이동
+            self._storage_transfer()
+
+    def _town_interact(self):
+        """마을에서 E: 인접 NPC 상호작용."""
+        npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
+        if not npc:
+            return
+        if npc['id'] == 'storage':
+            self._storage_cursor = 0
+            self._storage_pane = 0
+            self.state = 'storage'
+            self.audio.play('shop_open')
+        elif npc['id'] == 'smith':
+            # 대장장이: 골드 소모 강화 (기존 강화 패널 재사용)
+            self._enhance_mode = 'gold'
+            self._enhance_open = True
+            self._enhance_cursor = 0
+            self.audio.play('shop_open')
+
+    def _smith_cost(self, item) -> int:
+        """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
+        return 40 + item.enhance_level * 35
 
     def _equip_burst(self, item):
         """장착 순간 아이템 색 버스트 — 상시 오버레이 대신 '입는 쾌감'으로."""
@@ -2665,10 +2864,19 @@ class Game:
         if item.enhance_level >= self._ENHANCE_MAX:
             self.messages.append((t('enhance_max', item.name), 'warn'))
             return
-        if self.player.enhance_stones < 1:
-            self.messages.append((t('enhance_no_stone'), 'warn'))
-            return
-        self.player.enhance_stones -= 1
+        if self._enhance_mode == 'gold':
+            # 대장장이: 골드 소모 (단계 비례 가격)
+            cost = self._smith_cost(item)
+            if self.player.gold < cost:
+                self.messages.append((t('no_gold'), 'warn'))
+                self.audio.play('no_gold')
+                return
+            self.player.gold -= cost
+        else:
+            if self.player.enhance_stones < 1:
+                self.messages.append((t('enhance_no_stone'), 'warn'))
+                return
+            self.player.enhance_stones -= 1
         rate = self._ENHANCE_RATES[item.enhance_level]
         if random.random() < rate:
             item.enhance_level += 1
@@ -2841,6 +3049,13 @@ class Game:
             self.messages.append((t('boss_clear'), 'good'))
             self.audio.play('stairs')
             self._start_shake(6, 400)
+            # 구역(보스) 클리어 보상: 마을 귀환 포탈 자동 개방
+            for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1), (0, 0)):
+                px_, py_ = self.player.x + ddx, self.player.y + ddy
+                if (self.dungeon.is_walkable(px_, py_)
+                        and (px_, py_) != self.dungeon.stairs_pos):
+                    self._spawn_town_portal(px_, py_)
+                    break
 
     # ─────────────── 버닝 스테이지 ──────────────────────────────────
     def _enter_burning_stage(self):
@@ -3004,6 +3219,7 @@ class Game:
 
         # ── 몬스터 리스폰 ────────────────────────────────────────────
         if (not self._burning_active and
+                not self._in_town and
                 not self.dungeon.is_boss_floor and
                 self._respawn_max > 0):
             live_normal = sum(1 for e in self.dungeon.enemies
@@ -3055,6 +3271,10 @@ class Game:
 
         if self.state == 'shop':
             self.hud.render_shop(self.screen, self.dungeon.shop_items, self.player.gold)
+        elif self.state == 'storage':
+            self.hud.render_storage(self.screen, self.player, self._storage,
+                                    self._item_data, self._storage_pane,
+                                    self._storage_cursor)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel,
                                    mouse_pos=pygame.mouse.get_pos())
@@ -3095,7 +3315,10 @@ class Game:
                 arcane_window=self._arcane_window_ms > 0,
             )
         if self._enhance_open and self.state == 'playing':
-            self.hud.render_enhance(self.screen, self.player, self._enhance_cursor, self._enhance_result)
+            self.hud.render_enhance(self.screen, self.player, self._enhance_cursor,
+                                    self._enhance_result,
+                                    mode=self._enhance_mode,
+                                    cost_fn=self._smith_cost)
 
         # 버닝 스테이지 타이머 오버레이
         if self._burning_active:
@@ -3141,6 +3364,16 @@ class Game:
                 self._draw_enemy(enemy,
                                  (enemy.x-cx)*TILE_SIZE + int(enemy.anim_ox),
                                  (enemy.y-cy)*TILE_SIZE + int(enemy.anim_oy))
+
+        # ── 마을 NPC / 귀환 포탈 ────────────────────────────────────
+        if self._in_town and self._town:
+            self._town.draw(self._game_surf, cx, cy,
+                            self.player.x, self.player.y, self.hud.font_sm)
+        else:
+            portal = getattr(self.dungeon, 'town_portal_pos', None)
+            if portal and self.dungeon.tiles[portal[1]][portal[0]].visible:
+                from core.town import TownScene
+                TownScene.draw_portal(self._game_surf, portal, cx, cy)
 
         ox, oy = self.animator.player_offset
         ox += int(self._move_anim_offset[0])

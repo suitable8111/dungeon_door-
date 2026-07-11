@@ -249,20 +249,8 @@ def draw_player_layered(surf, tile_x, tile_y, facing,
     tile_x, tile_y : 타일 좌상단 좌표 (TILE_SIZE=32 기준)
     equipment      : player.equipment dict
     """
-    off = EQUIPMENT_OFFSETS.get(facing, EQUIPMENT_OFFSETS['down'])
-    cx  = tile_x + 16
-    cy  = tile_y + 16
-
-    # 투구/갑옷/신발/방패 오버레이는 '덮어 입은' 느낌이 좋지 않다는
-    # 유저 피드백으로 제거 — 장비 시각화는 페이퍼돌 화면(O키)과
-    # 장착 순간 버스트 연출이 담당. 무기만 유지 (액션 포즈의 핵심).
-
-    # ── 무기 레이어 ───────────────────────────────────────────────────
-    weapon_item = equipment.get('weapon')
-    if weapon_item is not None:
-        wox, woy = off['weapon']
-        dx, dy, angle = update_equipment_pos(facing, atk_phase, walk_frame,
-                                             atk_variant)
-        wx = cx + wox + dx
-        wy = cy + woy + dy
-        _draw_weapon(surf, weapon_item.color, wx, wy, angle)
+    # 장비 오버레이(투구/갑옷/신발/방패/무기)는 '덮어 입은' 느낌이
+    # 좋지 않다는 유저 피드백으로 전부 제거 — 장비 시각화는
+    # 페이퍼돌 화면(O키) + 장착 순간 아이템 색 버스트가 담당.
+    # 액션 타격감은 SmearAnim/잔상/임팩트 프레임이 유지한다.
+    return

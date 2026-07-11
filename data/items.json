@@ -472,5 +472,20 @@
     "name_ja": "強化石",
     "name_zh": "强化石",
     "name_ru": "Камень усиления"
+  },
+  "return_scroll": {
+    "name": "귀환 주문서",
+    "name_en": "Return Scroll",
+    "name_ja": "帰還の巻物",
+    "name_zh": "回城卷轴",
+    "name_ru": "Свиток возврата",
+    "color": [
+      170,
+      110,
+      255
+    ],
+    "type": "consumable",
+    "effect": "town_portal",
+    "value": 0
   }
 }

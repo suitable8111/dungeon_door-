@@ -1111,8 +1111,68 @@ class HUD:
         screen.blit(hint_s, (bx + 10, by + ph - 20))
 
     # ------------------------------------------------------------------ #
-    def render_enhance(self, screen, player, cursor, flash_result=None):
-        """장비 강화 오버레이 (P키)."""
+    # ------------------------------------------------------------------ #
+    def render_storage(self, screen, player, storage, item_data, pane, cursor):
+        """마을 창고(주모) — 좌: 소지품 / 우: 영구 창고 2패널."""
+        from core.lang import localized_name
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 210))
+        screen.blit(ov, (0, 0))
+
+        pw, ph = 720, 440
+        bx, by = W // 2 - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (16, 12, 8), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (150, 110, 60), (bx, by, pw, ph), 2, border_radius=6)
+
+        title = self.font_lg.render(t('storage_title'), True, (235, 190, 120))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
+        hint = self.font_sm.render(t('storage_hint'), True, (150, 140, 120))
+        screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 24))
+
+        col_w = pw // 2 - 24
+        panes = [
+            (t('storage_carried', len(player.inventory), player.max_inventory),
+             [(it.name, it.enhance_level) for it in player.inventory]),
+            (t('storage_stored', len(storage)),
+             [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')})),
+               e.get('enhance_level', 0)) for e in storage]),
+        ]
+        for pi, (header, rows) in enumerate(panes):
+            px = bx + 16 + pi * (col_w + 16)
+            active = (pi == pane)
+            hdr_col = (255, 220, 130) if active else (140, 130, 110)
+            pygame.draw.rect(screen, (30, 24, 14) if active else (22, 18, 12),
+                             (px, by + 44, col_w, ph - 84), border_radius=4)
+            if active:
+                pygame.draw.rect(screen, (220, 170, 80),
+                                 (px, by + 44, col_w, ph - 84), 1, border_radius=4)
+            h_s = self.font_md.render(header, True, hdr_col)
+            screen.blit(h_s, (px + 8, by + 50))
+            # 목록 (커서 주변 스크롤)
+            vis = 14
+            start = 0
+            if active and cursor >= vis:
+                start = cursor - vis + 1
+            y = by + 74
+            for i in range(start, min(len(rows), start + vis)):
+                name, enh = rows[i]
+                label = f'{name} [+{enh}]' if enh else name
+                sel = active and i == cursor
+                if sel:
+                    pygame.draw.rect(screen, (70, 52, 24),
+                                     (px + 4, y - 2, col_w - 8, 18), border_radius=3)
+                row_s = self.font_sm.render(label, True,
+                                            (255, 240, 200) if sel else (190, 180, 160))
+                screen.blit(row_s, (px + 10, y))
+                y += 19
+            if not rows:
+                empty = self.font_sm.render(t('inv_empty'), True, (110, 100, 90))
+                screen.blit(empty, (px + 10, by + 78))
+
+    def render_enhance(self, screen, player, cursor, flash_result=None,
+                       mode='stone', cost_fn=None):
+        """장비 강화 오버레이 — P키(강화석) / 대장장이(mode='gold')."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 210))
@@ -1137,10 +1197,22 @@ class HUD:
         pygame.draw.rect(screen, (10, 14, 28), (bx, by, pw, ph), border_radius=6)
         pygame.draw.rect(screen, border_col, (bx, by, pw, ph), 2, border_radius=6)
 
-        title = self.font_lg.render(t('enh_title'), True, (160, 210, 255))
+        smith = (mode == 'gold')
+        title = self.font_lg.render(t('smith_title') if smith else t('enh_title'),
+                                    True, (255, 190, 110) if smith else (160, 210, 255))
         screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
 
-        stone_s = self.font_sm.render(t('enh_stones', player.enhance_stones), True, (160, 210, 255))
+        if smith:
+            # 대장장이 모드: 보유 골드 + 선택 슬롯 강화 비용
+            res_txt = t('shop_gold', player.gold)
+            _slots = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
+            cur_item = player.equipment.get(_slots[cursor]) if cursor < len(_slots) else None
+            if cur_item and cost_fn:
+                res_txt += f'   ({t("smith_cost", cost_fn(cur_item))})'
+            stone_s = self.font_sm.render(res_txt, True, (255, 205, 90))
+        else:
+            stone_s = self.font_sm.render(t('enh_stones', player.enhance_stones),
+                                          True, (160, 210, 255))
         screen.blit(stone_s, (bx + pw - stone_s.get_width() - 14, by + 14))
 
         pygame.draw.line(screen, (50, 80, 120), (bx+12, by+42), (bx+pw-12, by+42))

@@ -106,6 +106,28 @@ def save_settings(d):
         pass
 
 
+# ── 영구 창고 (마을 주모) — 사망/새 게임과 무관하게 유지 ────────────
+STORAGE_PATH = os.path.join(_DATA_DIR, 'storage.json')
+
+
+def load_storage() -> list:
+    """[{'key':.., 'enhance_level':..}, ...]"""
+    try:
+        with open(STORAGE_PATH, encoding='utf-8') as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def save_storage(entries: list):
+    try:
+        with open(STORAGE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(entries, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 # ── 최고 기록 ─────────────────────────────────────────────────────
 def load_records():
     try:

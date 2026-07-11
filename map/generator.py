@@ -250,21 +250,22 @@ def _make_shop_items(floor_level, item_data):
         'teleport_scroll':     int(40  * mul),
         'amulet':              int(90  * mul),
         'whirlwind_potion':    int(60  * mul),
+        'return_scroll':       int(30  * mul),
     }
     if floor_level <= 3:
-        keys = ['health_potion', 'dagger', 'leather_armor', 'leather_helm', 'wooden_shield']
+        keys = ['health_potion', 'dagger', 'leather_armor', 'leather_helm', 'wooden_shield', 'return_scroll']
     elif floor_level <= 8:
         keys = ['large_health_potion', 'sword', 'chain_mail', 'iron_helm',
-                'iron_shield', 'silver_ring', 'teleport_scroll']
+                'iron_shield', 'silver_ring', 'teleport_scroll', 'return_scroll']
     elif floor_level <= 20:
         keys = ['large_health_potion', 'sword', 'plate_armor', 'iron_helm',
-                'iron_shield', 'war_pendant', 'amulet', 'whirlwind_potion']
+                'iron_shield', 'war_pendant', 'amulet', 'whirlwind_potion', 'return_scroll']
     elif floor_level <= 50:
         keys = ['large_health_potion', 'broad_sword', 'plate_armor', 'knight_helm',
-                'tower_shield', 'war_pendant', 'magic_stone', 'whirlwind_potion']
+                'tower_shield', 'war_pendant', 'magic_stone', 'whirlwind_potion', 'return_scroll']
     else:
         keys = ['large_health_potion', 'great_sword', 'mythril_armor', 'knight_helm',
-                'tower_shield', 'magic_stone', 'amulet', 'teleport_scroll', 'whirlwind_potion']
+                'tower_shield', 'magic_stone', 'amulet', 'teleport_scroll', 'whirlwind_potion', 'return_scroll']
 
     result = []
     for key in keys[:5]:

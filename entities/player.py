@@ -81,6 +81,11 @@ class Player(Entity):
         return self.defense + bonus + enhance + heal_buf
 
     @property
+    def dungeon_inventory(self) -> list:
+        """세션 인벤토리 별칭 — 마을 진입 시 영구 창고로 이전, 사망 시 소실."""
+        return self.inventory
+
+    @property
     def total_sp_reduce(self) -> float:
         """SP 소모 경감 — 레벨 0.4%/Lv + 장비 sp_reduce 합 (총 45% 상한)."""
         equip = sum(getattr(it, 'sp_reduce', 0.0)
