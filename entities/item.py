@@ -16,14 +16,21 @@ class Item:
         self.sp_reduce     = data.get('sp_reduce', 0.0)    # SP 소모 경감 비율
 
         # ── 내구도 (방어구 4종 전용) — 피격마다 닳고 0이면 효과 정지 ──
-        if self.item_type in ('armor', 'head', 'off_hand', 'boots'):
-            base = self.value if self.value >= 1 else self.value * 10
-            self.max_durability = 40 + int(base * 8)
+        self.max_durability = Item.calc_max_durability(data)
+        if self.max_durability > 0:
             self.durability = min(self.max_durability,
                                   data.get('durability', self.max_durability))
         else:
-            self.max_durability = 0
             self.durability = 0
+
+    @staticmethod
+    def calc_max_durability(data: dict) -> int:
+        """방어구 최대 내구도 = 40 + 방어값×8 (신발은 ×10 환산). 그 외 0."""
+        if data.get('type') not in ('armor', 'head', 'off_hand', 'boots'):
+            return 0
+        v = data.get('value', 0)
+        base = v if v >= 1 else v * 10
+        return 40 + int(base * 8)
 
     @property
     def broken(self) -> bool:

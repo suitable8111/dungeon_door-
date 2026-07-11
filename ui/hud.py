@@ -710,12 +710,27 @@ class HUD:
             if item:
                 pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 15))
                 nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
-                val_s = self.font_sm.render(nm, True, item.color)
+                broken = getattr(item, 'broken', False)
+                val_s = self.font_sm.render(nm, True,
+                                            (255, 80, 60) if broken else item.color)
             else:
                 val_s = self.font_sm.render('--', True, (40, 40, 60))
             screen.blit(lbl_s, (rx+8, y))
             screen.blit(val_s, (rx + pw - val_s.get_width() - 8, y))
             y += 14
+            # 내구도 미니 바 (방어구) — 파손 시 붉은 점멸
+            if item and getattr(item, 'max_durability', 0) > 0:
+                frac = item.durability / item.max_durability
+                bw2 = pw - 16
+                pygame.draw.rect(screen, (30, 26, 26), (rx+8, y-2, bw2, 3))
+                if frac > 0:
+                    d_col = ((90, 200, 90) if frac > 0.5 else
+                             (230, 180, 60) if frac > 0.25 else (230, 80, 60))
+                    pygame.draw.rect(screen, d_col,
+                                     (rx+8, y-2, max(1, int(bw2 * frac)), 3))
+                elif (pygame.time.get_ticks() // 400) % 2 == 0:
+                    pygame.draw.rect(screen, (255, 70, 50), (rx+8, y-2, bw2, 3))
+                y += 4
         y += 2
 
         # ── 빠른 아이템 (슬롯 1-5) ──────────────────────────────────
@@ -1070,7 +1085,13 @@ class HUD:
                     info += f"  DEF +{item.value}"
             elif item.effect == 'heal':
                 info += f"  HP +{item.value}"
-            info_s = self.font_sm.render(info, True, item.color)
+            # 내구도 (방어구)
+            if getattr(item, 'max_durability', 0) > 0:
+                info += ('  ' + t('broken_tag') if item.broken
+                         else f'  🛡{item.durability}/{item.max_durability}')
+            info_s = self.font_sm.render(info, True,
+                                         (255, 80, 60) if getattr(item, 'broken', False)
+                                         else item.color)
             screen.blit(info_s, (bx + (pw - info_s.get_width()) // 2, info_y + 6))
 
         # ── 버리기 존 ────────────────────────────────────────────────
@@ -1130,13 +1151,24 @@ class HUD:
         hint = self.font_sm.render(t('storage_hint'), True, (150, 140, 120))
         screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 24))
 
+        from entities.item import Item as _Item
+
+        def _dur_tag(cur, mx):
+            if mx <= 0 or cur >= mx:
+                return ''
+            return f' 〈{max(0, cur)}/{mx}〉' if cur > 0 else ' ' + t('broken_tag')
+
         col_w = pw // 2 - 24
         panes = [
             (t('storage_carried', len(player.inventory), player.max_inventory),
-             [(it.name, it.enhance_level) for it in player.inventory]),
+             [(it.name, it.enhance_level,
+               _dur_tag(it.durability, it.max_durability)) for it in player.inventory]),
             (t('storage_stored', len(storage)),
              [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')})),
-               e.get('enhance_level', 0)) for e in storage]),
+               e.get('enhance_level', 0),
+               _dur_tag(e.get('durability', 10**9),
+                        _Item.calc_max_durability(item_data.get(e.get('key', ''), {}))))
+              for e in storage]),
         ]
         for pi, (header, rows) in enumerate(panes):
             px = bx + 16 + pi * (col_w + 16)
@@ -1156,8 +1188,8 @@ class HUD:
                 start = cursor - vis + 1
             y = by + 74
             for i in range(start, min(len(rows), start + vis)):
-                name, enh = rows[i]
-                label = f'{name} [+{enh}]' if enh else name
+                name, enh, dur = rows[i]
+                label = (f'{name} [+{enh}]' if enh else name) + dur
                 sel = active and i == cursor
                 if sel:
                     pygame.draw.rect(screen, (70, 52, 24),
@@ -1178,7 +1210,7 @@ class HUD:
         ov.fill((0, 0, 0, 210))
         screen.blit(ov, (0, 0))
 
-        pw, ph = 460, 380
+        pw, ph = 460, 404
         bx = W // 2 - pw // 2
         by = H // 2 - ph // 2
 
@@ -1200,10 +1232,10 @@ class HUD:
         smith = (mode == 'gold')
         title = self.font_lg.render(t('smith_title') if smith else t('enh_title'),
                                     True, (255, 190, 110) if smith else (160, 210, 255))
-        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 8))
 
+        # 자원 표시는 제목과 겹치지 않게 별도 줄
         if smith:
-            # 대장장이 모드: 보유 골드 + 선택 슬롯 강화 비용
             res_txt = t('shop_gold', player.gold)
             _slots = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
             cur_item = player.equipment.get(_slots[cursor]) if cursor < len(_slots) else None
@@ -1213,9 +1245,9 @@ class HUD:
         else:
             stone_s = self.font_sm.render(t('enh_stones', player.enhance_stones),
                                           True, (160, 210, 255))
-        screen.blit(stone_s, (bx + pw - stone_s.get_width() - 14, by + 14))
+        screen.blit(stone_s, (bx + pw - stone_s.get_width() - 14, by + 42))
 
-        pygame.draw.line(screen, (50, 80, 120), (bx+12, by+42), (bx+pw-12, by+42))
+        pygame.draw.line(screen, (50, 80, 120), (bx+12, by+58), (bx+pw-12, by+58))
 
         _SLOT_ORDER = ['head', 'body', 'weapon', 'off_hand', 'accessory', 'feet']
         _SLOT_NAMES = {'head': t('slot_head_s'), 'body': t('slot_body_s'), 'weapon': t('slot_wpn_s'),
@@ -1224,7 +1256,7 @@ class HUD:
                        'off_hand': t('enh_stat_off'), 'accessory': t('enh_stat_acc'), 'feet': t('enh_stat_feet')}
         _RATES = [100,100,100,100,100,100,80,80,80,60,60,60,40,40,40,20,20,20]
 
-        y = by + 52
+        y = by + 66
         for i, slot in enumerate(_SLOT_ORDER):
             item = player.equipment.get(slot)
             selected = (i == cursor)
@@ -1267,19 +1299,22 @@ class HUD:
                 screen.blit(name_s, (bx+80, y+2))
                 stat_s = self.font_sm.render(_STAT_LABEL.get(slot, ''), True, (90, 160, 90))
                 screen.blit(stat_s, (bx+80, y+16))
-                # 내구도 바 (방어구) — 파손 시 붉은 태그
+                # 내구도 바 + 수치 (방어구) — 파손 시 붉은 태그
                 if getattr(item, 'max_durability', 0) > 0:
                     dur_frac = item.durability / item.max_durability
-                    dbx = bx + 230
-                    pygame.draw.rect(screen, (40, 30, 30), (dbx, y + 19, 70, 5))
+                    dbx = bx + 228
+                    pygame.draw.rect(screen, (40, 30, 30), (dbx, y + 19, 64, 5))
                     if dur_frac > 0:
                         d_col = ((90, 200, 90) if dur_frac > 0.5 else
                                  (230, 180, 60) if dur_frac > 0.25 else (230, 80, 60))
                         pygame.draw.rect(screen, d_col,
-                                         (dbx, y + 19, max(1, int(70 * dur_frac)), 5))
+                                         (dbx, y + 19, max(1, int(64 * dur_frac)), 5))
+                        num_s = self.font_sm.render(
+                            f'{item.durability}/{item.max_durability}', True, d_col)
+                        screen.blit(num_s, (dbx, y + 2))
                     else:
                         broken_s = self.font_sm.render(t('broken_tag'), True, (255, 80, 60))
-                        screen.blit(broken_s, (dbx + 74, y + 14))
+                        screen.blit(broken_s, (dbx, y + 2))
                 if enh < 18:
                     rate = _RATES[enh]
                     rate_col = (80, 220, 80) if rate == 100 else (220, 180, 60) if rate >= 60 else (220, 80, 80)
@@ -1862,9 +1897,28 @@ class HUD:
                 ico = 10
                 pygame.draw.rect(screen, item.color, (sx + 5, sy + SH - ico - 5, ico, ico), border_radius=2)
                 nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
+                broken = getattr(item, 'broken', False)
                 nm_s = self.font_sm.render(f"+{item.value} {nm}", True,
-                                           WHITE if is_sel else LIGHT_GRAY)
+                                           (255, 80, 60) if broken
+                                           else (WHITE if is_sel else LIGHT_GRAY))
                 screen.blit(nm_s, (sx + 17, sy + SH - nm_s.get_height() - 4))
+                # 내구도 바 + 수치 (방어구) — 라벨 아래 줄
+                if getattr(item, 'max_durability', 0) > 0:
+                    frac = item.durability / item.max_durability
+                    dbw = SW - 46
+                    dby = sy + 20
+                    pygame.draw.rect(screen, (34, 28, 28), (sx + 6, dby, dbw, 4))
+                    if frac > 0:
+                        d_col = ((90, 200, 90) if frac > 0.5 else
+                                 (230, 180, 60) if frac > 0.25 else (230, 80, 60))
+                        pygame.draw.rect(screen, d_col,
+                                         (sx + 6, dby, max(1, int(dbw * frac)), 4))
+                    dur_txt = (t('broken_tag') if broken
+                               else f'{item.durability}/{item.max_durability}')
+                    dur_s = self.font_sm.render(
+                        dur_txt, True,
+                        (255, 80, 60) if broken else (150, 150, 130))
+                    screen.blit(dur_s, (sx + 8 + dbw, dby - 5))
             else:
                 none_s = self.font_sm.render(t('equip_none'), True, (55, 55, 80))
                 screen.blit(none_s, (sx + (SW - none_s.get_width()) // 2,
