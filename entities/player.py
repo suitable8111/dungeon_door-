@@ -32,6 +32,9 @@ class Player(Entity):
         self.stamina:     float = 100.0
         self.stamina_max: int   = 100
 
+        # 방금 파손된 방어구 (Game 루프가 경고 연출 후 비움)
+        self.just_broken: list = []
+
         # 버프
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가
@@ -56,11 +59,11 @@ class Player(Entity):
     def total_attack(self) -> int:
         bonus = sum(
             item.value for item in self.equipment.values()
-            if item and item.effect in ('attack_up', 'stat_up_all')
+            if item and not item.broken and item.effect in ('attack_up', 'stat_up_all')
         )
         enhance = sum(
             item.enhance_level for item in self.equipment.values()
-            if item and item.item_type == 'weapon'
+            if item and not item.broken and item.item_type == 'weapon'
         )
         base = self.attack + bonus + enhance
         if self.atk_bonus_ms > 0:
@@ -71,11 +74,11 @@ class Player(Entity):
     def total_defense(self) -> int:
         bonus = sum(
             item.value for item in self.equipment.values()
-            if item and item.effect in ('defense_up', 'stat_up_all')
+            if item and not item.broken and item.effect in ('defense_up', 'stat_up_all')
         )
         enhance = sum(
             item.enhance_level for item in self.equipment.values()
-            if item and item.item_type in ('armor', 'off_hand')
+            if item and not item.broken and item.item_type in ('armor', 'off_hand')
         )
         heal_buf = self.heal_def_bonus if self.heal_def_ms > 0 else 0
         return self.defense + bonus + enhance + heal_buf
@@ -89,7 +92,8 @@ class Player(Entity):
     def total_sp_reduce(self) -> float:
         """SP 소모 경감 — 레벨 0.4%/Lv + 장비 sp_reduce 합 (총 45% 상한)."""
         equip = sum(getattr(it, 'sp_reduce', 0.0)
-                    for it in self.equipment.values() if it)
+                    for it in self.equipment.values()
+                    if it and not it.broken)
         return min(0.45, self.level * 0.004 + equip)
 
     @property
@@ -97,7 +101,7 @@ class Player(Entity):
         """투구 강화 포함 총 회피율 (0~80%)."""
         enhance = sum(
             item.enhance_level for item in self.equipment.values()
-            if item and item.item_type == 'head'
+            if item and not item.broken and item.item_type == 'head'
         )
         return min(80, self.evasion + enhance)
 
@@ -106,7 +110,7 @@ class Player(Entity):
         """장신구 강화로 증가하는 스킬 데미지 배율."""
         enhance = sum(
             item.enhance_level for item in self.equipment.values()
-            if item and item.item_type == 'accessory'
+            if item and not item.broken and item.item_type == 'accessory'
         )
         return 1.0 + enhance * 0.05
 
@@ -118,6 +122,23 @@ class Player(Entity):
         if self.damage_reduce_ms > 0:
             amount = max(1, int(amount * (1.0 - self.damage_reduce_pct)))
         self.hp = max(0, self.hp - amount)
+        self._degrade_armor()
+
+    def _degrade_armor(self):
+        """피격 시 장착 방어구 중 랜덤 1개 내구도 -1.
+
+        회피하면 안 닳는다(take_damage 미호출). 0이 되는 순간
+        just_broken에 기록 — Game 루프가 경고 연출을 소비한다.
+        """
+        import random
+        candidates = [it for it in self.equipment.values()
+                      if it and it.max_durability > 0 and it.durability > 0]
+        if not candidates:
+            return
+        it = random.choice(candidates)
+        it.durability -= 1
+        if it.durability <= 0:
+            self.just_broken.append(it)
 
     def tick_debuffs(self, dt_ms: int):
         if self.cursed_ms > 0:
@@ -145,11 +166,11 @@ class Player(Entity):
     def total_move_speed(self) -> float:
         bonus = sum(
             item.value for item in self.equipment.values()
-            if item and item.effect == 'speed_up'
+            if item and not item.broken and item.effect == 'speed_up'
         )
         enhance = sum(
             item.enhance_level * 0.05 for item in self.equipment.values()
-            if item and item.item_type == 'boots'
+            if item and not item.broken and item.item_type == 'boots'
         )
         spd = self.move_speed + bonus + enhance
         if self.slowed_ms > 0:
@@ -222,6 +243,8 @@ class Player(Entity):
             d = dict(idd[key])
             d['key'] = key
             d['enhance_level'] = enh
+            if isinstance(entry, dict) and 'durability' in entry:
+                d['durability'] = entry['durability']
             return Item(0, 0, d)
 
         p.inventory = []

@@ -15,6 +15,21 @@ class Item:
         self.enhance_level = data.get('enhance_level', 0)  # 0~18
         self.sp_reduce     = data.get('sp_reduce', 0.0)    # SP 소모 경감 비율
 
+        # ── 내구도 (방어구 4종 전용) — 피격마다 닳고 0이면 효과 정지 ──
+        if self.item_type in ('armor', 'head', 'off_hand', 'boots'):
+            base = self.value if self.value >= 1 else self.value * 10
+            self.max_durability = 40 + int(base * 8)
+            self.durability = min(self.max_durability,
+                                  data.get('durability', self.max_durability))
+        else:
+            self.max_durability = 0
+            self.durability = 0
+
+    @property
+    def broken(self) -> bool:
+        """파손 — 아이템은 남지만 모든 스탯 효과가 정지된다 (수리 가능)."""
+        return self.max_durability > 0 and self.durability <= 0
+
     @property
     def name(self) -> str:
         """현재 언어의 아이템 이름 (게임 중 언어 변경 즉시 반영)."""

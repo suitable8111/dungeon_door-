@@ -1267,6 +1267,19 @@ class HUD:
                 screen.blit(name_s, (bx+80, y+2))
                 stat_s = self.font_sm.render(_STAT_LABEL.get(slot, ''), True, (90, 160, 90))
                 screen.blit(stat_s, (bx+80, y+16))
+                # 내구도 바 (방어구) — 파손 시 붉은 태그
+                if getattr(item, 'max_durability', 0) > 0:
+                    dur_frac = item.durability / item.max_durability
+                    dbx = bx + 230
+                    pygame.draw.rect(screen, (40, 30, 30), (dbx, y + 19, 70, 5))
+                    if dur_frac > 0:
+                        d_col = ((90, 200, 90) if dur_frac > 0.5 else
+                                 (230, 180, 60) if dur_frac > 0.25 else (230, 80, 60))
+                        pygame.draw.rect(screen, d_col,
+                                         (dbx, y + 19, max(1, int(70 * dur_frac)), 5))
+                    else:
+                        broken_s = self.font_sm.render(t('broken_tag'), True, (255, 80, 60))
+                        screen.blit(broken_s, (dbx + 74, y + 14))
                 if enh < 18:
                     rate = _RATES[enh]
                     rate_col = (80, 220, 80) if rate == 100 else (220, 180, 60) if rate >= 60 else (220, 80, 80)
@@ -1283,6 +1296,9 @@ class HUD:
 
             y += 38
 
+        if smith:
+            rep_s = self.font_sm.render(t('smith_repair_hint'), True, (200, 160, 90))
+            screen.blit(rep_s, (bx + (pw - rep_s.get_width()) // 2, by + ph - 40))
         guide_s = self.font_sm.render(t('enh_hint'), True, (70, 90, 130))
         screen.blit(guide_s, (bx + (pw - guide_s.get_width()) // 2, by + ph - 24))
 

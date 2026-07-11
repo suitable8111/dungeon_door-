@@ -493,6 +493,14 @@ class Game:
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
+                    # 방어구 파손 경고 소비 (Player.take_damage가 기록)
+                    for _broken in self.player.just_broken:
+                        self.messages.append((t('armor_broken', _broken.name), 'bad'))
+                        self.animator.add(CalloutAnim(self.player.x, self.player.y,
+                                                      '!', (255, 90, 60)))
+                        self.audio.play('break')
+                        self._start_shake(4, 220)
+                    self.player.just_broken.clear()
                 if self._combo_ms > 0:
                     self._combo_ms = max(0.0, self._combo_ms - world_dt)
                     if self._combo_ms == 0:
@@ -1632,6 +1640,10 @@ class Game:
                 self.player.inventory.remove(item)
             self._spawn_town_portal()
             self.state = 'playing'             # 인벤 닫고 포탈 확인
+        elif item.effect == 'repair':
+            if item in self.player.inventory:
+                self.player.inventory.remove(item)
+            self._use_repair_kit()
         elif item.effect == 'whirlwind':
             if item in self.player.inventory:
                 self.player.inventory.remove(item)
@@ -1891,6 +1903,9 @@ class Game:
                 return False                   # 마을에서는 사용 불가
             self.player.inventory.pop(slot)
             self._spawn_town_portal()
+        elif item.effect == 'repair':
+            self.player.inventory.pop(slot)
+            self._use_repair_kit()
         elif item.effect == 'whirlwind':
             self.player.inventory.pop(slot)
             self._skill_whirl(no_cooldown=True)
@@ -1971,7 +1986,8 @@ class Game:
         moved = 0
         for it in list(self.player.inventory):
             self._storage.append({'key': it.key,
-                                  'enhance_level': it.enhance_level})
+                                  'enhance_level': it.enhance_level,
+                                  'durability': it.durability})
             self.player.inventory.remove(it)
             moved += 1
         if moved:
@@ -1989,7 +2005,8 @@ class Game:
             i = min(self._storage_cursor, len(inv) - 1)
             it = inv.pop(i)
             self._storage.append({'key': it.key,
-                                  'enhance_level': it.enhance_level})
+                                  'enhance_level': it.enhance_level,
+                                  'durability': it.durability})
             self.audio.play('pickup')
         else:                                             # 창고 → 소지품
             if not self._storage:
@@ -2004,6 +2021,8 @@ class Game:
                 d = dict(self._item_data[key])
                 d['key'] = key
                 d['enhance_level'] = entry.get('enhance_level', 0)
+                if 'durability' in entry:
+                    d['durability'] = entry['durability']
                 self.player.inventory.append(Item(0, 0, d))
             self.audio.play('pickup')
         save_storage(self._storage)                       # 영구 반영
@@ -2043,6 +2062,18 @@ class Game:
     def _smith_cost(self, item) -> int:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
         return 40 + item.enhance_level * 35
+
+    def _use_repair_kit(self):
+        """응급 수리 키트 — 장착 방어구 각각 최대치의 50% 회복."""
+        fixed = 0
+        for it in self.player.equipment.values():
+            if it and it.max_durability > 0 and it.durability < it.max_durability:
+                it.durability = min(it.max_durability,
+                                    it.durability + it.max_durability // 2)
+                fixed += 1
+        self.messages.append((t('repair_kit_used', fixed), 'good'))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self.audio.play('use_item')
 
     def _equip_burst(self, item):
         """장착 순간 아이템 색 버스트 — 상시 오버레이 대신 '입는 쾌감'으로."""
@@ -2851,8 +2882,49 @@ class Game:
             self._enhance_cursor = (self._enhance_cursor + 1) % len(slots)
         elif key in (pygame.K_RETURN, pygame.K_SPACE):
             self._do_enhance(slots[self._enhance_cursor])
+        elif key == pygame.K_r and self._enhance_mode == 'gold':
+            self._do_repair(slots[self._enhance_cursor])      # 대장장이: 선택 수리
+        elif key == pygame.K_t and self._enhance_mode == 'gold':
+            self._do_repair_all()                             # 대장장이: 전체 수리
         elif key in (pygame.K_ESCAPE, pygame.K_p):
             self._enhance_open = False
+
+    # ── 대장장이 수리 (내구도) ────────────────────────────────────────
+    def _repair_cost(self, item) -> int:
+        return (item.max_durability - item.durability) * 2
+
+    def _do_repair(self, slot: str) -> bool:
+        item = self.player.equipment.get(slot)
+        if not item or item.max_durability <= 0:
+            self.messages.append((t('enhance_no_item'), 'warn'))
+            return False
+        missing = item.max_durability - item.durability
+        if missing <= 0:
+            self.messages.append((t('repair_full'), 'info'))
+            return False
+        cost = self._repair_cost(item)
+        if self.player.gold < cost:
+            self.messages.append((t('no_gold'), 'warn'))
+            self.audio.play('no_gold')
+            return False
+        self.player.gold -= cost
+        item.durability = item.max_durability
+        self.messages.append((t('repair_done', item.name, cost), 'good'))
+        # 수리 연출: 망치질 스파크 (자리: 히트스톱/모루 사운드 확장 가능)
+        self.animator.particles.emit_basic_hit(self.player.x, self.player.y)
+        self.audio.play('buy')
+        return True
+
+    def _do_repair_all(self):
+        repaired = 0
+        for slot in self._ENHANCE_SLOTS:
+            item = self.player.equipment.get(slot)
+            if item and item.max_durability > 0 and item.durability < item.max_durability:
+                if not self._do_repair(slot):
+                    break
+                repaired += 1
+        if repaired == 0:
+            self.messages.append((t('repair_full'), 'info'))
 
     def _do_enhance(self, slot: str):
         import random

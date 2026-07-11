@@ -487,5 +487,20 @@
     "type": "consumable",
     "effect": "town_portal",
     "value": 0
+  },
+  "repair_kit": {
+    "name": "수리 키트",
+    "name_en": "Repair Kit",
+    "name_ja": "修理キット",
+    "name_zh": "修理工具",
+    "name_ru": "Ремонтный набор",
+    "color": [
+      180,
+      160,
+      120
+    ],
+    "type": "consumable",
+    "effect": "repair",
+    "value": 0
   }
 }

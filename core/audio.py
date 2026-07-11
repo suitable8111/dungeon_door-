@@ -508,6 +508,10 @@ class AudioManager:
                 # 런지 — 휙 바람 가름
                 'lunge':       lambda p: _mix(_noise(110,0.22,rate=r),
                                               _sine(700*p,60,0.10,rate=r)+_sine(1000*p,70,0.08,rate=r)),
+                # 장비 파손 — 금속 깨지는 소리 (하강 + 노이즈)
+                'break':       lambda p: _mix(_noise(160,0.30,rate=r),
+                                              _square(700*p,50,0.14,rate=r)+_square(420*p,70,0.14,rate=r)
+                                              +_square(210*p,110,0.14,rate=r)),
                 # 탈진 — 낮은 숨소리 퍽 (스태미나 부족)
                 'exhaust':     lambda p: _mix(_noise(130,0.14,rate=r),
                                               _square(110*p,90,0.08,rate=r)),
