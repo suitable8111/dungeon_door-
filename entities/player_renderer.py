@@ -253,29 +253,11 @@ def draw_player_layered(surf, tile_x, tile_y, facing,
     cx  = tile_x + 16
     cy  = tile_y + 16
 
-    # ── 레이어 0: 신발 (몸체 아래에 그려야 발이 몸에 가려짐) ──────────────
-    feet_item = equipment.get('feet')
-    if feet_item is not None:
-        _draw_boots(surf, feet_item.color, cx, cy, facing, walk_frame)
+    # 투구/갑옷/신발/방패 오버레이는 '덮어 입은' 느낌이 좋지 않다는
+    # 유저 피드백으로 제거 — 장비 시각화는 페이퍼돌 화면(O키)과
+    # 장착 순간 버스트 연출이 담당. 무기만 유지 (액션 포즈의 핵심).
 
-    # ── 레이어 1: 갑옷 ────────────────────────────────────────────────
-    body_item = equipment.get('body')
-    if body_item is not None:
-        _draw_body_armor(surf, body_item.color, cx, cy + 2, facing, walk_frame)
-
-    # ── 레이어 2: 투구 ────────────────────────────────────────────────
-    head_item = equipment.get('head')
-    if head_item is not None:
-        hox, hoy = off['head']
-        _draw_helmet(surf, head_item.color, cx + hox, cy + hoy, facing, walk_frame)
-
-    # ── 레이어 3: 방패 (무기 아래에 그려야 z-order 자연스러움) ────────────
-    shield_item = equipment.get('off_hand')
-    if shield_item is not None:
-        sox, soy = off['shield']
-        _draw_shield(surf, shield_item.color, cx + sox, cy + soy, facing)
-
-    # ── 레이어 4: 무기 ────────────────────────────────────────────────
+    # ── 무기 레이어 ───────────────────────────────────────────────────
     weapon_item = equipment.get('weapon')
     if weapon_item is not None:
         wox, woy = off['weapon']

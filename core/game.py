@@ -1589,6 +1589,7 @@ class Game:
         elif item.equip_slot:
             msg = item.use(self.player)
             self.messages.append((msg, 'good'))
+            self._equip_burst(item)
             self.audio.play('use_item')
         else:
             if item in self.player.inventory:
@@ -1830,6 +1831,7 @@ class Game:
             # 장비 아이템: equip이 인벤토리 이동을 직접 처리
             msg = item.use(self.player)
             self.messages.append((msg, 'good'))
+            self._equip_burst(item)
             self.audio.play('use_item')
         elif item.effect == 'teleport':
             self.player.inventory.pop(slot)
@@ -1842,6 +1844,11 @@ class Game:
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
         return True
+
+    def _equip_burst(self, item):
+        """장착 순간 아이템 색 버스트 — 상시 오버레이 대신 '입는 쾌감'으로."""
+        self.animator.particles.emit_combo_tier(self.player.x, self.player.y,
+                                                item.color)
 
     def _buy_item(self, slot):
         if slot >= len(self.dungeon.shop_items):
