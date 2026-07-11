@@ -35,6 +35,9 @@ class Player(Entity):
         # 방금 파손된 방어구 (Game 루프가 경고 연출 후 비움)
         self.just_broken: list = []
 
+        # 여관밥 버프 (이번 런 한정 최대 HP +10%)
+        self.well_fed: bool = False
+
         # 버프
         self.invincible_ms    = 0   # 무적 (궁극기)
         self.heal_def_bonus   = 0   # 재생의 숨결 방어력 임시 증가

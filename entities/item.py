@@ -25,10 +25,14 @@ class Item:
 
     @staticmethod
     def calc_max_durability(data: dict) -> int:
-        """방어구 최대 내구도 = 40 + 방어값×8 (신발은 ×10 환산). 그 외 0."""
-        if data.get('type') not in ('armor', 'head', 'off_hand', 'boots'):
-            return 0
+        """최대 내구도. 방어구 = 40 + 방어값×8 (신발 ×10 환산),
+        무기 = 80 + 공격값×12 (공격마다 닳아서 더 크게). 그 외 0."""
+        t_ = data.get('type')
         v = data.get('value', 0)
+        if t_ == 'weapon':
+            return 80 + int(v * 12)
+        if t_ not in ('armor', 'head', 'off_hand', 'boots'):
+            return 0
         base = v if v >= 1 else v * 10
         return 40 + int(base * 8)
 

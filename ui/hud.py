@@ -1133,8 +1133,41 @@ class HUD:
 
     # ------------------------------------------------------------------ #
     # ------------------------------------------------------------------ #
-    def render_storage(self, screen, player, storage, item_data, pane, cursor):
-        """마을 창고(주모) — 좌: 소지품 / 우: 영구 창고 2패널."""
+    def render_inn(self, screen, player, rest_cost):
+        """여관(주모) — [1] 휴식 / [2] 여관밥."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 200))
+        screen.blit(ov, (0, 0))
+        pw, ph = 420, 240
+        bx, by = W // 2 - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (20, 13, 8), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (196, 120, 70), (bx, by, pw, ph), 2, border_radius=6)
+
+        title = self.font_lg.render(t('inn_title'), True, (240, 180, 120))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 12))
+        gold_s = self.font_sm.render(t('shop_gold', player.gold), True, GOLD_COLOR)
+        screen.blit(gold_s, (bx + pw - gold_s.get_width() - 14, by + 50))
+
+        rows = [
+            (t('inn_rest', rest_cost), (150, 230, 150)),
+            (t('inn_food_already') if getattr(player, 'well_fed', False)
+             else t('inn_food'), (255, 205, 120)),
+        ]
+        y = by + 84
+        for label, col in rows:
+            pygame.draw.rect(screen, (34, 24, 14), (bx + 16, y - 4, pw - 32, 30),
+                             border_radius=4)
+            row_s = self.font_md.render(label, True, col)
+            screen.blit(row_s, (bx + 28, y))
+            y += 40
+        hint = self.font_sm.render(t('inn_hint'), True, (150, 130, 110))
+        screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 26))
+
+    # ------------------------------------------------------------------ #
+    def render_storage(self, screen, player, storage, item_data, pane, cursor,
+                       capacity=30, upgrade_cost=None):
+        """개인 창고(상자) — 좌: 소지품 / 우: 영구 창고 2패널."""
         from core.lang import localized_name
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
@@ -1150,6 +1183,10 @@ class HUD:
         screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
         hint = self.font_sm.render(t('storage_hint'), True, (150, 140, 120))
         screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 24))
+        if upgrade_cost is not None:
+            up_s = self.font_sm.render(t('storage_upgrade_hint', upgrade_cost),
+                                       True, (230, 190, 110))
+            screen.blit(up_s, (bx + (pw - up_s.get_width()) // 2, by + ph - 42))
 
         from entities.item import Item as _Item
 
@@ -1163,7 +1200,7 @@ class HUD:
             (t('storage_carried', len(player.inventory), player.max_inventory),
              [(it.name, it.enhance_level,
                _dur_tag(it.durability, it.max_durability)) for it in player.inventory]),
-            (t('storage_stored', len(storage)),
+            (t('storage_stored', len(storage), capacity),
              [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')})),
                e.get('enhance_level', 0),
                _dur_tag(e.get('durability', 10**9),

@@ -242,7 +242,7 @@ class Game:
         self._in_town          = False
         self._town: TownScene | None = None      # lazy 생성
         self._dungeon_session  = None            # {'dungeon','floor','px','py',...}
-        self._storage: list    = load_storage()  # 영구 창고 (사망해도 유지)
+        self._storage, self._storage_cap = load_storage()  # 영구 창고 + 용량
         self._storage_cursor   = 0               # 창고 UI 커서
         self._storage_pane     = 0               # 0=소지품  1=창고
         self._enhance_mode     = 'stone'         # 'stone'(P키) | 'gold'(대장장이)
@@ -914,6 +914,8 @@ class Game:
                     self._handle_skillbook_key(event.key)
                 elif self._enhance_open:
                     self._handle_enhance_key(event.key)
+                elif self.state == 'storage' and event.key == pygame.K_u:
+                    self._upgrade_storage()       # 창고 용량 확장
                 elif self._inv_confirm_idx is not None:
                     if event.key in (pygame.K_y, pygame.K_RETURN):
                         self._discard_inventory_item(self._inv_confirm_idx)
@@ -944,7 +946,7 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
-                elif self.state == 'storage':
+                elif self.state in ('storage', 'inn'):
                     self.state = 'playing'
                 elif self.state == 'paused':
                     self.state = 'playing'
@@ -968,6 +970,8 @@ class Game:
                 self._handle_shop_action(action)
             elif self.state == 'storage':
                 self._handle_storage_action(action)
+            elif self.state == 'inn':
+                self._handle_inn_action(action)
             elif self.state == 'inventory':
                 self._handle_inventory_action(action)
             elif self.state == 'equipment':
@@ -1672,6 +1676,12 @@ class Game:
                          * dmg_mul))
         # 타격 시 드라이브 소폭 회복
         self.player.drive = min(self.player.drive_max, self.player.drive + 0.15)
+        # 무기 내구도: 적중할 때마다 -1 (헛스윙은 안 닳음)
+        wpn = self.player.equipment.get('weapon')
+        if wpn and wpn.max_durability > 0 and wpn.durability > 0:
+            wpn.durability -= 1
+            if wpn.durability <= 0:
+                self.player.just_broken.append(wpn)
         if crit:
             dmg *= 2
             self.messages.append((t('crit_hit', enemy.name, dmg), 'warn'))
@@ -1985,13 +1995,16 @@ class Game:
         from core.save_load import save_storage
         moved = 0
         for it in list(self.player.inventory):
+            if len(self._storage) >= self._storage_cap:
+                self.messages.append((t('storage_cap_full'), 'warn'))
+                break
             self._storage.append({'key': it.key,
                                   'enhance_level': it.enhance_level,
                                   'durability': it.durability})
             self.player.inventory.remove(it)
             moved += 1
         if moved:
-            save_storage(self._storage)
+            save_storage(self._storage, self._storage_cap)
         return moved
 
     def _storage_transfer(self):
@@ -2001,6 +2014,9 @@ class Game:
         if self._storage_pane == 0:                       # 소지품 → 창고
             inv = self.player.inventory
             if not inv:
+                return
+            if len(self._storage) >= self._storage_cap:
+                self.messages.append((t('storage_cap_full'), 'warn'))
                 return
             i = min(self._storage_cursor, len(inv) - 1)
             it = inv.pop(i)
@@ -2025,7 +2041,7 @@ class Game:
                     d['durability'] = entry['durability']
                 self.player.inventory.append(Item(0, 0, d))
             self.audio.play('pickup')
-        save_storage(self._storage)                       # 영구 반영
+        save_storage(self._storage, self._storage_cap)    # 영구 반영
         self._storage_cursor = max(0, self._storage_cursor - 0)
 
     def _handle_storage_action(self, action):
@@ -2047,10 +2063,17 @@ class Game:
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         if not npc:
             return
-        if npc['id'] == 'storage':
+        if npc['id'] == 'chest':
             self._storage_cursor = 0
             self._storage_pane = 0
             self.state = 'storage'
+            self.audio.play('shop_open')
+        elif npc['id'] == 'inn':
+            self.state = 'inn'
+            self.audio.play('shop_open')
+        elif npc['id'] == 'merchant':
+            self.dungeon.shop_items = self._make_town_stock()
+            self.state = 'shop'
             self.audio.play('shop_open')
         elif npc['id'] == 'smith':
             # 대장장이: 골드 소모 강화 (기존 강화 패널 재사용)
@@ -2062,6 +2085,77 @@ class Game:
     def _smith_cost(self, item) -> int:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
         return 40 + item.enhance_level * 35
+
+    # ── 잡화점 (마을 상인): 소모품 위주, 던전 상점보다 저렴 ───────────
+    def _make_town_stock(self):
+        from entities.item import Item
+        stock = []
+        for key, price in (('health_potion', 12), ('large_health_potion', 28),
+                           ('return_scroll', 22), ('repair_kit', 34),
+                           ('teleport_scroll', 30), ('whirlwind_potion', 45)):
+            if key in self._item_data:
+                d = dict(self._item_data[key]); d['key'] = key
+                stock.append((Item(0, 0, d), price))
+        return stock
+
+    # ── 여관 (주모): 휴식 + 여관밥 ────────────────────────────────────
+    def _inn_rest_cost(self) -> int:
+        floor = (self._dungeon_session['floor']
+                 if self._dungeon_session else self.floor)
+        return 15 + floor * 5
+
+    def _handle_inn_action(self, action):
+        ty = action['type']
+        if ty == 'use_item' and action.get('slot') == 0:      # [1] 휴식
+            cost = self._inn_rest_cost()
+            if self.player.gold < cost:
+                self.messages.append((t('no_gold'), 'warn'))
+                self.audio.play('no_gold')
+                return
+            self.player.gold -= cost
+            self.player.hp = self.player.max_hp
+            self.player.stamina = float(self.player.stamina_max)
+            self.player.drive = float(self.player.drive_max)
+            self.messages.append((t('inn_rested', cost), 'good'))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self.audio.play('skill_heal')
+            self.state = 'playing'
+        elif ty == 'use_item' and action.get('slot') == 1:    # [2] 여관밥
+            if getattr(self.player, 'well_fed', False):
+                self.messages.append((t('inn_food_already'), 'info'))
+                return
+            if self.player.gold < 30:
+                self.messages.append((t('no_gold'), 'warn'))
+                self.audio.play('no_gold')
+                return
+            self.player.gold -= 30
+            bonus = max(5, int(self.player.max_hp * 0.10))
+            self.player.max_hp += bonus
+            self.player.hp = self.player.max_hp
+            self.player.well_fed = True
+            self.messages.append((t('inn_food_done', bonus), 'good'))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self.audio.play('levelup')
+            self.state = 'playing'
+
+    # ── 창고 용량 확장 (U키) ──────────────────────────────────────────
+    _STORAGE_UPGRADES = {30: 500, 60: 2000}   # 현재 용량 → 확장 비용 (+30칸)
+
+    def _upgrade_storage(self):
+        from core.save_load import save_storage
+        cost = self._STORAGE_UPGRADES.get(self._storage_cap)
+        if cost is None:
+            self.messages.append((t('storage_cap_max'), 'info'))
+            return
+        if self.player.gold < cost:
+            self.messages.append((t('no_gold'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        self.player.gold -= cost
+        self._storage_cap += 30
+        save_storage(self._storage, self._storage_cap)
+        self.messages.append((t('storage_upgraded', self._storage_cap), 'good'))
+        self.audio.play('levelup')
 
     def _use_repair_kit(self):
         """응급 수리 키트 — 장착 방어구 각각 최대치의 50% 회복."""
@@ -3346,7 +3440,11 @@ class Game:
         elif self.state == 'storage':
             self.hud.render_storage(self.screen, self.player, self._storage,
                                     self._item_data, self._storage_pane,
-                                    self._storage_cursor)
+                                    self._storage_cursor,
+                                    capacity=self._storage_cap,
+                                    upgrade_cost=self._STORAGE_UPGRADES.get(self._storage_cap))
+        elif self.state == 'inn':
+            self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel,
                                    mouse_pos=pygame.mouse.get_pos())

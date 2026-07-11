@@ -112,20 +112,29 @@ def save_settings(d):
 STORAGE_PATH = os.path.join(_DATA_DIR, 'storage.json')
 
 
-def load_storage() -> list:
-    """[{'key':.., 'enhance_level':..}, ...]"""
+STORAGE_BASE_CAP = 30
+
+
+def load_storage() -> tuple:
+    """(items, capacity). 구버전(list) 포맷은 기본 용량으로 마이그레이션."""
     try:
         with open(STORAGE_PATH, encoding='utf-8') as f:
             d = json.load(f)
-            return d if isinstance(d, list) else []
+        if isinstance(d, list):                      # 구 포맷
+            return d, STORAGE_BASE_CAP
+        if isinstance(d, dict):
+            return (d.get('items', []),
+                    int(d.get('capacity', STORAGE_BASE_CAP)))
     except Exception:
-        return []
+        pass
+    return [], STORAGE_BASE_CAP
 
 
-def save_storage(entries: list):
+def save_storage(entries: list, capacity: int = STORAGE_BASE_CAP):
     try:
         with open(STORAGE_PATH, 'w', encoding='utf-8') as f:
-            json.dump(entries, f, ensure_ascii=False, indent=2)
+            json.dump({'items': entries, 'capacity': capacity},
+                      f, ensure_ascii=False, indent=2)
     except Exception:
         pass
 
