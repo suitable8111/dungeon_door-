@@ -218,9 +218,106 @@ GIVER_NAMES = {
 }
 
 
+# ── 잡담 대사 (퀘스트와 무관, 말 걸면 랜덤) ──────────────────────────────────
+CHAT = {
+    'villager_boy': [
+        {'ko': '용사님 검은 진짜 반짝여요! 저도 만져봐도 돼요?',
+         'en': "Your sword's so shiny! Can I touch it? Just once?",
+         'ja': '勇者さまの剣ピカピカ! ぼくも触っていい?',
+         'zh': '勇士的剑好闪！我能摸一下吗？就一下！',
+         'ru': 'Твой меч блестит! Можно потрогать? Ну разок!'},
+        {'ko': '아빠는 던전이 위험하대요. 근데 용사님은 안 무섭죠?',
+         'en': 'Dad says the dungeon is scary. But you\'re not scared, right?',
+         'ja': 'パパはダンジョンは危ないって。でも勇者さまは怖くないよね?',
+         'zh': '爸爸说地城很危险。但勇士不怕对吧？',
+         'ru': 'Папа говорит, подземелье страшное. Но ты ведь не боишься?'},
+        {'ko': '나중에 저랑 같이 모험 가요! 약속!',
+         'en': "Let's go adventuring together someday! Promise!",
+         'ja': 'いつかぼくと一緒に冒険に行こう! 約束だよ!',
+         'zh': '以后带我一起去冒险吧！拉钩！',
+         'ru': 'Когда-нибудь пойдём в поход вместе! Обещаешь?'},
+    ],
+    'villager_farmer': [
+        {'ko': '올해는 순무가 잘 됐어. 저녁에 국 끓여 먹게.',
+         'en': "Turnips came in well this year. Good for a stew tonight.",
+         'ja': '今年はカブがよく育った。夜は汁物じゃな。',
+         'zh': '今年萝卜长得好。晚上炖汤喝。',
+         'ru': 'Репа в этом году удалась. Вечером сварю похлёбку.'},
+        {'ko': '던전만 잠잠하면 이 마을도 살 만하지.',
+         'en': "As long as the dungeon stays quiet, this town's a fine place.",
+         'ja': 'ダンジョンさえ静かなら、この村も住みやすいわい。',
+         'zh': '只要地城安分，这村子还是挺宜居的。',
+         'ru': 'Пока подземелье тихое — жить в деревне можно.'},
+        {'ko': '허리가 예전 같지 않아. 젊음이 부럽구먼.',
+         'en': "My back isn't what it was. I envy your youth.",
+         'ja': '腰が昔のようにいかん。若さがうらやましいわい。',
+         'zh': '腰不如从前了。真羡慕你年轻。',
+         'ru': 'Спина уже не та. Завидую твоей молодости.'},
+    ],
+    'villager_granny': [
+        {'ko': '따뜻할 때 차 한잔 하고 가려무나.',
+         'en': "Have a cup of tea while it's warm, dear.",
+         'ja': '温かいうちにお茶でも飲んでおいき。',
+         'zh': '趁热喝杯茶再走吧。',
+         'ru': 'Выпей чайку, пока горячий, милок.'},
+        {'ko': '이 늙은이 눈에도 넌 참 좋은 아이야.',
+         'en': "Even these old eyes can see you're a good soul.",
+         'ja': 'この年寄りの目にも、あんたはいい子じゃよ。',
+         'zh': '就算老眼昏花，也看得出你是好孩子。',
+         'ru': 'Даже мои старые глаза видят: ты добрая душа.'},
+        {'ko': '무리하지 말고, 꼭 살아 돌아오렴.',
+         'en': "Don't overdo it — come back alive, always.",
+         'ja': '無理はせんで、必ず生きて帰るんじゃよ。',
+         'zh': '别逞强，一定要活着回来。',
+         'ru': 'Не геройствуй попусту — возвращайся живым.'},
+    ],
+    'villager_hunter': [
+        {'ko': '발소리를 죽이는 법을 알면 반은 이긴 거야.',
+         'en': "Learn to silence your footsteps and you\'re half-won.",
+         'ja': '足音を消す術を覚えれば、半分は勝ちだ。',
+         'zh': '学会隐去脚步声，就赢了一半。',
+         'ru': 'Научись ходить бесшумно — считай, полдела сделано.'},
+        {'ko': '오라를 두른 놈은 무리에서 먼저 노려. 나머진 흩어지지.',
+         'en': "Hit the aura-cloaked one first — the rest scatter.",
+         'ja': 'オーラをまとった奴を先に狙え。残りは散る。',
+         'zh': '先打带光环的，其余的就散了。',
+         'ru': 'Бей того, что в ауре, — остальные разбегутся.'},
+        {'ko': '내 활은 은퇴했지만 눈은 아직 살아있지.',
+         'en': "My bow's retired, but my eyes are still sharp.",
+         'ja': '俺の弓は引退したが、目はまだ生きてる。',
+         'zh': '我的弓退役了，可眼力还在。',
+         'ru': 'Лук мой на покое, а глаз ещё зоркий.'},
+    ],
+    'villager_scholar': [
+        {'ko': '이 마을 지하엔 아직 해독 못 한 비문이 잔뜩입니다.',
+         'en': "The depths below hold inscriptions I still can't read.",
+         'ja': 'この村の地下には未解読の碑文が山ほどあります。',
+         'zh': '这村子地下还有许多我读不懂的碑文。',
+         'ru': 'В глубинах под нами — письмена, что мне не прочесть.'},
+        {'ko': '지식은 검보다 느리지만, 더 멀리 갑니다.',
+         'en': "Knowledge is slower than a blade, but travels farther.",
+         'ja': '知識は剣より遅いが、より遠くまで届きます。',
+         'zh': '知识比剑慢，却走得更远。',
+         'ru': 'Знание медленнее клинка, но летит дальше.'},
+        {'ko': '당신의 여정을 기록으로 남기고 싶군요. 언젠가.',
+         'en': "I'd love to chronicle your journey. Someday.",
+         'ja': 'あなたの旅を記録に残したい。いつか。',
+         'zh': '真想把你的旅程记录下来。总有一天。',
+         'ru': 'Хотел бы записать твой путь. Когда-нибудь.'},
+    ],
+}
+
+
 def _resolve(table: dict) -> str:
     lang = get_lang()
     return table.get(lang) or table.get('en') or table.get('ko', '')
+
+
+def random_chat(giver_id: str) -> str:
+    """말 걸기 잡담 — 해당 시민의 대사 풀에서 랜덤 (현재 언어)."""
+    import random
+    lines = CHAT.get(giver_id)
+    return _resolve(random.choice(lines)) if lines else ''
 
 
 def qtext(qid: str, field: str) -> str:

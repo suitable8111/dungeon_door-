@@ -93,6 +93,9 @@ class BGMPlayer:
         self._build()
 
     def _build(self):
+        import os
+        if os.environ.get('DD_NO_BGM'):
+            return                       # 헤드리스 테스트: 절차 BGM 생성 생략(고속화)
         r, ch = self._rate, self._ch
         try:
             self._sounds = {

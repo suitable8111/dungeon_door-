@@ -18,7 +18,14 @@ from core.lang import t
 from map.dungeon import Dungeon
 from map.tile import Tile
 
-TOWN_W, TOWN_H = 31, 21
+TOWN_W, TOWN_H = 66, 49       # 이전 31×21의 약 5배 면적
+
+_CKEY = (255, 0, 255)         # NPC 좌우 반전용 컬러키
+
+
+def _rand_wait() -> float:
+    import random
+    return random.uniform(700, 2600)   # 다음 걸음까지 정지 시간 ms
 
 # 마을 전용 테마 (따뜻한 색)
 TOWN_THEME = {
@@ -34,28 +41,44 @@ TOWN_THEME = {
 
 
 class TownScene:
-    """마을 맵(건물/장식) + NPC 배치 + 상호작용 판정 + 렌더링."""
+    """마을 맵(건물/장식) + NPC 배회 AI + 상호작용 + 렌더링."""
 
     def __init__(self):
-        self._deco = {'tree': [], 'lamp': [], 'well': None}
+        self._deco = {'tree': [], 'lamp': [], 'well': None,
+                      'flower': [], 'barrel': [], 'stall': [], 'bench': []}
+        self.portal_pos = (33, 45)               # 남문 광장 — NPC 배회 반경 밖
+        self.spawn_pos  = (33, 42)               # 포탈 북쪽 진입 지점
         self.dungeon = self._build_map()
-        # 시설 NPC (항상 상주)
-        self.npcs = [
-            {'id': 'inn',      'x': 6,  'y': 6,  'name_key': 'npc_storage'},
-            {'id': 'chest',    'x': 3,  'y': 4,  'name_key': 'npc_chest'},
-            {'id': 'smith',    'x': 24, 'y': 6,  'name_key': 'npc_smith'},
-            {'id': 'merchant', 'x': 8,  'y': 14, 'name_key': 'npc_merchant'},
-            # 시민 (퀘스트 의뢰인) — id == giver, 층 진행에 따라 등장
-            {'id': 'villager_boy',     'x': 12, 'y': 12, 'quest': True},
-            {'id': 'villager_farmer',  'x': 20, 'y': 11, 'quest': True},
-            {'id': 'villager_granny',  'x': 24, 'y': 14, 'quest': True},
-            {'id': 'villager_hunter',  'x': 15, 'y': 17, 'quest': True},
-            {'id': 'villager_scholar', 'x': 9,  'y': 9,  'quest': True},
+
+        ts = TILE_SIZE
+        # 시설 NPC (건물 앞 상주)
+        facilities = [
+            ('inn',      9,  11, 'npc_storage'),
+            ('chest',    7,  41, 'npc_chest'),
+            ('smith',    54, 11, 'npc_smith'),
+            ('merchant', 55, 43, 'npc_merchant'),
         ]
-        # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트) — Game이 매 프레임 갱신
+        # 시민 (퀘스트 의뢰인) — home 앵커 주변을 배회, 건물/포탈과 떨어뜨림
+        villagers = [
+            ('villager_boy',     20, 30),
+            ('villager_farmer',  44, 32),
+            ('villager_granny',  14, 18),
+            ('villager_hunter',  48, 18),
+            ('villager_scholar', 33, 12),
+        ]
+        self.npcs = []
+        for nid, x, y, nk in facilities:
+            self.npcs.append({'id': nid, 'x': x, 'y': y, 'name_key': nk,
+                              'home': (x, y), 'fx': x * ts, 'fy': y * ts,
+                              'tx': x, 'ty': y, 'wait': 0.0, 'radius': 0,
+                              'facing': 1, 'moving': False})
+        for nid, x, y in villagers:
+            self.npcs.append({'id': nid, 'x': x, 'y': y, 'quest': True,
+                              'home': (x, y), 'fx': x * ts, 'fy': y * ts,
+                              'tx': x, 'ty': y, 'wait': 0.0, 'radius': 6,
+                              'facing': 1, 'moving': False})
+        # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트)
         self.visible_givers = None
-        self.portal_pos = (TOWN_W // 2, TOWN_H - 4)
-        self.spawn_pos  = (TOWN_W // 2, 13)      # 우물 남쪽 광장
 
     def _npc_shown(self, npc) -> bool:
         if 'quest' not in npc:
@@ -65,42 +88,133 @@ class TownScene:
     def visible_npcs(self):
         return [n for n in self.npcs if self._npc_shown(n)]
 
-    # ── 맵 생성: 광장 + 건물 3채 + 우물/나무/가로등 ──────────────────
+    # ── 맵 생성: 넓은 마을 + 건물 여러 채 + 분수/공원/장식 ────────────
     def _build_map(self) -> Dungeon:
+        import random as _r
         d = Dungeon(TOWN_W, TOWN_H)
         for y in range(1, TOWN_H - 1):
             for x in range(1, TOWN_W - 1):
                 d.tiles[y][x] = Tile.floor()
 
         def building(x, y, w, h, door_dx):
-            """벽 외곽 + 내부 바닥 + 남쪽 문."""
             for by_ in range(y, y + h):
                 for bx_ in range(x, x + w):
                     edge = (bx_ in (x, x + w - 1) or by_ in (y, y + h - 1))
                     d.tiles[by_][bx_] = Tile.wall() if edge else Tile.floor()
-            d.tiles[y + h - 1][x + door_dx] = Tile.floor()   # 문
+            d.tiles[y + h - 1][x + door_dx] = Tile.floor()   # 남쪽 문
 
-        building(2, 2, 8, 5, 4)      # 여관 (NW) — 문 (6,6)
-        building(21, 2, 8, 5, 3)     # 대장간 (NE) — 문 (24,6)
-        building(4, 10, 7, 4, 4)     # 잡화점 (SW) — 문 (8,13)
+        # 기능 건물 4채 + 장식용 민가 4채
+        building(4,  4, 11, 7, 5)     # 여관 (NW)  문 (9,10)
+        building(49, 4, 11, 7, 5)     # 대장간 (NE) 문 (54,10)
+        building(4,  36, 8, 5, 3)     # 창고 헛간 (SW) 문 (7,40)
+        building(50, 36, 11, 7, 5)    # 잡화점 (SE) 문 (55,42)
+        building(24, 3, 8, 6, 4)      # 민가
+        building(24, 40, 9, 6, 4)     # 민가
+        building(16, 22, 7, 5, 3)     # 민가
+        building(43, 22, 7, 5, 3)     # 민가
 
-        # 우물 (중앙, 2×2 통행 불가)
-        wx, wy = TOWN_W // 2 - 1, 9
-        for oy in range(2):
-            for ox in range(2):
-                d.tiles[wy + oy][wx + ox] = Tile.wall()
-        self._deco['well'] = (wx, wy)
+        # 중앙 분수 (3×3 통행 불가)
+        fx0, fy0 = 32, 23
+        for oy in range(3):
+            for ox in range(3):
+                d.tiles[fy0 + oy][fx0 + ox] = Tile.wall()
+        self._deco['well'] = (fx0, fy0)
 
-        # 나무 (통행 불가) / 가로등 (통행 가능, 장식)
-        for tx, ty in ((2, 18), (28, 18), (28, 12), (2, 9), (17, 3), (13, 3)):
-            d.tiles[ty][tx] = Tile.wall()
-            self._deco['tree'].append((tx, ty))
-        self._deco['lamp'] = [(11, 17), (19, 17), (5, 8), (25, 9)]
+        # 통행 불가 격자 캐시
+        def blocked(x, y):
+            return not d.is_walkable(x, y)
+
+        # 나무 — 외곽 공원처럼 흩뿌림 (통행 불가)
+        _r.seed(20260712)
+        trees = [(3, 14), (3, 20), (3, 28), (3, 33), (62, 14), (62, 20),
+                 (62, 28), (62, 33), (10, 46), (16, 46), (40, 46), (48, 46),
+                 (55, 46), (10, 2), (38, 2), (46, 2), (20, 34), (46, 34),
+                 (28, 30), (36, 30), (13, 30), (52, 26)]
+        for tx, ty in trees:
+            if not blocked(tx, ty) and (tx, ty) != self.portal_pos:
+                d.tiles[ty][tx] = Tile.wall()
+                self._deco['tree'].append((tx, ty))
+
+        # 가로등 (통행 가능) — 중앙 도로/광장 따라
+        self._deco['lamp'] = [(24, 20), (41, 20), (24, 30), (41, 30),
+                              (33, 16), (33, 38), (14, 12), (52, 12),
+                              (14, 40), (52, 40)]
+        # 꽃밭 (통행 가능, 색점)
+        self._deco['flower'] = [(30, 20), (35, 20), (30, 28), (35, 28),
+                                (20, 24), (45, 24), (33, 34), (33, 12)]
+        # 통나무통 (대장간 옆) / 좌판 (잡화점 앞) / 벤치 (분수 옆) — 통행 불가
+        for bx, by in ((48, 12), (48, 14), (61, 12)):
+            if not blocked(bx, by):
+                d.tiles[by][bx] = Tile.wall(); self._deco['barrel'].append((bx, by))
+        for sx, sy in ((53, 44), (57, 44)):
+            if not blocked(sx, sy):
+                d.tiles[sy][sx] = Tile.wall(); self._deco['stall'].append((sx, sy))
+        for bx, by in ((30, 27), (37, 27)):
+            if not blocked(bx, by):
+                d.tiles[by][bx] = Tile.wall(); self._deco['bench'].append((bx, by))
 
         for row in d.tiles:                          # 마을은 항상 밝다
             for tile in row:
                 tile.visible = tile.explored = True
         return d
+
+    # ── 배회 AI ───────────────────────────────────────────────────────
+    _WANDER_SPEED = 1.5   # 타일/초
+
+    def update(self, dt_ms: float, px: int, py: int):
+        """NPC가 home 주변을 자연스럽게 배회. 플레이어가 가까우면 멈춰 바라봄."""
+        ts = TILE_SIZE
+        step = self._WANDER_SPEED * ts * (dt_ms / 1000.0)
+        # 점유 타일 (겹침 방지)
+        occ = {(n['tx'], n['ty']) for n in self.npcs}
+        occ |= {(n['x'], n['y']) for n in self.npcs}
+        occ.add((px, py)); occ.add(self.portal_pos)
+        for npc in self.visible_npcs():
+            if npc['radius'] <= 0:
+                continue
+            tgt_x, tgt_y = npc['tx'] * ts, npc['ty'] * ts
+            dx, dy = tgt_x - npc['fx'], tgt_y - npc['fy']
+            dist = math.hypot(dx, dy)
+            if dist > 1.0:                                # 이동 중
+                npc['moving'] = True
+                mv = min(step, dist)
+                npc['fx'] += dx / dist * mv
+                npc['fy'] += dy / dist * mv
+                if abs(dx) > 1:
+                    npc['facing'] = 1 if dx > 0 else -1
+                if dist - mv <= 1.0:                      # 도착 → 타일 확정
+                    npc['fx'], npc['fy'] = tgt_x, tgt_y
+                    npc['x'], npc['y'] = npc['tx'], npc['ty']
+                    npc['wait'] = _rand_wait()
+            else:                                         # 정지 대기
+                npc['moving'] = False
+                # 플레이어가 2칸 이내면 배회 멈추고 바라봄
+                if max(abs(npc['x'] - px), abs(npc['y'] - py)) <= 2:
+                    if px != npc['x']:
+                        npc['facing'] = 1 if px > npc['x'] else -1
+                    npc['wait'] = 500.0
+                    continue
+                npc['wait'] -= dt_ms
+                if npc['wait'] <= 0:
+                    self._pick_target(npc, occ)
+
+    def _pick_target(self, npc, occ):
+        import random as _r
+        hx, hy = npc['home']
+        cands = []
+        for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = npc['x'] + ddx, npc['y'] + ddy
+            if not self.dungeon.is_walkable(nx, ny):
+                continue
+            if abs(nx - hx) + abs(ny - hy) > npc['radius']:
+                continue
+            if (nx, ny) in occ:
+                continue
+            cands.append((nx, ny))
+        if cands:
+            npc['tx'], npc['ty'] = _r.choice(cands)
+        else:
+            npc['wait'] = _rand_wait()
 
     # ── 상호작용 판정 ─────────────────────────────────────────────────
     def npc_near(self, px: int, py: int):
@@ -114,15 +228,27 @@ class TownScene:
     def draw(self, surf, cam_x: int, cam_y: int, px: int, py: int, font):
         ts = TILE_SIZE
         ticks = pygame.time.get_ticks()
+        ox, oy = cam_x * ts, cam_y * ts
 
-        # 장식 (나무/우물/가로등)
+        # 바닥 장식 (NPC 아래)
+        for fx, fy in self._deco['flower']:
+            self._draw_flower(surf, fx * ts - ox, fy * ts - oy, ticks)
+        for lx, ly in self._deco['lamp']:
+            self._draw_lamp(surf, lx * ts - ox, ly * ts - oy, ticks)
+        # 입체 장식 (통행 불가)
         for tx, ty in self._deco['tree']:
-            self._draw_tree(surf, (tx - cam_x) * ts, (ty - cam_y) * ts)
+            self._draw_tree(surf, tx * ts - ox, ty * ts - oy)
+        for bx, by in self._deco['barrel']:
+            self._draw_barrel(surf, bx * ts - ox, by * ts - oy)
+        for sx, sy in self._deco['stall']:
+            self._draw_stall(surf, sx * ts - ox, sy * ts - oy)
+        for bx, by in self._deco['bench']:
+            self._draw_bench(surf, bx * ts - ox, by * ts - oy)
         if self._deco['well']:
             wx, wy = self._deco['well']
-            self._draw_well(surf, (wx - cam_x) * ts, (wy - cam_y) * ts, ticks)
-        for lx, ly in self._deco['lamp']:
-            self._draw_lamp(surf, (lx - cam_x) * ts, (ly - cam_y) * ts, ticks)
+            self._draw_well(surf, wx * ts - ox, wy * ts - oy, ticks)
+
+        self.draw_portal(surf, self.portal_pos, cam_x, cam_y)
 
         _SPRITES = {'inn': self._draw_storage_npc, 'smith': self._draw_smith_npc,
                     'merchant': self._draw_merchant_npc, 'chest': self._draw_chest,
@@ -132,11 +258,20 @@ class TownScene:
                     'villager_hunter': self._draw_hunter,
                     'villager_scholar': self._draw_scholar}
         from core.quests import giver_name
-        for npc in self.visible_npcs():
-            sx = (npc['x'] - cam_x) * ts
-            sy = (npc['y'] - cam_y) * ts
-            _SPRITES[npc['id']](surf, sx, sy, ticks)
-            # 이름표 + 근접 시 [E] 프롬프트 (+퀘스트 상태 마커는 게임이 그림)
+        # y 정렬 — 아래쪽 NPC가 앞에 그려져 자연스러운 겹침
+        for npc in sorted(self.visible_npcs(), key=lambda n: n['fy']):
+            sx = int(npc['fx'] - ox)
+            sy = int(npc['fy'] - oy)
+            walk = int(math.sin(ticks * 0.02)) if npc.get('moving') else 0
+            draw_fn = _SPRITES[npc['id']]
+            if npc.get('facing', 1) < 0:                 # 좌향 → 좌우 반전
+                tmp = pygame.Surface((ts, ts)); tmp.fill(_CKEY)
+                tmp.set_colorkey(_CKEY)
+                draw_fn(tmp, 0, walk, ticks)
+                surf.blit(pygame.transform.flip(tmp, True, False), (sx, sy))
+            else:
+                draw_fn(surf, sx, sy + walk, ticks)
+            # 이름표 + 근접 시 [E]
             label = (t(npc['name_key']) if 'name_key' in npc
                      else giver_name(npc['id']))
             near = max(abs(npc['x'] - px), abs(npc['y'] - py)) <= 1
@@ -146,9 +281,8 @@ class TownScene:
                               (255, 235, 140) if near else (200, 190, 160))
             surf.blit(txt, (sx + ts // 2 - txt.get_width() // 2, sy - 14))
 
-        self.draw_portal(surf, self.portal_pos, cam_x, cam_y)
-        sx = (self.portal_pos[0] - cam_x) * ts
-        sy = (self.portal_pos[1] - cam_y) * ts
+        sx = self.portal_pos[0] * ts - ox
+        sy = self.portal_pos[1] * ts - oy
         txt = font.render(t('town_portal_label'), True, (170, 140, 255))
         surf.blit(txt, (sx + ts // 2 - txt.get_width() // 2, sy - 14))
 
@@ -198,6 +332,37 @@ class TownScene:
         pygame.draw.circle(s, (int(255 * glow), int(200 * glow), 60),
                            (cx, y + 5), 4)
         pygame.draw.circle(s, (255, 240, 170), (cx, y + 5), 2)
+
+    @staticmethod
+    def _draw_flower(s, x, y, tk):
+        cols = ((235, 90, 110), (245, 200, 80), (170, 120, 235), (240, 240, 250))
+        for i, (ox, oy) in enumerate(((8, 20), (16, 12), (22, 22), (13, 25))):
+            c = cols[i % len(cols)]
+            pygame.draw.circle(s, (60, 120, 55), (x + ox, y + oy + 3), 2)  # 잎
+            pygame.draw.circle(s, c, (x + ox, y + oy), 2)
+
+    @staticmethod
+    def _draw_barrel(s, x, y):
+        pygame.draw.rect(s, (90, 60, 32), (x + 8, y + 10, 16, 18), border_radius=3)
+        pygame.draw.rect(s, (120, 82, 44), (x + 9, y + 11, 14, 16), border_radius=3)
+        pygame.draw.rect(s, (70, 48, 26), (x + 8, y + 14, 16, 2))
+        pygame.draw.rect(s, (70, 48, 26), (x + 8, y + 22, 16, 2))
+
+    @staticmethod
+    def _draw_stall(s, x, y):
+        pygame.draw.rect(s, (110, 78, 44), (x + 4, y + 14, 24, 12))      # 판매대
+        for i in range(4):                                              # 줄무늬 차양
+            c = (200, 70, 60) if i % 2 == 0 else (235, 225, 210)
+            pygame.draw.rect(s, c, (x + 3 + i * 6, y + 4, 6, 7))
+        pygame.draw.circle(s, (235, 120, 60), (x + 10, y + 16), 2)      # 과일
+        pygame.draw.circle(s, (120, 200, 90), (x + 18, y + 16), 2)
+
+    @staticmethod
+    def _draw_bench(s, x, y):
+        pygame.draw.rect(s, (110, 78, 44), (x + 5, y + 16, 22, 5))       # 좌판
+        pygame.draw.rect(s, (86, 58, 30), (x + 6, y + 21, 3, 6))         # 다리
+        pygame.draw.rect(s, (86, 58, 30), (x + 23, y + 21, 3, 6))
+        pygame.draw.rect(s, (96, 66, 36), (x + 5, y + 10, 22, 3))        # 등받이
 
     @staticmethod
     def _draw_chest(s, x, y, tk):

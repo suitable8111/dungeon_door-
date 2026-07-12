@@ -517,6 +517,8 @@ class Game:
                     if self._combo_ms == 0:
                         self._combo_count = 0
                 self._update_enemies(world_dt)
+                if self._in_town and self._town:
+                    self._town.update(dt, self.player.x, self.player.y)
             self._update_bgm()
             self._render()
 
@@ -1984,7 +1986,8 @@ class Game:
         무사히 도착하는 순간 영구 창고(permanent)로 이전 — 이후 사망해도
         창고(storage.json)는 유지된다.
         """
-        from core.town import TownScene, TOWN_THEME
+        from core.town import TownScene, TOWN_THEME, TOWN_W, TOWN_H
+        from core.camera import Camera
         if self._town is None:
             self._town = TownScene()
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
@@ -2003,6 +2006,9 @@ class Game:
         self.dungeon = self._town.dungeon
         self._theme = TOWN_THEME
         self.player.x, self.player.y = self._town.spawn_pos
+        # 넓어진 마을 크기에 맞춘 카메라 (기존 것은 복귀 시 복원)
+        self._saved_camera = self.camera
+        self.camera = Camera(TOWN_W, TOWN_H)
         self.camera.center_on(self.player.x, self.player.y)
         self.messages.append((t('town_enter'), 'good'))
         if moved:
@@ -2013,6 +2019,10 @@ class Game:
         """마을 포탈 재진입: 저장해 둔 던전 세션 복원 (사냥터 그 자리)."""
         s = self._dungeon_session
         self._in_town = False
+        # 마을 진입 시 저장한 던전 카메라 복원
+        if getattr(self, '_saved_camera', None) is not None:
+            self.camera = self._saved_camera
+            self._saved_camera = None
         if s:
             self.dungeon = s['dungeon']
             self.floor   = s['floor']
@@ -2140,10 +2150,11 @@ class Game:
         from core.quests import QUESTS, qtext, giver_name, giver_current_quest
         qid = giver_current_quest(giver_id, self._quests, self._max_floor_reached)
         if qid is None:
-            # 제공할 퀘스트 없음 (전부 완료 or 다음 퀘 미개방) → 잡담
+            # 제공할 퀘스트 없음 (전부 완료 or 다음 퀘 미개방) → 잡담 (랜덤)
+            from core.quests import random_chat
             self._dialog = {'qid': None, 'mode': 'info',
                             'npc_name': giver_name(giver_id),
-                            'text': t('quest_idle_chat'),
+                            'text': random_chat(giver_id) or t('quest_idle_chat'),
                             'start': pygame.time.get_ticks()}
             self.state = 'dialog'
             self.audio.play('menu_select')
@@ -2278,8 +2289,8 @@ class Game:
                 mark, col = '?', (120, 255, 150)
             else:
                 continue
-            mx = (npc['x'] - cx) * ts + ts // 2
-            my = (npc['y'] - cy) * ts - 26 + bob
+            mx = int(npc.get('fx', npc['x'] * ts)) - cx * ts + ts // 2
+            my = int(npc.get('fy', npc['y'] * ts)) - cy * ts - 26 + bob
             txt = self.hud.font_md.render(mark, True, col)
             self._game_surf.blit(txt, (mx - txt.get_width() // 2, my))
 
