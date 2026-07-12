@@ -39,19 +39,31 @@ class TownScene:
     def __init__(self):
         self._deco = {'tree': [], 'lamp': [], 'well': None}
         self.dungeon = self._build_map()
-        # NPC/시설 (id, 타일 좌표, 이름 lang 키) — 각 건물 앞/안
+        # 시설 NPC (항상 상주)
         self.npcs = [
             {'id': 'inn',      'x': 6,  'y': 6,  'name_key': 'npc_storage'},
             {'id': 'chest',    'x': 3,  'y': 4,  'name_key': 'npc_chest'},
             {'id': 'smith',    'x': 24, 'y': 6,  'name_key': 'npc_smith'},
             {'id': 'merchant', 'x': 8,  'y': 14, 'name_key': 'npc_merchant'},
-            # 시민 (퀘스트 의뢰인) — 광장 주변
-            {'id': 'villager_boy',    'x': 12, 'y': 12, 'quest': 'rat_hunt'},
-            {'id': 'villager_farmer', 'x': 20, 'y': 11, 'quest': 'centipede_menace'},
-            {'id': 'villager_granny', 'x': 24, 'y': 14, 'quest': 'rescue_girl'},
+            # 시민 (퀘스트 의뢰인) — id == giver, 층 진행에 따라 등장
+            {'id': 'villager_boy',     'x': 12, 'y': 12, 'quest': True},
+            {'id': 'villager_farmer',  'x': 20, 'y': 11, 'quest': True},
+            {'id': 'villager_granny',  'x': 24, 'y': 14, 'quest': True},
+            {'id': 'villager_hunter',  'x': 15, 'y': 17, 'quest': True},
+            {'id': 'villager_scholar', 'x': 9,  'y': 9,  'quest': True},
         ]
+        # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트) — Game이 매 프레임 갱신
+        self.visible_givers = None
         self.portal_pos = (TOWN_W // 2, TOWN_H - 4)
         self.spawn_pos  = (TOWN_W // 2, 13)      # 우물 남쪽 광장
+
+    def _npc_shown(self, npc) -> bool:
+        if 'quest' not in npc:
+            return True
+        return self.visible_givers is None or npc['id'] in self.visible_givers
+
+    def visible_npcs(self):
+        return [n for n in self.npcs if self._npc_shown(n)]
 
     # ── 맵 생성: 광장 + 건물 3채 + 우물/나무/가로등 ──────────────────
     def _build_map(self) -> Dungeon:
@@ -92,8 +104,8 @@ class TownScene:
 
     # ── 상호작용 판정 ─────────────────────────────────────────────────
     def npc_near(self, px: int, py: int):
-        """플레이어 인접(체비쇼프 1칸) NPC 반환. 없으면 None."""
-        for npc in self.npcs:
+        """플레이어 인접(체비쇼프 1칸) NPC 반환 — 등장한 NPC만. 없으면 None."""
+        for npc in self.visible_npcs():
             if max(abs(npc['x'] - px), abs(npc['y'] - py)) <= 1:
                 return npc
         return None
@@ -116,9 +128,11 @@ class TownScene:
                     'merchant': self._draw_merchant_npc, 'chest': self._draw_chest,
                     'villager_boy': self._draw_boy,
                     'villager_farmer': self._draw_farmer,
-                    'villager_granny': self._draw_granny}
+                    'villager_granny': self._draw_granny,
+                    'villager_hunter': self._draw_hunter,
+                    'villager_scholar': self._draw_scholar}
         from core.quests import giver_name
-        for npc in self.npcs:
+        for npc in self.visible_npcs():
             sx = (npc['x'] - cam_x) * ts
             sy = (npc['y'] - cam_y) * ts
             _SPRITES[npc['id']](surf, sx, sy, ticks)
@@ -249,6 +263,29 @@ class TownScene:
         pygame.draw.circle(s, (235, 200, 175), (cx, cy - 7), 5) # 얼굴
         pygame.draw.circle(s, (215, 215, 220), (cx, cy - 11), 4)  # 흰 머리
         pygame.draw.rect(s, (140, 105, 60), (cx + 7, cy - 6, 3, 16))  # 지팡이
+
+    @staticmethod
+    def _draw_hunter(s, x, y, tk):
+        bob = int(math.sin(tk * 0.003 + 1) * 1.5)
+        cx, cy = x + 16, y + 16 + bob
+        pygame.draw.circle(s, (70, 95, 55), (cx, cy + 2), 8)      # 녹색 가죽옷
+        pygame.draw.circle(s, (230, 190, 155), (cx, cy - 8), 5)   # 얼굴
+        pygame.draw.polygon(s, (90, 70, 40),                       # 뾰족 후드
+                            [(cx - 6, cy - 10), (cx + 6, cy - 10), (cx, cy - 19)])
+        pygame.draw.arc(s, (150, 120, 70),                         # 활
+                        (cx + 5, cy - 12, 12, 24), -1.2, 1.2, 2)
+        pygame.draw.line(s, (200, 200, 210), (cx + 6, cy - 11), (cx + 6, cy + 11), 1)
+
+    @staticmethod
+    def _draw_scholar(s, x, y, tk):
+        bob = int(math.sin(tk * 0.0024 + 3) * 1.2)
+        cx, cy = x + 16, y + 16 + bob
+        pygame.draw.circle(s, (60, 60, 120), (cx, cy + 2), 8)     # 남색 로브
+        pygame.draw.circle(s, (232, 196, 164), (cx, cy - 8), 5)   # 얼굴
+        pygame.draw.rect(s, (40, 40, 80), (cx - 6, cy - 13, 12, 4))  # 학사모 챙
+        pygame.draw.rect(s, (40, 40, 80), (cx - 3, cy - 17, 6, 5))
+        pygame.draw.rect(s, (200, 180, 130), (cx + 5, cy - 4, 6, 8))  # 책
+        pygame.draw.line(s, (120, 90, 60), (cx + 8, cy - 4), (cx + 8, cy + 4), 1)
 
     @staticmethod
     def _draw_merchant_npc(s, x, y, tk):

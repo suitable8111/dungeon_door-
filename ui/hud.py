@@ -1173,59 +1173,105 @@ class HUD:
         hint = self.font_sm.render(t(hint_key), True, (170, 150, 110))
         screen.blit(hint, (bx + pw - hint.get_width() - 16, by + ph - 22))
 
-    def render_questlog(self, screen, quests):
-        """Q — 퀘스트 목록: 이름/의뢰인/목표 진행바/보상/상태."""
-        from core.quests import QUESTS, qtext, giver_name, objective_str
+    def render_questlog(self, screen, quests, max_floor=1):
+        """Q — 퀘스트 일지: 진행 중 / 수락 가능 / 완료로 분류.
+
+        미개방(층/선행 조건 미충족)은 '???' 티저로 노출해 다음 목표를 암시.
+        """
+        from core.quests import (QUESTS, qtext, giver_name, objective_str,
+                                  quest_target, is_unlocked, unlock_hint)
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 205))
+        ov.fill((0, 0, 0, 210))
         screen.blit(ov, (0, 0))
-        pw, ph = 560, 420
+        pw, ph = 600, 560
         bx, by = W // 2 - pw // 2, H // 2 - ph // 2
         pygame.draw.rect(screen, (13, 16, 26), (bx, by, pw, ph), border_radius=6)
         pygame.draw.rect(screen, (120, 170, 120), (bx, by, pw, ph), 2, border_radius=6)
         title = self.font_lg.render(t('quest_title'), True, (150, 230, 160))
-        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 10))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 8))
 
-        _ST_COL = {'available': (150, 150, 160), 'active': (255, 225, 120),
-                   'done': (120, 255, 150), 'claimed': (90, 100, 90)}
-        y = by + 56
+        # 분류
+        active, avail, locked, done = [], [], [], []
         for qid, q in QUESTS.items():
+            st = quests.get(qid, {'state': 'available'})['state']
+            if st in ('active', 'done'):
+                active.append(qid)
+            elif st == 'claimed':
+                done.append(qid)
+            elif is_unlocked(qid, quests, max_floor):
+                avail.append(qid)
+            else:
+                locked.append(qid)
+
+        y = by + 46
+        x0 = bx + 16
+        cw = pw - 32
+
+        def section(label, color, count):
+            nonlocal y
+            hdr = self.font_md.render(f'{label}  ({count})', True, color)
+            screen.blit(hdr, (x0, y))
+            pygame.draw.line(screen, tuple(c // 2 for c in color),
+                             (x0, y + 20), (bx + pw - 16, y + 20))
+            y += 28
+
+        def full_card(qid):
+            nonlocal y
+            q = QUESTS[qid]
             qs = quests.get(qid, {'state': 'available', 'progress': 0})
             st = qs['state']
-            col = _ST_COL[st]
-            pygame.draw.rect(screen, (22, 26, 40), (bx + 14, y, pw - 28, 104),
-                             border_radius=5)
-            name_s = self.font_md.render(qtext(qid, 'name'), True, col)
-            screen.blit(name_s, (bx + 26, y + 8))
+            col = (255, 225, 120) if st == 'active' else (120, 255, 150) if st == 'done' else (200, 205, 215)
+            pygame.draw.rect(screen, (24, 28, 42), (x0, y, cw, 66), border_radius=5)
+            if st == 'done':
+                pygame.draw.rect(screen, (90, 200, 120), (x0, y, cw, 66), 1, border_radius=5)
+            screen.blit(self.font_md.render(qtext(qid, 'name'), True, col), (x0 + 10, y + 6))
             st_s = self.font_sm.render(t(f'quest_st_{st}'), True, col)
-            screen.blit(st_s, (bx + pw - st_s.get_width() - 26, y + 10))
-            giver_s = self.font_sm.render(giver_name(q['giver']), True, (140, 140, 160))
-            screen.blit(giver_s, (bx + 26, y + 30))
-            desc_s = self.font_sm.render(qtext(qid, 'desc'), True, (200, 200, 190))
-            screen.blit(desc_s, (bx + 26, y + 48))
-            # 진행바 (수락 후)
+            screen.blit(st_s, (x0 + cw - st_s.get_width() - 10, y + 8))
+            screen.blit(self.font_sm.render(
+                f"{giver_name(q['giver'])} · {qtext(qid, 'desc')}", True,
+                (170, 170, 185)), (x0 + 10, y + 28))
             if st in ('active', 'done'):
-                total = q['count'] if q['kind'] != 'reach_floor' else q['floor']
-                frac = min(1.0, qs['progress'] / max(1, total))
-                pygame.draw.rect(screen, (30, 36, 30), (bx + 26, y + 70, 300, 8))
-                pygame.draw.rect(screen, col, (bx + 26, y + 70,
-                                               max(1, int(300 * frac)), 8))
-                obj_s = self.font_sm.render(objective_str(qid, qs['progress']),
-                                            True, col)
-                screen.blit(obj_s, (bx + 334, y + 66))
-            # 보상
+                frac = min(1.0, qs['progress'] / max(1, quest_target(qid)))
+                pygame.draw.rect(screen, (30, 36, 30), (x0 + 10, y + 50, 300, 8))
+                pygame.draw.rect(screen, col, (x0 + 10, y + 50, max(1, int(300 * frac)), 8))
+                screen.blit(self.font_sm.render(objective_str(qid, qs['progress']),
+                            True, col), (x0 + 318, y + 47))
             r = q['reward']
             parts = []
-            if r.get('gold'):   parts.append(f"{r['gold']} G")
+            if r.get('gold'):   parts.append(f"{r['gold']}G")
             if r.get('stones'): parts.append(t('quest_rw_stones', r['stones']))
-            if r.get('items'):  parts.append('+' + str(len(r['items'])) + ' item')
-            rw_s = self.font_sm.render(t('quest_rw', '  ·  '.join(parts)),
-                                       True, (215, 185, 110))
-            screen.blit(rw_s, (bx + pw - rw_s.get_width() - 26, y + 84))
-            y += 114
+            if r.get('items'):  parts.append(f"+{len(r['items'])}")
+            rw = self.font_sm.render('  '.join(parts), True, (215, 185, 110))
+            screen.blit(rw, (x0 + cw - rw.get_width() - 10, y + 47))
+            y += 72
+
+        def oneline(qid, color, prefix, suffix=''):
+            nonlocal y
+            label = f"{prefix} {qtext(qid, 'name')}{suffix}"
+            screen.blit(self.font_sm.render(label, True, color), (x0 + 12, y))
+            y += 20
+
+        if active:
+            section(t('quest_sec_active'), (255, 225, 120), len(active))
+            for qid in active:
+                full_card(qid)
+        if avail:
+            section(t('quest_sec_avail'), (150, 210, 255), len(avail))
+            for qid in avail:
+                full_card(qid)
+        if locked:
+            section(t('quest_sec_locked'), (130, 130, 140), len(locked))
+            for qid in locked:
+                oneline(qid, (110, 110, 120), '🔒 ???',
+                        f"  ({t('quest_unlock_at', unlock_hint(qid))})")
+        if done:
+            section(t('quest_sec_done'), (110, 200, 130), len(done))
+            for qid in done:
+                oneline(qid, (110, 160, 120), '✔')
+
         hint = self.font_sm.render(t('quest_hint'), True, (110, 130, 110))
-        screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 24))
+        screen.blit(hint, (bx + (pw - hint.get_width()) // 2, by + ph - 22))
 
     # ------------------------------------------------------------------ #
     def render_inn(self, screen, player, rest_cost):

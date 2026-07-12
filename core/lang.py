@@ -766,6 +766,18 @@ _T: dict[str, dict[str, str]] = {
     'quest_st_claimed':   {'ko': '완료', 'en': 'Completed', 'ja': '完了', 'zh': '已完成', 'ru': 'Завершено'},
     'quest_rw':        {'ko': '보상: {}', 'en': 'Reward: {}', 'ja': '報酬: {}', 'zh': '奖励: {}', 'ru': 'Награда: {}'},
     'quest_rw_stones': {'ko': '강화석 {}개', 'en': '{} stones', 'ja': '強化石{}個', 'zh': '强化石{}', 'ru': 'камней: {}'},
+    'quest_sec_active':{'ko': '진행 중', 'en': 'In Progress', 'ja': '進行中', 'zh': '进行中', 'ru': 'В процессе'},
+    'quest_sec_avail': {'ko': '수락 가능', 'en': 'Available', 'ja': '受諾可能', 'zh': '可接受', 'ru': 'Доступно'},
+    'quest_sec_locked':{'ko': '미개방', 'en': 'Locked', 'ja': '未開放', 'zh': '未解锁', 'ru': 'Закрыто'},
+    'quest_sec_done':  {'ko': '완료', 'en': 'Completed', 'ja': '完了', 'zh': '已完成', 'ru': 'Завершено'},
+    'quest_unlock_at': {'ko': '{} 개방', 'en': 'unlocks at {}', 'ja': '{}で開放', 'zh': '{}解锁', 'ru': 'откроется: {}'},
+    'quest_clear':     {'ko': 'QUEST CLEAR', 'en': 'QUEST CLEAR', 'ja': 'QUEST CLEAR', 'zh': 'QUEST CLEAR', 'ru': 'QUEST CLEAR'},
+    'quest_reward_banner': {'ko': 'REWARD!', 'en': 'REWARD!', 'ja': 'REWARD!', 'zh': 'REWARD!', 'ru': 'REWARD!'},
+    'quest_idle_chat': {'ko': '오늘도 평화롭구먼. 용사님 덕분이야, 고맙네!',
+                        'en': 'Another peaceful day — all thanks to you, hero!',
+                        'ja': '今日も平和だ。勇者さまのおかげだよ、ありがとう!',
+                        'zh': '今天也很太平。多亏了勇士，谢谢你！',
+                        'ru': 'Ещё один мирный день — всё благодаря тебе, герой!'},
 
     # ── 내구도 시스템 ─────────────────────────────────────────────────
     'armor_broken':   {'ko': '💔 {}이(가) 파손됐다! 효과 정지 — 수리 필요',
