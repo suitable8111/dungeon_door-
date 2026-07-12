@@ -511,6 +511,9 @@ class AudioManager:
                 # 런지 — 휙 바람 가름
                 'lunge':       lambda p: _mix(_noise(110,0.22,rate=r),
                                               _sine(700*p,60,0.10,rate=r)+_sine(1000*p,70,0.08,rate=r)),
+                # 활 발사 — 시위 튕김(짧은 노이즈 + 하강 톤)
+                'bow_shoot':   lambda p: _mix(_noise(55,0.20,rate=r),
+                                              _saw(900*p,40,0.10,rate=r)+_saw(500*p,55,0.09,rate=r)),
                 # 장비 파손 — 금속 깨지는 소리 (하강 + 노이즈)
                 'break':       lambda p: _mix(_noise(160,0.30,rate=r),
                                               _square(700*p,50,0.14,rate=r)+_square(420*p,70,0.14,rate=r)

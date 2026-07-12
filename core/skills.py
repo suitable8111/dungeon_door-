@@ -412,15 +412,109 @@ ALL_SKILL_DEFS = {
         ],
         'sp_cost': [5, 10],
     },
+    # ── 궁수 전용 스킬 (원거리) ─────────────────────────────────────────
+    'power_shot': {
+        'name': '강궁 사격', 'name_en': 'Power Shot', 'name_ja': '剛弓射撃',
+        'name_zh': '强弓射击', 'name_ru': 'Мощный выстрел',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 3500,
+        'color': (255, 170, 60),
+        'category': 'attack',
+        'desc': '전방 관통 화살 — 경로의 모든 적을 꿰뚫는다',
+        'desc_en': 'A piercing arrow that skewers every enemy in its path',
+        'desc_ja': '前方貫通の矢 — 経路の敵をすべて貫く',
+        'desc_zh': '前方穿透箭 — 贯穿路径上所有敌人',
+        'desc_ru': 'Пробивная стрела, пронзающая всех врагов на пути',
+        'usage': '전방 직선 관통 · 높은 배율',
+        'usage_en': 'Line-piercing shot · high multiplier',
+        'usage_ja': '前方直線貫通 · 高倍率',
+        'usage_zh': '前方直线穿透 · 高倍率',
+        'usage_ru': 'Пробивной выстрел по прямой · высокий множитель',
+        'upgrades': [
+            {'mul': 2.2, 'range': 8, 'cd_ms': 3500,
+             'level_desc': '220% 관통 · 8칸 · 쿨 3.5초',
+             'level_desc_en': '220% pierce · 8 tiles · 3.5s CD',
+             'level_desc_ja': '220%貫通 · 8マス · CD3.5秒',
+             'level_desc_zh': '220%穿透 · 8格 · 冷却3.5秒',
+             'level_desc_ru': '220% пробой · 8 кл. · КД 3,5с'},
+            {'mul': 2.7, 'range': 9, 'cd_ms': 3000,
+             'level_desc': '270% 관통 · 9칸 · 쿨 3.0초',
+             'level_desc_en': '270% pierce · 9 tiles · 3.0s CD',
+             'level_desc_ja': '270%貫通 · 9マス · CD3.0秒',
+             'level_desc_zh': '270%穿透 · 9格 · 冷却3.0秒',
+             'level_desc_ru': '270% пробой · 9 кл. · КД 3,0с'},
+            {'mul': 3.3, 'range': 10, 'cd_ms': 2600,
+             'level_desc': '330% 관통 · 10칸 · 쿨 2.6초',
+             'level_desc_en': '330% pierce · 10 tiles · 2.6s CD',
+             'level_desc_ja': '330%貫通 · 10マス · CD2.6秒',
+             'level_desc_zh': '330%穿透 · 10格 · 冷却2.6秒',
+             'level_desc_ru': '330% пробой · 10 кл. · КД 2,6с'},
+        ],
+        'sp_cost': [5, 10],
+    },
+    'arrow_rain': {
+        'name': '화살비', 'name_en': 'Arrow Rain', 'name_ja': '矢の雨',
+        'name_zh': '箭雨', 'name_ru': 'Дождь стрел',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 6000,
+        'color': (120, 200, 255),
+        'category': 'attack',
+        'desc': '전방 지역에 화살을 퍼부어 광역 피해',
+        'desc_en': 'Rain arrows over an area ahead for AoE damage',
+        'desc_ja': '前方の地域に矢を降らせて範囲ダメージ',
+        'desc_zh': '向前方区域倾泻箭矢造成范围伤害',
+        'desc_ru': 'Обрушивает стрелы на область впереди',
+        'usage': '전방 반경 N칸 광역 사격',
+        'usage_en': 'AoE volley, radius N ahead',
+        'usage_ja': '前方半径Nマスの範囲射撃',
+        'usage_zh': '前方半径N格范围射击',
+        'usage_ru': 'Залп по области радиусом N',
+        'upgrades': [
+            {'radius': 2, 'mul': 1.1, 'cd_ms': 6000,
+             'level_desc': '반경 2칸 · 110% 피해 · 쿨 6초',
+             'level_desc_en': 'Radius 2 · 110% DMG · 6s CD',
+             'level_desc_ja': '半径2 · 110%ダメージ · CD6秒',
+             'level_desc_zh': '半径2 · 110%伤害 · 冷却6秒',
+             'level_desc_ru': 'Радиус 2 · 110% урона · КД 6с'},
+            {'radius': 2, 'mul': 1.3, 'cd_ms': 5500,
+             'level_desc': '반경 2칸 · 130% 피해 · 쿨 5.5초',
+             'level_desc_en': 'Radius 2 · 130% DMG · 5.5s CD',
+             'level_desc_ja': '半径2 · 130%ダメージ · CD5.5秒',
+             'level_desc_zh': '半径2 · 130%伤害 · 冷却5.5秒',
+             'level_desc_ru': 'Радиус 2 · 130% урона · КД 5,5с'},
+            {'radius': 3, 'mul': 1.5, 'cd_ms': 5000,
+             'level_desc': '반경 3칸 · 150% 피해 · 쿨 5초',
+             'level_desc_en': 'Radius 3 · 150% DMG · 5s CD',
+             'level_desc_ja': '半径3 · 150%ダメージ · CD5秒',
+             'level_desc_zh': '半径3 · 150%伤害 · 冷却5秒',
+             'level_desc_ru': 'Радиус 3 · 150% урона · КД 5с'},
+        ],
+        'sp_cost': [5, 10],
+    },
 }
 ALL_SKILL_DEFS = localize_defs(ALL_SKILL_DEFS)
 
-# 기본 장착 슬롯
+# 기본 장착 슬롯 (전사)
 DEFAULT_EQUIPPED: dict[str, str] = {
     slot: sid
     for sid, sdef in ALL_SKILL_DEFS.items()
     if (slot := dict.get(sdef, 'slot_default')) is not None
 }
+
+# 궁수 기본 장착 — 이동기 + 원거리 스킬 조합
+DEFAULT_EQUIPPED_ARCHER: dict[str, str] = {
+    'W': 'flash_dash',    # 구르기(회피 이동)
+    'A': 'arrow_rain',    # 광역 사격
+    'S': 'regen_breath',  # 회복
+    'D': 'power_shot',    # 관통 강사격
+}
+
+
+def default_equipped_for(char_class: str) -> dict:
+    return dict(DEFAULT_EQUIPPED_ARCHER if char_class == 'archer'
+               else DEFAULT_EQUIPPED)
 
 # 하위 호환 — 기존 SKILL_DEFS 리스트 (W/A/S/D 슬롯 기본 스킬)
 SKILL_DEFS = [

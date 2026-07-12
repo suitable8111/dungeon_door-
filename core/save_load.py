@@ -19,9 +19,42 @@ def _get_data_dir():
 
 _DATA_DIR = _get_data_dir()
 
-SAVE_PATH     = os.path.join(_DATA_DIR, 'savegame.json')
+SAVE_PATH     = os.path.join(_DATA_DIR, 'savegame.json')   # 레거시(단일) 세이브
 SETTINGS_PATH = os.path.join(_DATA_DIR, 'settings.json')
 RECORDS_PATH  = os.path.join(_DATA_DIR, 'records.json')
+
+# ── 세이브 슬롯 (캐릭터 카드) ────────────────────────────────────────
+SLOT_COUNT = 3
+
+
+def slot_path(slot: int) -> str:
+    return os.path.join(_DATA_DIR, f'save_slot{slot}.json')
+
+
+def migrate_legacy_save():
+    """구 단일 savegame.json → 슬롯1로 1회 이관 (최초 실행 호환)."""
+    if os.path.exists(SAVE_PATH) and not os.path.exists(slot_path(1)):
+        try:
+            os.rename(SAVE_PATH, slot_path(1))
+        except Exception:
+            pass
+
+
+def list_cards() -> list:
+    """슬롯 1..N의 카드 요약. 빈 슬롯은 exists=False."""
+    cards = []
+    for slot in range(1, SLOT_COUNT + 1):
+        d = load_game(slot)
+        if d:
+            pl = d.get('player', {})
+            cards.append({'slot': slot, 'exists': True,
+                          'name': d.get('name') or pl.get('name') or 'Hero',
+                          'char_class': d.get('char_class', 'warrior'),
+                          'floor': d.get('floor', 1),
+                          'level': pl.get('level', 1)})
+        else:
+            cards.append({'slot': slot, 'exists': False})
+    return cards
 
 _DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'en'}
 _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0}
@@ -30,9 +63,12 @@ _DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_ru
 # ── 세이브 ──────────────────────────────────────────────────────────
 def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
               skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None,
-              skill_enchants=None, quests=None, max_floor_reached=0):
+              skill_enchants=None, quests=None, max_floor_reached=0,
+              slot=1, name=None, char_class=None):
     data = {
         'floor': floor,
+        'name':       name or getattr(player, 'char_name', '') or 'Hero',
+        'char_class': char_class or getattr(player, 'char_class', 'warrior'),
         'player': {
             'hp': player.hp, 'max_hp': player.max_hp,
             'attack': player.attack, 'defense': player.defense,
@@ -65,29 +101,29 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'max_floor_reached': max_floor_reached,
     }
     try:
-        with open(SAVE_PATH, 'w', encoding='utf-8') as f:
+        with open(slot_path(slot), 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
     except Exception:
         return False
 
 
-def load_game():
+def load_game(slot: int = 1):
     try:
-        with open(SAVE_PATH, encoding='utf-8') as f:
+        with open(slot_path(slot), encoding='utf-8') as f:
             return json.load(f)
     except Exception:
         return None
 
 
-def has_save():
-    return os.path.exists(SAVE_PATH)
+def has_save(slot: int = 1):
+    return os.path.exists(slot_path(slot))
 
 
-def delete_save():
+def delete_save(slot: int = 1):
     try:
-        if os.path.exists(SAVE_PATH):
-            os.remove(SAVE_PATH)
+        if os.path.exists(slot_path(slot)):
+            os.remove(slot_path(slot))
     except Exception:
         pass
 

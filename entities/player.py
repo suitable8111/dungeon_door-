@@ -6,8 +6,16 @@ class Player(Entity):
     BASE_MOVE_REPEAT_MS = 220
     BASE_ATK_CD_MS      = 700
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, char_class='warrior', char_name='Hero'):
         super().__init__(x, y, "영웅", hp=30, max_hp=30, attack=5, defense=2)
+        # 캐릭터 정체성 (세이브 카드)
+        self.char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self.char_name  = char_name or 'Hero'
+        # 궁수는 이동/공속이 조금 높고 방어가 낮은 원거리 딜러
+        if self.char_class == 'archer':
+            self.hp = self.max_hp = 26
+            self.attack = 5
+            self.defense = 1
         self.level = 1
         self.xp = 0
         self.xp_next = 15
@@ -219,9 +227,10 @@ class Player(Entity):
 
     # ── 저장 복원 ───────────────────────────────────────────────────
     @classmethod
-    def from_save(cls, x, y, data, item_data_dict):
+    def from_save(cls, x, y, data, item_data_dict,
+                  char_class='warrior', char_name='Hero'):
         from entities.item import Item
-        p = cls(x, y)
+        p = cls(x, y, char_class=char_class, char_name=char_name)
         p.hp           = data['hp']
         p.max_hp       = data['max_hp']
         p.attack       = data['attack']

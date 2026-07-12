@@ -133,15 +133,14 @@ class HUD:
         screen.blit(hint, (_cx(hint, WINDOW_WIDTH), WINDOW_HEIGHT // 2 + 75))
 
     # ------------------------------------------------------------------ #
-    def render_menu(self, screen, has_save_file, save_floor=None,
-                    sel=0, mouse_pos=(0, 0),
-                    page='main', settings=None, settings_sel=0,
-                    test_floor=None):
-        """메인 메뉴 렌더링. 버튼 (pygame.Rect, action_str) 목록을 반환."""
+    def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
+                    page='main', settings=None, settings_sel=0):
+        """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         cx = W // 2
         settings = settings or {}
+        cards = cards or []
 
         # ── 공통 배경 ────────────────────────────────────────────────
         if self._title_bg:
@@ -172,9 +171,8 @@ class HUD:
 
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
-            n_main = 2 if has_save_file else 1
-            p_w = 450
-            p_h = 82 + n_main * 68 + 14 + 2 * 50 + 52
+            p_w = 470
+            p_h = 82 + len(cards) * 62 + 16 + 50 + 52
         else:
             p_w = 440
             p_h = 350
@@ -209,35 +207,48 @@ class HUD:
             screen.blit(t1, (tx, ty))
             screen.blit(t2, (tx + t1.get_width() + 12, ty))
 
-            # ── 메인 버튼 (새 게임 / 이어하기) ─────────────────────
-            bw = 320; bh = 52
-            bx = cx - bw // 2
-            by0 = p_y + 90
-
-            main_items = [(t('menu_new'), 'new')]
-            if has_save_file:
-                lbl = t('menu_cont_f', save_floor) if save_floor else t('menu_cont')
-                main_items.append((lbl, 'continue'))
-
-            for i, (label, action) in enumerate(main_items):
-                by   = by0 + i * 68
+            # ── 세이브 카드 (슬롯별 캐릭터) ───────────────────────
+            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150)}
+            bw = p_w - 44; bh = 54
+            bx = p_x + 22
+            by0 = p_y + 88
+            for i, card in enumerate(cards):
+                by   = by0 + i * 62
                 rect = pygame.Rect(bx, by, bw, bh)
                 act  = (i == sel)
                 hov  = rect.collidepoint(mouse_pos)
                 bg_c, bd_c, tc = _btn_colors(act, hov)
-                bd_w = 2 if act else 1
-                pygame.draw.rect(screen, bg_c, rect, border_radius=4)
-                pygame.draw.rect(screen, bd_c, rect, bd_w, border_radius=4)
+                pygame.draw.rect(screen, bg_c, rect, border_radius=5)
+                pygame.draw.rect(screen, bd_c, rect, 2 if act else 1, border_radius=5)
                 if act:
                     arr = self.font_md.render("▶", True, GOLD_COLOR)
-                    screen.blit(arr, (rect.left+14, rect.centery - arr.get_height()//2))
-                ts = self.font_lg.render(label, True, tc)
-                screen.blit(ts, (rect.centerx - ts.get_width()//2,
-                                  rect.centery - ts.get_height()//2))
-                buttons.append((rect, action))
+                    screen.blit(arr, (rect.left+8, rect.centery - arr.get_height()//2))
+                if card.get('exists'):
+                    ccol = _CLASS_COL.get(card['char_class'], (200, 200, 210))
+                    # 직업 아이콘 (전사=검 / 궁수=활)
+                    self._draw_class_icon(screen, rect.left + 34, rect.centery,
+                                          card['char_class'], ccol)
+                    nm = self.font_lg.render(card['name'][:12], True, tc)
+                    screen.blit(nm, (rect.left + 54, rect.top + 6))
+                    sub = self.font_sm.render(
+                        f"{t('class_'+card['char_class'])}  ·  "
+                        f"{t('card_floor_lv', card['floor'], card['level'])}",
+                        True, ccol)
+                    screen.blit(sub, (rect.left + 54, rect.top + 30))
+                    buttons.append((rect, f"slot:{card['slot']}"))
+                    # 삭제 버튼 (우측 X)
+                    dr = pygame.Rect(rect.right - 30, rect.centery - 10, 20, 20)
+                    _draw_x_icon(screen, dr.centerx, dr.centery, (150, 70, 70))
+                    buttons.append((dr, f"del:{card['slot']}"))
+                else:
+                    ns = self.font_lg.render(t('card_new'), True,
+                                             (120, 200, 130) if act or hov else (90, 130, 95))
+                    screen.blit(ns, (rect.centerx - ns.get_width()//2,
+                                     rect.centery - ns.get_height()//2))
+                    buttons.append((rect, f"slot:{card['slot']}"))
 
             # ── 구분선 ─────────────────────────────────────────────
-            sep_y = by0 + n_main * 68 + 6
+            sep_y = by0 + len(cards) * 62 + 2
             pygame.draw.line(screen, (44, 42, 66),
                              (p_x+30, sep_y), (p_x+p_w-30, sep_y))
 
@@ -245,7 +256,7 @@ class HUD:
             sm_h = 44
             sm_w = (p_w - 60) // 2
             sm_y = sep_y + 12
-            s_idx = n_main;     q_idx = n_main + 1
+            s_idx = len(cards);     q_idx = len(cards) + 1
 
             for idx, action, lbl_key, danger, sm_x in [
                 (s_idx, 'settings', 'menu_settings', False, p_x + 20),
@@ -363,20 +374,79 @@ class HUD:
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
-        # ── 우상단 디버그 아이콘 (패널 바깥, test_floor 있을 때만) ──
-        if test_floor is not None:
-            iw, ih = 110, 32
-            ix = W - iw - 10
-            iy = 10
-            irect = pygame.Rect(ix, iy, iw, ih)
-            hov = irect.collidepoint(mouse_pos)
-            pygame.draw.rect(screen, (160, 60, 0) if hov else (120, 40, 0), irect, border_radius=5)
-            pygame.draw.rect(screen, (255, 160, 0), irect, 2, border_radius=5)
-            lbl = self.font_sm.render(f"🐛 B{test_floor}F TEST", True, (255, 220, 100))
-            screen.blit(lbl, (irect.centerx - lbl.get_width() // 2,
-                               irect.centery - lbl.get_height() // 2))
-            buttons.append((irect, 'test_mode'))
+        return buttons
 
+    # ------------------------------------------------------------------ #
+    def _draw_class_icon(self, screen, cx, cy, char_class, col):
+        """직업 미니 아이콘 — 전사=검, 궁수=활."""
+        if char_class == 'archer':
+            pygame.draw.arc(screen, col, (cx - 6, cy - 9, 10, 18), -1.2, 1.2, 2)
+            pygame.draw.line(screen, (220, 220, 225), (cx - 5, cy - 8), (cx - 5, cy + 8), 1)
+            pygame.draw.line(screen, (200, 180, 130), (cx - 5, cy), (cx + 8, cy), 2)
+        else:
+            pygame.draw.line(screen, (200, 205, 220), (cx - 6, cy + 6), (cx + 5, cy - 6), 3)
+            pygame.draw.line(screen, col, (cx - 8, cy - 5), (cx - 3, cy - 8), 2)  # 가드
+
+    def render_char_create(self, screen, char_class, name, sel, mouse_pos=(0, 0)):
+        """캐릭터 생성 화면 — 직업 선택 + 이름 입력 + 미리보기."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        cx = W // 2
+        screen.fill((7, 7, 16))
+        pw, ph = 520, 420
+        px, py = cx - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (10, 10, 26, 240), (px, py, pw, ph), border_radius=8)
+        pygame.draw.rect(screen, (70, 66, 105), (px, py, pw, ph), 2, border_radius=8)
+        title = self.font_lg.render(t('char_create_title'), True, GOLD_COLOR)
+        screen.blit(title, (cx - title.get_width() // 2, py + 18))
+
+        buttons = []
+        # ── 직업 선택 (◀ 전사 / 궁수 ▶) ──
+        cls_y = py + 74
+        is_archer = char_class == 'archer'
+        ccol = (120, 205, 150) if is_archer else (235, 185, 60)
+        # 좌우 화살표
+        larr = self.font_lg.render("◀", True, (180, 180, 200))
+        rarr = self.font_lg.render("▶", True, (180, 180, 200))
+        screen.blit(larr, (px + 40, cls_y + 30))
+        screen.blit(rarr, (px + pw - 40 - rarr.get_width(), cls_y + 30))
+        buttons.append((pygame.Rect(px + 30, cls_y + 20, 40, 50), 'class_prev'))
+        buttons.append((pygame.Rect(px + pw - 70, cls_y + 20, 40, 50), 'class_next'))
+        # 미리보기 아이콘 (크게)
+        self._draw_class_icon(screen, cx, cls_y + 8, char_class, ccol)
+        cls_name = self.font_lg.render(t('class_' + char_class), True, ccol)
+        screen.blit(cls_name, (cx - cls_name.get_width() // 2, cls_y + 38))
+        desc = self.font_sm.render(t('class_desc_' + char_class), True, (170, 170, 185))
+        screen.blit(desc, (cx - desc.get_width() // 2, cls_y + 66))
+
+        # ── 이름 입력 필드 ──
+        ny = cls_y + 108
+        lbl = self.font_md.render(t('char_name_label'), True, (150, 150, 170))
+        screen.blit(lbl, (px + 40, ny + 6))
+        field = pygame.Rect(px + 120, ny, pw - 160, 34)
+        pygame.draw.rect(screen, (20, 20, 38), field, border_radius=4)
+        pygame.draw.rect(screen, GOLD_COLOR if sel == 1 else (70, 66, 105),
+                         field, 2 if sel == 1 else 1, border_radius=4)
+        shown = name or 'Hero'
+        caret = '_' if (sel == 1 and (pygame.time.get_ticks() // 500) % 2 == 0) else ''
+        ns = self.font_md.render(shown + caret, True,
+                                 (255, 255, 255) if name else (110, 110, 130))
+        screen.blit(ns, (field.left + 10, field.centery - ns.get_height() // 2))
+        buttons.append((field, 'name_field'))
+
+        # ── 생성 버튼 ──
+        cbtn = pygame.Rect(cx - 110, ny + 56, 220, 46)
+        act = sel == 2
+        bg_c, bd_c, tc = _btn_colors(act, cbtn.collidepoint(mouse_pos))
+        pygame.draw.rect(screen, bg_c, cbtn, border_radius=5)
+        pygame.draw.rect(screen, bd_c, cbtn, 2 if act else 1, border_radius=5)
+        cs = self.font_lg.render(t('char_create_btn'), True, tc)
+        screen.blit(cs, (cbtn.centerx - cs.get_width() // 2,
+                         cbtn.centery - cs.get_height() // 2))
+        buttons.append((cbtn, 'create'))
+
+        hint = self.font_sm.render(t('char_create_hint'), True, (90, 88, 120))
+        screen.blit(hint, (cx - hint.get_width() // 2, py + ph - 28))
+        self._char_create_buttons = buttons
         return buttons
 
     # ------------------------------------------------------------------ #

@@ -455,6 +455,43 @@ class BoltAnim(_Anim):
             pygame.draw.line(surf, trail_col, (tx2, ty2), (bx, by), max(1, int(2 * fade)))
 
 
+class ArrowAnim(_Anim):
+    """궁수 화살 — 발사 지점에서 목표까지 빠르게 날아가는 화살 스프라이트."""
+    _FACE_ANG = {'right': 0.0, 'left': math.pi, 'down': math.pi / 2, 'up': -math.pi / 2}
+
+    def __init__(self, sx, sy, tx, ty, facing='right', color=(240, 225, 150)):
+        super().__init__(160)
+        self.sx, self.sy = sx, sy
+        self.tx, self.ty = tx, ty
+        self.color = color
+        self.ang = self._FACE_ANG.get(facing, 0.0)
+
+    def draw(self, surf, cam_x, cam_y, font):
+        ts = TILE_SIZE
+        t = self.t
+        # 앞머리는 조금 앞서고 꼬리는 뒤따라 — 화살 몸통
+        head = min(1.0, t * 1.15)
+        tail = max(0.0, t * 1.15 - 0.22)
+        hx = int((self.sx + (self.tx - self.sx) * head - cam_x) * ts + ts // 2)
+        hy = int((self.sy + (self.ty - self.sy) * head - cam_y) * ts + ts // 2)
+        tx = int((self.sx + (self.tx - self.sx) * tail - cam_x) * ts + ts // 2)
+        ty = int((self.sy + (self.ty - self.sy) * tail - cam_y) * ts + ts // 2)
+        fade = max(0.0, 1.0 - t)
+        shaft = tuple(int(c * (0.5 + 0.5 * fade)) for c in (150, 120, 70))
+        pygame.draw.line(surf, shaft, (tx, ty), (hx, hy), 2)
+        # 촉 (밝은 삼각)
+        ca, sa = math.cos(self.ang), math.sin(self.ang)
+        px, py = -sa, ca
+        tip = (hx + int(ca * 4), hy + int(sa * 4))
+        pygame.draw.polygon(surf, self.color, [
+            tip, (hx + int(px * 3), hy + int(py * 3)),
+            (hx - int(px * 3), hy - int(py * 3))])
+        # 깃 (꼬리)
+        pygame.draw.line(surf, (220, 220, 230),
+                         (tx + int(px * 3), ty + int(py * 3)),
+                         (tx - int(px * 3), ty - int(py * 3)), 1)
+
+
 class AttackSwingAnim(_Anim):
     """기본공격 검 휘두르기 — 7선 160° 부채꼴 + 팁 연결선 + 임팩트 플래시."""
     # 각 방향별 7방향 단위벡터 (±80° 범위)

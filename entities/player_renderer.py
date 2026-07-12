@@ -11,6 +11,43 @@ import pygame
 
 _PI = math.pi
 
+# 방향 → (전방 단위벡터)
+_DIR = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
+
+
+def draw_archer_bow(surf, tile_x, tile_y, facing, phase):
+    """궁수 활 오버레이 — 베이스 스프라이트 위에 활+화살을 그린다.
+
+    phase 0=대기(활 든 자세), 1=시위 당김(화살 노킹), 2=발사 직후.
+    """
+    cx, cy = tile_x + 16, tile_y + 16
+    dx, dy = _DIR.get(facing, (0, 1))
+    px, py = -dy, dx                     # 수직
+    # 활 중심 — 몸 앞 손 위치
+    bxc = cx + dx * 8
+    byc = cy + dy * 8 + (2 if facing == 'down' else -2 if facing == 'up' else 0)
+    L = 9
+    t1 = (int(bxc + px * L), int(byc + py * L))
+    t2 = (int(bxc - px * L), int(byc - py * L))
+    mid = (int(bxc + dx * 4), int(byc + dy * 4))
+    wood, lite = (150, 110, 60), (196, 150, 90)
+    pygame.draw.lines(surf, wood, False, [t1, mid, t2], 2)
+    pygame.draw.circle(surf, lite, mid, 1)
+    # 시위: phase별 당김량
+    pull = {0: 0, 1: 5, 2: -3}.get(phase, 0)
+    nock = (int(bxc - dx * pull), int(byc - dy * pull))
+    string = (225, 225, 232)
+    pygame.draw.line(surf, string, t1, nock, 1)
+    pygame.draw.line(surf, string, t2, nock, 1)
+    if phase == 1:                       # 노킹된 화살
+        ax = (int(nock[0] + dx * 14), int(nock[1] + dy * 14))
+        pygame.draw.line(surf, (150, 120, 70), nock, ax, 2)
+        pygame.draw.polygon(surf, (240, 235, 180), [
+            (int(ax[0] + dx * 3), int(ax[1] + dy * 3)),
+            (int(ax[0] + px * 2), int(ax[1] + py * 2)),
+            (int(ax[0] - px * 2), int(ax[1] - py * 2))])
+
+
 # ── 공통 드로우 헬퍼 ─────────────────────────────────────────────────────────
 def _c(s, col, x, y, r):
     pygame.draw.circle(s, col, (round(x), round(y)), max(1, r))

@@ -10,15 +10,18 @@ from core.input_handler import InputHandler
 from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAnim,
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
                             DeathAnim, GoldPopAnim, BannerAnim,
-                            SmearAnim, ThrustSmearAnim, AfterimageAnim, CalloutAnim)
+                            SmearAnim, ThrustSmearAnim, AfterimageAnim, CalloutAnim,
+                            ArrowAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
                          SKILL_SP_COST, ALL_SKILL_DEFS, DEFAULT_EQUIPPED,
-                         ENCHANT_DEFS, ENCHANT_TYPES, ENCHANT_MAX_LEVEL)
+                         ENCHANT_DEFS, ENCHANT_TYPES, ENCHANT_MAX_LEVEL,
+                         default_equipped_for)
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
-                             load_records, update_records)
+                             load_records, update_records,
+                             list_cards, migrate_legacy_save, SLOT_COUNT)
 from core.lang import t, set_lang
 from core.combat import roll_damage
 from map.generator import generate_dungeon
@@ -363,12 +366,22 @@ class Game:
         self._is_test_mode = False
         self._test_floor: int | None = None  # main.py 에서 세팅, 메뉴 버튼으로 진입
 
-        # 저장파일 확인 후 메뉴로
-        self._save_data         = load_game()
+        # 세이브 슬롯(캐릭터 카드) — 레거시 세이브 1회 이관
+        migrate_legacy_save()
+        self._save_slot         = 1
+        self._cards             = list_cards()
+        self._save_data         = load_game(self._save_slot)
         self._menu_sel          = 0
         self._menu_page         = 'main'
         self._menu_settings_sel = 0
         self._menu_buttons      = []
+        # 캐릭터 생성 화면 상태
+        self._create_class      = 'warrior'   # 'warrior' | 'archer'
+        self._create_name       = ''
+        self._create_slot       = 1
+        self._create_sel        = 0            # 0=class 1=name 2=create
+        # 궁수 발사 연출
+        self._shoot_ms          = 0.0
         self.state  = 'menu'
         self.player  = None
         self.dungeon = None
@@ -633,8 +646,12 @@ class Game:
                 self.audio.bgm.play(f'theme_{self.dungeon.theme_index}')
 
     # ─────────────── 새 게임 / 불러오기 ──────────────────────────────
-    def _new_game(self):
-        delete_save()
+    def _new_game(self, char_class='warrior', char_name='Hero', slot=None):
+        if slot is not None:
+            self._save_slot = slot
+        self._char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self._char_name  = char_name or 'Hero'
+        delete_save(self._save_slot)
         self._save_data       = None
         self.floor            = 1
         self._facing          = 'down'
@@ -646,7 +663,7 @@ class Game:
         self._skill_books     = set()
         self._skill_levels    = {sid: 1 for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
-        self._equipped_skills = DEFAULT_EQUIPPED.copy()
+        self._equipped_skills = default_equipped_for(self._char_class)
         self._skill_enchants  = {
             sid: {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0}
             for sid in ALL_SKILL_DEFS
@@ -729,10 +746,15 @@ class Game:
         self._enter_burning_stage()
         self.clock.tick()   # 초기화 누적 시간 소비 — 첫 dt가 타이머를 왜곡하지 않도록
 
-    def _continue_game(self):
+    def _continue_game(self, slot=None):
+        if slot is not None:
+            self._save_slot = slot
+            self._save_data = load_game(slot)
         data = self._save_data
         if not data:
             self._new_game(); return
+        self._char_class = data.get('char_class', 'warrior')
+        self._char_name  = data.get('name', 'Hero')
         self.floor       = data['floor']
         self._facing     = 'down'
         self._walk_frame = 0
@@ -778,7 +800,8 @@ class Game:
                                           self._enemy_data, self._item_data)
         self.dungeon = dungeon
         self._theme  = get_theme(self.floor)
-        self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data)
+        self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data,
+                                        char_class=self._char_class, char_name=self._char_name)
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         if not self._is_test_mode:
@@ -795,10 +818,13 @@ class Game:
         self.dungeon  = dungeon
         self._theme   = get_theme(self.floor)
         if is_new_game:
-            self.player = Player(*start)
+            self.player = Player(*start,
+                                 char_class=getattr(self, '_char_class', 'warrior'),
+                                 char_name=getattr(self, '_char_name', 'Hero'))
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
-            self.messages.append((t('combat_hint'), 'info'))
+            self.messages.append((t('archer_hint' if self.player.char_class == 'archer'
+                                     else 'combat_hint'), 'info'))
         else:
             self.player.x, self.player.y = start
             self.messages.append((t('floor_arrive', self.floor), 'good'))
@@ -813,7 +839,9 @@ class Game:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                               self._skill_levels, self._skill_xp, self._skill_points,
                               self._equipped_skills, self._skill_enchants, self._quests,
-                              self._max_floor_reached)
+                              self._max_floor_reached, slot=self._save_slot,
+                              name=getattr(self,'_char_name','Hero'),
+                              char_class=getattr(self,'_char_class','warrior'))
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -903,6 +931,8 @@ class Game:
                     self._inv_confirm_idx = None
                 elif self.state == 'menu':
                     self._handle_menu_click(event.pos)
+                elif self.state == 'char_create':
+                    self._handle_char_create_click(event.pos)
                 elif self.state == 'paused':
                     self._handle_pause_click(event.pos)
                 elif self.state == 'inventory':
@@ -950,6 +980,18 @@ class Game:
                         self._inv_confirm_idx = None
                 elif self.state == 'inventory' and event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
                     self._start_discard_confirm(self._inv_sel)
+                elif self.state == 'char_create':
+                    self._handle_char_create_key(event.key, event.unicode)
+                elif (self.state == 'menu' and self._menu_page == 'main'
+                        and event.key == pygame.K_DELETE):
+                    if self._menu_sel < len(self._cards):
+                        c = self._cards[self._menu_sel]
+                        if c.get('exists'):
+                            self._delete_card(c['slot'])
+
+        # 캐릭터 생성 화면은 raw 키 입력 전용 — 액션 처리 건너뜀
+        if self.state == 'char_create':
+            return
 
         for action in self.input.update(dt):
             t = action['type']
@@ -1042,29 +1084,87 @@ class Game:
             self._handle_menu_settings_action(action)
             return
         typ = action['type']
-        n_main = 2 if self._save_data else 1
-        total  = n_main + 2  # + settings + quit
+        n = len(self._cards)
+        total = n + 2  # + settings + quit
         if typ == 'move':
             dy = action.get('dy', 0)
             if dy != 0:
                 self._menu_sel = (self._menu_sel + dy) % total
                 self.audio.play('menu_select')
-        elif typ in ('wait', 'confirm'):
-            if self._menu_sel == 0:
-                self.audio.play('menu_confirm')
-                self._new_game()
-            elif self._menu_sel == 1 and self._save_data:
-                self.audio.play('menu_confirm')
-                self._continue_game()
-            elif self._menu_sel == n_main:
+        elif typ in ('wait', 'confirm', 'load'):
+            if self._menu_sel < n:
+                self._select_card(self._cards[self._menu_sel])
+            elif self._menu_sel == n:
                 self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
-            elif self._menu_sel == n_main + 1:
+            elif self._menu_sel == n + 1:
                 pygame.quit(); sys.exit()
-        elif typ == 'load' and self._save_data:
-            self.audio.play('menu_confirm')
-            self._continue_game()
+
+    def _select_card(self, card):
+        """카드 선택 — 있으면 이어하기, 비었으면 캐릭터 생성."""
+        self.audio.play('menu_confirm')
+        if card.get('exists'):
+            self._continue_game(card['slot'])
+        else:
+            self._open_char_create(card['slot'])
+
+    def _delete_card(self, slot):
+        delete_save(slot)
+        self._cards = list_cards()
+        if self._save_slot == slot:
+            self._save_data = load_game(slot)
+        self.audio.play('menu_select')
+
+    # ── 캐릭터 생성 ────────────────────────────────────────────────────
+    def _open_char_create(self, slot):
+        self._create_slot  = slot
+        self._create_class = 'warrior'
+        self._create_name  = ''
+        self._create_sel   = 0
+        self.state = 'char_create'
+        self.audio.play('menu_select')
+
+    def _do_create_character(self):
+        name = (self._create_name or 'Hero').strip() or 'Hero'
+        self.audio.play('menu_confirm')
+        self._new_game(char_class=self._create_class, char_name=name,
+                       slot=self._create_slot)
+
+    def _handle_char_create_key(self, key, unicode_ch):
+        import pygame as _pg
+        if key == _pg.K_ESCAPE:
+            self.state = 'menu'
+            self._cards = list_cards()
+            return
+        if key in (_pg.K_LEFT, _pg.K_RIGHT):
+            self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
+            self.audio.play('menu_select')
+            return
+        if key == _pg.K_UP:
+            self._create_sel = (self._create_sel - 1) % 3; return
+        if key in (_pg.K_DOWN, _pg.K_TAB):
+            self._create_sel = (self._create_sel + 1) % 3; return
+        if key == _pg.K_RETURN:
+            self._do_create_character(); return
+        if key == _pg.K_BACKSPACE:
+            self._create_name = self._create_name[:-1]; return
+        # 이름 문자 입력 (영숫자/공백, 최대 12)
+        if unicode_ch and unicode_ch.isprintable() and unicode_ch not in ('\t', '\r'):
+            if len(self._create_name) < 12 and (unicode_ch.isalnum() or unicode_ch == ' '):
+                self._create_name += unicode_ch
+
+    def _handle_char_create_click(self, pos):
+        for rect, tag in getattr(self.hud, '_char_create_buttons', []):
+            if rect.collidepoint(pos):
+                if tag == 'class_prev' or tag == 'class_next':
+                    self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
+                    self.audio.play('menu_select')
+                elif tag == 'name_field':
+                    self._create_sel = 1
+                elif tag == 'create':
+                    self._do_create_character()
+                break
 
     def _handle_menu_settings_action(self, action):
         typ = action['type']
@@ -1113,10 +1213,13 @@ class Game:
             return
         for rect, action in self._menu_buttons:
             if rect.collidepoint(pos):
-                if action == 'new':
-                    self._new_game()
-                elif action == 'continue' and self._save_data:
-                    self._continue_game()
+                if action.startswith('slot:'):
+                    slot = int(action.split(':')[1])
+                    card = next((c for c in self._cards if c['slot'] == slot), None)
+                    if card:
+                        self._select_card(card)
+                elif action.startswith('del:'):
+                    self._delete_card(int(action.split(':')[1]))
                 elif action == 'test_mode' and self._test_floor is not None:
                     self.start_test_mode(self._test_floor)
                 elif action == 'settings':
@@ -1268,7 +1371,9 @@ class Game:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                           self._skill_levels, self._skill_xp, self._skill_points,
                           self._equipped_skills, self._skill_enchants, self._quests,
-                          self._max_floor_reached)
+                          self._max_floor_reached, slot=self._save_slot,
+                          name=getattr(self,'_char_name','Hero'),
+                          char_class=getattr(self,'_char_class','warrior'))
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -1280,7 +1385,8 @@ class Game:
             self.state           = 'menu'
             self._menu_sel       = 0
             self._menu_page      = 'main'
-            self._save_data      = load_game()
+            self._cards          = list_cards()
+            self._save_data      = load_game(self._save_slot)
         elif self._pause_sel == 7:
             pygame.quit(); sys.exit()
 
@@ -1429,6 +1535,8 @@ class Game:
         if enemy:
             if self._atk_cd_timer > 0:
                 return False  # 쿨다운 중: 이동 범프 공격 불가
+            if self.player.char_class == 'archer':
+                return self._archer_shoot()          # 궁수는 근접 범프도 사격
             return self._chain_attack(dx, dy, enemy)  # 범프도 콤보 체인에 합류
         target_tile = self.dungeon.tiles[ny][nx]
 
@@ -1443,7 +1551,7 @@ class Game:
             if self.floor >= MAX_FLOOR:
                 self.messages.append((t('victory'), 'good'))
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
-                delete_save()
+                delete_save(self._save_slot)
                 self.state = 'game_over'
             else:
                 self.floor += 1
@@ -1545,6 +1653,10 @@ class Game:
         if self._atk_cd_timer > 0:
             return False  # 쿨다운 중
         held = self._held_move_dir()
+        if self.player.char_class == 'archer':
+            if held:
+                self._facing = self._DIR_NAME[held]
+            return self._archer_shoot()
         fdx, fdy = self._DIRS.get(self._facing, (0, 1))
         if held:
             if held == (fdx, fdy):
@@ -1555,6 +1667,34 @@ class Game:
             self._facing = self._DIR_NAME[held]
             fdx, fdy = held
         return self._chain_attack(fdx, fdy)
+
+    # ── 궁수 기본 사격 (원거리 히트스캔 + 화살 연출) ────────────────────
+    _ARCHER_RANGE = 8
+
+    def _archer_shoot(self):
+        if not self._spend_stamina(self._STAMINA_COST['slash']):
+            return False
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        self._atk_variant = 'shoot'
+        self._trigger_atk_anim()                 # 활 당김 → 발사 프레임
+        end = (self.player.x, self.player.y)
+        hit = None
+        for i in range(1, self._ARCHER_RANGE + 1):
+            cx, cy = self.player.x + dx * i, self.player.y + dy * i
+            if not self.dungeon.in_bounds(cx, cy) or self.dungeon.tiles[cy][cx].block_sight:
+                break
+            end = (cx, cy)
+            e = self.dungeon.get_enemy_at(cx, cy)
+            if e:
+                hit = e
+                break
+        self.animator.add(ArrowAnim(self.player.x, self.player.y,
+                                    end[0], end[1], self._facing))
+        self.audio.play('bow_shoot')
+        if hit:
+            self._player_attack(hit)
+        self._atk_cd_timer = self.player.atk_cooldown_ms
+        return True
 
     def _chain_attack(self, dx, dy, enemy=None):
         """3단 콤보 본체 (Space 공격·이동 범프 공격 공용)."""
@@ -2520,6 +2660,8 @@ class Game:
             'life_steal':  self._exec_life_steal,
             'war_cry':     self._exec_war_cry,
             'dark_pulse':  self._exec_dark_pulse,
+            'power_shot':  self._exec_power_shot,
+            'arrow_rain':  self._exec_arrow_rain,
         }
         fn = _exec_map.get(skill_id)
         if not fn:
@@ -2749,6 +2891,80 @@ class Game:
         self.audio.play('skill_dash')
         self.messages.append((t('skill_flame_hit', hits) if hits else t('skill_flame_miss'),
                                'warn' if hits else 'info'))
+        return True
+
+    # ── 궁수 스킬 ──────────────────────────────────────────────────────
+    def _exec_power_shot(self, slot):
+        lvl = self._skill_levels.get('power_shot', 1)
+        stats = ALL_SKILL_DEFS['power_shot']['upgrades'][lvl - 1]
+        rng, mul = stats['range'], stats['mul']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        end = (self.player.x, self.player.y)
+        hits = 0
+        for i in range(1, rng + 1):
+            nx, ny = self.player.x + dx * i, self.player.y + dy * i
+            if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].block_sight:
+                break
+            end = (nx, ny)
+            e = self.dungeon.get_enemy_at(nx, ny)
+            if e:
+                dmg = roll_damage(self._skill_atk, e.defense, mul)
+                e.take_damage(dmg)
+                self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 170, 60)))
+                self.animator.particles.emit_power_hit(nx, ny)
+                hits += 1
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+                # 관통 — 멈추지 않고 계속 진행
+        self.animator.add(ArrowAnim(self.player.x, self.player.y,
+                                    end[0], end[1], self._facing, (255, 190, 90)))
+        self._trigger_atk_anim()
+        self._start_shake(2, 130)
+        self._gain_skill_xp('power_shot', max(1, hits))
+        self.skills.trigger(slot)
+        self.audio.play('bow_shoot')
+        self.messages.append((t('skill_power_shot', hits) if hits
+                              else t('skill_power_shot_miss'),
+                              'warn' if hits else 'info'))
+        return True
+
+    def _exec_arrow_rain(self, slot):
+        import random as _r
+        lvl = self._skill_levels.get('arrow_rain', 1)
+        stats = ALL_SKILL_DEFS['arrow_rain']['upgrades'][lvl - 1]
+        radius, mul = stats['radius'], stats['mul']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        cx = self.player.x + dx * (radius + 1)     # 전방 지역 중심
+        cy = self.player.y + dy * (radius + 1)
+        hits = 0
+        for ddx in range(-radius, radius + 1):
+            for ddy in range(-radius, radius + 1):
+                if abs(ddx) + abs(ddy) > radius:
+                    continue
+                tx, ty = cx + ddx, cy + ddy
+                if not self.dungeon.in_bounds(tx, ty):
+                    continue
+                e = self.dungeon.get_enemy_at(tx, ty)
+                if e:
+                    dmg = roll_damage(self._skill_atk, e.defense, mul)
+                    e.take_damage(dmg)
+                    self.animator.add(HitFlashAnim(tx, ty, dmg, (120, 200, 255)))
+                    hits += 1
+                    if not e.is_alive():
+                        self._on_enemy_killed(e)
+        for _ in range(12):                        # 화살 낙하 연출
+            ox = _r.uniform(-radius, radius)
+            oy = _r.uniform(-radius, radius)
+            self.animator.add(ArrowAnim(cx + ox, cy - 5, cx + ox, cy + oy,
+                                        'down', (150, 210, 255)))
+        self.animator.particles.emit_frost_hit(cx, cy)
+        self._trigger_atk_anim()
+        self._gain_skill_xp('arrow_rain', max(1, hits))
+        self.skills.trigger(slot)
+        self.audio.play('bow_shoot')
+        self.messages.append((t('skill_arrow_rain', hits) if hits
+                              else t('skill_arrow_rain_miss'),
+                              'warn' if hits else 'info'))
         return True
 
     def _exec_life_steal(self, slot):
@@ -3640,7 +3856,7 @@ class Game:
                 self._exit_burning_stage(survived=False)
             else:
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
-                delete_save()
+                delete_save(self._save_slot)
                 self.audio.play('death')
                 self._ach_unlock('ACH_DIE')
                 self.state = 'dead'
@@ -3665,15 +3881,20 @@ class Game:
         self.screen.fill(BLACK)
 
         if self.state == 'menu':
-            sf = self._save_data['floor'] if self._save_data else None
             self._menu_buttons = self.hud.render_menu(
-                self.screen, bool(self._save_data), sf,
+                self.screen, self._cards,
                 self._menu_sel, pygame.mouse.get_pos(),
                 page=self._menu_page,
                 settings=self._settings,
                 settings_sel=self._menu_settings_sel,
-                test_floor=self._test_floor,
             )
+            pygame.display.flip()
+            return
+
+        if self.state == 'char_create':
+            self.hud.render_char_create(
+                self.screen, self._create_class, self._create_name,
+                self._create_sel, pygame.mouse.get_pos())
             pygame.display.flip()
             return
 
@@ -4186,6 +4407,10 @@ class Game:
             self.player.equipment,
             atk_variant=self._atk_variant,
         )
+        # 궁수: 베이스 스프라이트 위에 활 오버레이 (idle/당김/발사 프레임)
+        if self.player.char_class == 'archer':
+            from entities.player_renderer import draw_archer_bow
+            draw_archer_bow(self._game_surf, x, y, facing, phase)
 
     def _draw_enemy(self, enemy, x, y):
         fn = _SPRITE_FN.get(enemy.key, draw_generic)
