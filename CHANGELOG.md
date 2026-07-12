@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.1.0 — Quests & the Living Town
+
+The town comes alive, and the villagers have stories to tell.
+
+### Quests
+- **Quest chains**: villagers now offer follow-up quests as you complete their first — Little Hans and Farmer Bram each have a two-part chain.
+- **Villagers arrive as you descend**: new townsfolk appear as you reach deeper floors — Garo the Hunter (floor 5, elite bounties) and Scholar Isolde (floor 8, reach floor 20).
+- **New objective type**: elite-variant bounties (`kill_elite`).
+- **Classified Quest Log** (Q): grouped into In Progress / Available / Locked (with `???` teasers showing unlock conditions) / Completed.
+- **Flashy quest clear**: reporting a finished quest triggers a full-screen QUEST CLEAR celebration — golden radial burst, reward banner, gold flash, slow motion, particle fountain, and fanfare.
+
+### A Living Town
+- **5× bigger town** (66×49): multiple shops and houses, a central fountain, a park, lamps, flower beds, market stalls, benches, and barrels. The camera pans as you explore.
+- **NPCs wander naturally** around their homes, pausing to look your way when you come close.
+- **Small talk**: chat with villagers even when they have no quest — each has their own personality, fully localized in all 5 languages.
+- **Fixed**: the return portal and an NPC could occupy the same tile.
+
 ## v2.0.0 — The Town & Action Overhaul
 
 The biggest update yet: real action combat, a living town hub, quests, durability, and a full loot-dopamine layer. The game loop is transformed.
