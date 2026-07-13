@@ -128,6 +128,7 @@ def draw_hp_bar(s, x, y, hp, max_hp):
         _r(s,(200+int(55*(1-ratio)),int(210*ratio),40),x+2,y+2,max(1,int(bw*ratio)),4)
 
 from entities.enemy_sprites import ENEMY_SPRITE_FNS as _SPRITE_FN, draw_generic
+from entities.mob_sprites import MC_ENEMY_SPRITE_FNS as _MC_SPRITE_FN, mc_generic
 from entities.enemy import ELITE_AFFIXES
 from entities.player_renderer import draw_player_layered
 from core.skill_effect import SkillEffect
@@ -379,7 +380,12 @@ class Game:
         self._create_class      = 'warrior'   # 'warrior' | 'archer'
         self._create_name       = ''
         self._create_slot       = 1
-        self._create_sel        = 0            # 0=class 1=name 2=create
+        self._create_skin       = 0
+        self._create_hair       = 0
+        self._create_haircol    = 0
+        # sel: 0=class 1=skin 2=hair 3=haircol 4=name 5=create
+        self._create_sel        = 0
+        self._CREATE_ROWS       = 6
         # 궁수 발사 연출
         self._shoot_ms          = 0.0
         self.state  = 'menu'
@@ -646,11 +652,14 @@ class Game:
                 self.audio.bgm.play(f'theme_{self.dungeon.theme_index}')
 
     # ─────────────── 새 게임 / 불러오기 ──────────────────────────────
-    def _new_game(self, char_class='warrior', char_name='Hero', slot=None):
+    def _new_game(self, char_class='warrior', char_name='Hero', slot=None,
+                  appearance=None):
         if slot is not None:
             self._save_slot = slot
         self._char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
         self._char_name  = char_name or 'Hero'
+        self._char_appearance = dict(appearance) if appearance else \
+            {'skin': 0, 'hair': 0, 'haircol': 0}
         delete_save(self._save_slot)
         self._save_data       = None
         self.floor            = 1
@@ -688,10 +697,13 @@ class Game:
         self.state = 'playing'
 
     # ─────────────── 테스트 모드 ──────────────────────────────────────
-    def start_test_mode(self, floor: int = 1):
+    def start_test_mode(self, floor: int = 1, char_class='warrior'):
         """python3 main.py -test [층수] 로 호출 — 최대 스탯으로 지정 층 시작."""
         self._is_test_mode    = True
         self._save_data       = None
+        self._char_class      = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self._char_name       = 'TestHero'
+        self._char_appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
         self.floor            = max(1, min(floor, MAX_FLOOR))
         self._facing          = 'down'
         self._walk_frame      = 0
@@ -701,7 +713,7 @@ class Game:
         # 모든 스킬 최대 레벨, 조합 스킬 전체 해금
         self._skill_levels    = {sid: SKILL_MAX_LEVEL for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
-        self._equipped_skills = DEFAULT_EQUIPPED.copy()
+        self._equipped_skills = default_equipped_for(self._char_class)
         self._skill_enchants  = {
             sid: {'power': ENCHANT_MAX_LEVEL, 'haste': ENCHANT_MAX_LEVEL,
                   'efficiency': ENCHANT_MAX_LEVEL, 'arcane': ENCHANT_MAX_LEVEL}
@@ -735,14 +747,14 @@ class Game:
         self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
 
-    def start_town_test(self, floor: int = 1):
+    def start_town_test(self, floor: int = 1, char_class='warrior'):
         """python3 test_main.py town [층] — 던전 세션 생성 후 곧장 마을 진입."""
-        self.start_test_mode(floor)
+        self.start_test_mode(floor, char_class=char_class)
         self._enter_town()
 
-    def start_burning_mode(self):
+    def start_burning_mode(self, char_class='warrior'):
         """python3 test_main.py bunning — 버닝 스테이지 직행."""
-        self.start_test_mode(floor=1)
+        self.start_test_mode(floor=1, char_class=char_class)
         self._enter_burning_stage()
         self.clock.tick()   # 초기화 누적 시간 소비 — 첫 dt가 타이머를 왜곡하지 않도록
 
@@ -755,6 +767,10 @@ class Game:
             self._new_game(); return
         self._char_class = data.get('char_class', 'warrior')
         self._char_name  = data.get('name', 'Hero')
+        self._char_appearance = dict(
+            data.get('appearance')
+            or data.get('player', {}).get('appearance')
+            or {'skin': 0, 'hair': 0, 'haircol': 0})
         self.floor       = data['floor']
         self._facing     = 'down'
         self._walk_frame = 0
@@ -801,7 +817,8 @@ class Game:
         self.dungeon = dungeon
         self._theme  = get_theme(self.floor)
         self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data,
-                                        char_class=self._char_class, char_name=self._char_name)
+                                        char_class=self._char_class, char_name=self._char_name,
+                                        appearance=self._char_appearance)
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         if not self._is_test_mode:
@@ -821,6 +838,8 @@ class Game:
             self.player = Player(*start,
                                  char_class=getattr(self, '_char_class', 'warrior'),
                                  char_name=getattr(self, '_char_name', 'Hero'))
+            self.player.appearance = dict(getattr(self, '_char_appearance', None)
+                                          or {'skin': 0, 'hair': 0, 'haircol': 0})
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
             self.messages.append((t('archer_hint' if self.player.char_class == 'archer'
@@ -1118,18 +1137,42 @@ class Game:
 
     # ── 캐릭터 생성 ────────────────────────────────────────────────────
     def _open_char_create(self, slot):
-        self._create_slot  = slot
-        self._create_class = 'warrior'
-        self._create_name  = ''
-        self._create_sel   = 0
+        self._create_slot   = slot
+        self._create_class  = 'warrior'
+        self._create_name   = ''
+        self._create_skin   = 0
+        self._create_hair   = 0
+        self._create_haircol = 0
+        self._create_sel    = 0
         self.state = 'char_create'
         self.audio.play('menu_select')
+
+    def _create_appearance(self):
+        return {'skin': self._create_skin, 'hair': self._create_hair,
+                'haircol': self._create_haircol}
 
     def _do_create_character(self):
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
         self._new_game(char_class=self._create_class, char_name=name,
-                       slot=self._create_slot)
+                       slot=self._create_slot,
+                       appearance=self._create_appearance())
+
+    def _create_cycle(self, delta):
+        """현재 선택된 행의 값을 delta 방향으로 순환."""
+        from entities.avatar import cycle
+        sel = self._create_sel
+        if sel == 0:
+            self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
+        elif sel == 1:
+            self._create_skin = cycle('skin', self._create_skin, delta)
+        elif sel == 2:
+            self._create_hair = cycle('hair', self._create_hair, delta)
+        elif sel == 3:
+            self._create_haircol = cycle('haircol', self._create_haircol, delta)
+        else:
+            return
+        self.audio.play('menu_select')
 
     def _handle_char_create_key(self, key, unicode_ch):
         import pygame as _pg
@@ -1137,14 +1180,14 @@ class Game:
             self.state = 'menu'
             self._cards = list_cards()
             return
-        if key in (_pg.K_LEFT, _pg.K_RIGHT):
-            self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
-            self.audio.play('menu_select')
-            return
+        if key == _pg.K_LEFT:
+            self._create_cycle(-1); return
+        if key == _pg.K_RIGHT:
+            self._create_cycle(+1); return
         if key == _pg.K_UP:
-            self._create_sel = (self._create_sel - 1) % 3; return
+            self._create_sel = (self._create_sel - 1) % self._CREATE_ROWS; return
         if key in (_pg.K_DOWN, _pg.K_TAB):
-            self._create_sel = (self._create_sel + 1) % 3; return
+            self._create_sel = (self._create_sel + 1) % self._CREATE_ROWS; return
         if key == _pg.K_RETURN:
             self._do_create_character(); return
         if key == _pg.K_BACKSPACE:
@@ -1157,11 +1200,12 @@ class Game:
     def _handle_char_create_click(self, pos):
         for rect, tag in getattr(self.hud, '_char_create_buttons', []):
             if rect.collidepoint(pos):
-                if tag == 'class_prev' or tag == 'class_next':
-                    self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
-                    self.audio.play('menu_select')
+                # row_prev:N / row_next:N — 해당 행 선택 후 순환
+                if tag.startswith('row_prev:') or tag.startswith('row_next:'):
+                    self._create_sel = int(tag.split(':')[1])
+                    self._create_cycle(-1 if tag.startswith('row_prev') else +1)
                 elif tag == 'name_field':
-                    self._create_sel = 1
+                    self._create_sel = 4
                 elif tag == 'create':
                     self._do_create_character()
                 break
@@ -1603,6 +1647,13 @@ class Game:
 
     def _snapshot_player(self):
         """잔상용 현재 플레이어 실루엣 스냅샷."""
+        if self._USE_AVATAR:
+            from entities.avatar import draw_avatar_tile
+            tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            draw_avatar_tile(tmp, 0, 0, self._facing, self._walk_frame, 0,
+                             getattr(self.player, 'appearance', None),
+                             self.player.char_class)
+            return tmp
         tmp = pygame.Surface((TILE_SIZE, TILE_SIZE))
         tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
         draw_player(tmp, 0, 0, self._facing, self._walk_frame)
@@ -1895,7 +1946,7 @@ class Game:
         # 프롭(항아리/나무상자): 파괴 연출 + 콤보 유지 + 소소한 보상 후 종료
         if enemy.is_prop:
             self.animator.add(DeathAnim(enemy.x, enemy.y,
-                                        _SPRITE_FN.get(enemy.key, draw_generic),
+                                        self._enemy_sprite_fn(enemy.key),
                                         enemy.color, False))
             self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
             self.juice.kill()
@@ -1910,7 +1961,7 @@ class Game:
                                   self.player.stamina + self.player.stamina_max * pct)
         # 사망 연출: 시체 잔상 + 적 색 파편 버스트 + 히트스톱 + 흔들림
         self.animator.add(DeathAnim(enemy.x, enemy.y,
-                                    _SPRITE_FN.get(enemy.key, draw_generic),
+                                    self._enemy_sprite_fn(enemy.key),
                                     enemy.color, enemy.is_boss))
         self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
         self.juice.kill(boss=enemy.is_boss)
@@ -3894,7 +3945,8 @@ class Game:
         if self.state == 'char_create':
             self.hud.render_char_create(
                 self.screen, self._create_class, self._create_name,
-                self._create_sel, pygame.mouse.get_pos())
+                self._create_sel, pygame.mouse.get_pos(),
+                appearance=self._create_appearance())
             pygame.display.flip()
             return
 
@@ -3951,8 +4003,14 @@ class Game:
                                                 yes_r, no_r,
                                                 mouse_pos=pygame.mouse.get_pos())
         elif self.state == 'equipment':
+            if self._USE_AVATAR:
+                from entities.avatar import avatar_surface
+                _pspr = avatar_surface(64, getattr(self.player, 'appearance', None),
+                                       self.player.char_class, scale=3)
+            else:
+                _pspr = self._sprites.get('hero_down')
             self.hud.render_equipment(self.screen, self.player, self._equip_sel,
-                                      self._sprites.get('hero_down'),
+                                      _pspr,
                                       mouse_pos=pygame.mouse.get_pos())
 
         if self._skillbook_open and self.state == 'playing':
@@ -4346,43 +4404,23 @@ class Game:
                                  (0, 0, GAME_W, GAME_H), thickness)
             self.screen.blit(self._edge_surf, (GAME_X, GAME_Y))
 
+    # 인게임 캐릭터를 절차적 마인크래프트 아바타로 렌더 (False면 기존 PNG 사용)
+    _USE_AVATAR = True
+
     def _draw_player_sprite(self, x, y):
         facing = self._facing
         phase  = self._atk_phase
-        spr = None
-
-        if facing in ('left', 'right'):
-            side = 'left' if facing == 'left' else 'right'
-            if phase == 1:
-                spr = self._sprites.get(f'hero_attack_ready_{side}')
-            elif phase == 2:
-                spr = self._sprites.get(f'hero_attack_end_{side}')
-            if spr is None:
-                spr = self._sprites.get(f'hero_{side}') or self._sprites.get('hero')
-
-        elif facing == 'up':
-            if phase == 1:
-                spr = self._sprites.get('hero_attack_ready_up')
-            elif phase == 2:
-                spr = self._sprites.get('hero_attack_end_up')
-            if spr is None:
-                spr = (self._sprites.get('hero_up')
-                       or self._sprites.get('hero_back')
-                       or self._sprites.get('hero'))
-
-        else:  # down
-            if phase == 1:
-                spr = self._sprites.get('hero_attack_ready_down')
-            elif phase == 2:
-                spr = self._sprites.get('hero_attack_end_down')
-            if spr is None:
-                spr = self._sprites.get('hero_down') or self._sprites.get('hero')
 
         # Squeeze & Stretch 스케일 (강화술 시전 순간)
         scale = 1.0
         if self._fortify_effect and self._fortify_effect.alive:
             scale = self._fortify_effect.squeeze_scale
 
+        if self._USE_AVATAR:
+            self._draw_avatar_player(x, y, facing, phase, scale)
+            return
+
+        spr = self._pick_hero_png(facing, phase)
         if scale != 1.0:
             tmp = pygame.Surface((TILE_SIZE, TILE_SIZE))
             tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
@@ -4412,8 +4450,54 @@ class Game:
             from entities.player_renderer import draw_archer_bow
             draw_archer_bow(self._game_surf, x, y, facing, phase)
 
+    def _draw_avatar_player(self, x, y, facing, phase, scale):
+        """절차적 아바타 + (궁수) 활 오버레이. 강화술 스퀴즈 스케일 지원."""
+        from entities.avatar import draw_avatar_tile
+        from entities.player_renderer import draw_archer_bow
+        ap  = getattr(self.player, 'appearance', None)
+        cls = self.player.char_class
+        if scale != 1.0:
+            tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+            draw_avatar_tile(tmp, 0, 0, facing, self._walk_frame, phase, ap, cls)
+            if cls == 'archer':
+                draw_archer_bow(tmp, 0, 0, facing, phase)
+            w = h = round(TILE_SIZE * scale)
+            scaled = pygame.transform.scale(tmp, (w, h))
+            off = (TILE_SIZE - w) // 2
+            self._game_surf.blit(scaled, (x + off, y + off))
+        else:
+            draw_avatar_tile(self._game_surf, x, y, facing, self._walk_frame,
+                             phase, ap, cls)
+            if cls == 'archer':
+                draw_archer_bow(self._game_surf, x, y, facing, phase)
+
+    def _pick_hero_png(self, facing, phase):
+        """기존 PNG 스프라이트 선택 (레거시 경로)."""
+        if facing in ('left', 'right'):
+            side = facing
+            spr = (self._sprites.get(f'hero_attack_ready_{side}') if phase == 1 else
+                   self._sprites.get(f'hero_attack_end_{side}')   if phase == 2 else None)
+            return spr or self._sprites.get(f'hero_{side}') or self._sprites.get('hero')
+        elif facing == 'up':
+            spr = (self._sprites.get('hero_attack_ready_up') if phase == 1 else
+                   self._sprites.get('hero_attack_end_up')   if phase == 2 else None)
+            return (spr or self._sprites.get('hero_up')
+                    or self._sprites.get('hero_back') or self._sprites.get('hero'))
+        else:
+            spr = (self._sprites.get('hero_attack_ready_down') if phase == 1 else
+                   self._sprites.get('hero_attack_end_down')   if phase == 2 else None)
+            return spr or self._sprites.get('hero_down') or self._sprites.get('hero')
+
+    # 적/NPC를 마인크래프트 블록 스타일로 렌더 (False면 기존 아트)
+    _USE_MC_MOBS = True
+
+    def _enemy_sprite_fn(self, key):
+        if self._USE_MC_MOBS:
+            return _MC_SPRITE_FN.get(key) or _SPRITE_FN.get(key, mc_generic)
+        return _SPRITE_FN.get(key, draw_generic)
+
     def _draw_enemy(self, enemy, x, y):
-        fn = _SPRITE_FN.get(enemy.key, draw_generic)
+        fn = self._enemy_sprite_fn(enemy.key)
         ts = TILE_SIZE
         # 피격 순간 흰 플래시 / 공격 전조 중 미세 떨림
         col = (255, 255, 255) if enemy.hurt_ms > 0 else enemy.color
@@ -4454,8 +4538,18 @@ class Game:
             _r(self._game_surf, (255, 220, 60), mx - 1, my - 9, 3, 6)
             _r(self._game_surf, (255, 220, 60), mx - 1, my - 1, 3, 2)
 
+    _USE_MC_ITEMS = True
+
     def _draw_item(self, item, x, y):
         ts=TILE_SIZE; s=self._game_surf
+        if self._USE_MC_ITEMS:
+            # 살짝 떠오르는 부유 애니
+            bob = int(2 * math.sin(pygame.time.get_ticks() * 0.004 + x))
+            pygame.draw.ellipse(s, (24, 22, 30),
+                                (x + 9, y + ts - 7, ts - 18, 4))   # 발밑 그림자
+            from entities.item_icons import draw_mc_item
+            draw_mc_item(s, x + 4, y + 2 + bob, ts - 8, item.item_type, item.color)
+            return
         ccx, ccy = x+ts//2, y+ts//2
         col = item.color
         pygame.draw.polygon(s, col, [(ccx,ccy-7),(ccx+6,ccy),(ccx,ccy+7),(ccx-6,ccy)])

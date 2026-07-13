@@ -11,6 +11,8 @@ class Player(Entity):
         # 캐릭터 정체성 (세이브 카드)
         self.char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
         self.char_name  = char_name or 'Hero'
+        # 외형 커스터마이즈 (피부/헤어스타일/머리색) — 세이브 카드 프리뷰용
+        self.appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
         # 궁수는 이동/공속이 조금 높고 방어가 낮은 원거리 딜러
         if self.char_class == 'archer':
             self.hp = self.max_hp = 26
@@ -228,9 +230,11 @@ class Player(Entity):
     # ── 저장 복원 ───────────────────────────────────────────────────
     @classmethod
     def from_save(cls, x, y, data, item_data_dict,
-                  char_class='warrior', char_name='Hero'):
+                  char_class='warrior', char_name='Hero', appearance=None):
         from entities.item import Item
         p = cls(x, y, char_class=char_class, char_name=char_name)
+        if appearance:
+            p.appearance = dict(appearance)
         p.hp           = data['hp']
         p.max_hp       = data['max_hp']
         p.attack       = data['attack']

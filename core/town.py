@@ -15,8 +15,12 @@ import pygame
 
 from core.constants import TILE_SIZE
 from core.lang import t
+from entities.mob_sprites import mc_villager, VILLAGER_SPEC, mc_object
 from map.dungeon import Dungeon
 from map.tile import Tile
+
+# 마을 NPC를 마인크래프트 블록 스타일로 렌더 (False면 기존 아트)
+USE_MC_NPC = True
 
 TOWN_W, TOWN_H = 66, 49       # 이전 31×21의 약 5배 면적
 
@@ -250,27 +254,34 @@ class TownScene:
 
         self.draw_portal(surf, self.portal_pos, cam_x, cam_y)
 
-        _SPRITES = {'inn': self._draw_storage_npc, 'smith': self._draw_smith_npc,
-                    'merchant': self._draw_merchant_npc, 'chest': self._draw_chest,
-                    'villager_boy': self._draw_boy,
-                    'villager_farmer': self._draw_farmer,
-                    'villager_granny': self._draw_granny,
-                    'villager_hunter': self._draw_hunter,
-                    'villager_scholar': self._draw_scholar}
+        _LEGACY = {'inn': self._draw_storage_npc, 'smith': self._draw_smith_npc,
+                   'merchant': self._draw_merchant_npc, 'chest': self._draw_chest,
+                   'villager_boy': self._draw_boy,
+                   'villager_farmer': self._draw_farmer,
+                   'villager_granny': self._draw_granny,
+                   'villager_hunter': self._draw_hunter,
+                   'villager_scholar': self._draw_scholar}
+
+        def _draw_one(target, dx, dy, npc_id):
+            if USE_MC_NPC and npc_id == 'chest':
+                mc_object(target, dx, dy, (150, 110, 60), ticks, kind='chest')
+            elif USE_MC_NPC and npc_id in VILLAGER_SPEC:
+                mc_villager(target, dx, dy, ticks, **VILLAGER_SPEC[npc_id])
+            else:
+                _LEGACY[npc_id](target, dx, dy, ticks)
+
         from core.quests import giver_name
         # y 정렬 — 아래쪽 NPC가 앞에 그려져 자연스러운 겹침
         for npc in sorted(self.visible_npcs(), key=lambda n: n['fy']):
             sx = int(npc['fx'] - ox)
             sy = int(npc['fy'] - oy)
             walk = int(math.sin(ticks * 0.02)) if npc.get('moving') else 0
-            draw_fn = _SPRITES[npc['id']]
             if npc.get('facing', 1) < 0:                 # 좌향 → 좌우 반전
-                tmp = pygame.Surface((ts, ts)); tmp.fill(_CKEY)
-                tmp.set_colorkey(_CKEY)
-                draw_fn(tmp, 0, walk, ticks)
+                tmp = pygame.Surface((ts, ts), pygame.SRCALPHA)
+                _draw_one(tmp, 0, walk, npc['id'])
                 surf.blit(pygame.transform.flip(tmp, True, False), (sx, sy))
             else:
-                draw_fn(surf, sx, sy + walk, ticks)
+                _draw_one(surf, sx, sy + walk, npc['id'])
             # 이름표 + 근접 시 [E]
             label = (t(npc['name_key']) if 'name_key' in npc
                      else giver_name(npc['id']))

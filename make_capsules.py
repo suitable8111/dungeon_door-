@@ -19,6 +19,38 @@ sys.path.insert(0, BASE)
 pygame.init()
 pygame.display.set_mode((1, 1))
 
+# 새 마인크래프트 스타일 아트 (인게임과 동일 소스)
+from entities.avatar import draw_avatar_tile
+from entities.mob_sprites import MC_ENEMY_SPRITE_FNS
+from entities.hero_hd import draw_hero_hd   # 캡슐용 고해상도 전사
+
+_HERO_APP = {'skin': 1, 'hair': 0, 'haircol': 1}   # 캡슐용 전사 외형
+
+
+def _scale_tile(draw_into, size):
+    """32px 타일에 그린 뒤 size로 최근접 확대(블록 유지)."""
+    tile = pygame.Surface((32, 32), pygame.SRCALPHA)
+    draw_into(tile)
+    return pygame.transform.scale(tile, (size, size))
+
+
+def _mc_hero_cropped(target_h, facing='right'):
+    """전사 아바타를 콘텐츠 bbox로 크롭해 target_h 높이로 확대. (surf, w) 반환."""
+    fc = facing if facing in ('down', 'up', 'left', 'right') else 'down'
+    tile = pygame.Surface((32, 32), pygame.SRCALPHA)
+    draw_avatar_tile(tile, 0, 0, fc, 0, 0, _HERO_APP, 'warrior')
+    bb = tile.get_bounding_rect()
+    if bb.width == 0 or bb.height == 0:
+        bb = pygame.Rect(0, 0, 32, 32)
+    crop = tile.subsurface(bb).copy()
+    w = max(1, int(bb.width * target_h / bb.height))
+    return pygame.transform.scale(crop, (w, target_h)), w
+
+
+def _mc_mob_surf(key, size, col):
+    fn = MC_ENEMY_SPRITE_FNS.get(key)
+    return _scale_tile(lambda t: fn(t, 0, 0, col, 600), size)
+
 OUT = os.path.join(BASE, 'assets', 'steam')
 os.makedirs(OUT, exist_ok=True)
 
@@ -182,22 +214,39 @@ def _load_hero(facing: str):
     return _HERO_CACHE[facing]
 
 def hero_size(target_h: int, facing='down') -> tuple:
-    """스프라이트를 그리지 않고 스케일 후 (w, h)만 반환."""
-    img = _load_hero(facing)
-    iw, ih = img.get_size()
-    return int(iw * target_h / ih), target_h
+    """HD 전사의 (w, h) 반환 (스크래치에 렌더해 폭 측정)."""
+    scratch = pygame.Surface((target_h * 2 + 4, target_h + 4), pygame.SRCALPHA)
+    w, _ = draw_hero_hd(scratch, 0, 0, target_h)
+    return w, target_h
 
 def draw_hero(surf, hx, hy, target_h: int, facing='down') -> tuple:
-    """실제 스프라이트를 target_h 높이로 스케일해 blit. (w, h) 반환."""
-    img = _load_hero(facing)
-    iw, ih = img.get_size()
-    nw = int(iw * target_h / ih)
-    scaled = pygame.transform.smoothscale(img, (nw, target_h))
-    surf.blit(scaled, (hx, hy))
-    return nw, target_h
+    """고해상도 전사(갑옷·칼)를 target_h 높이로 그린다. (w, h) 반환."""
+    return draw_hero_hd(surf, hx, hy, target_h, facing)
 
-# ─── 적 스프라이트 ─────────────────────────────────────────────────────
+# ─── 적/보스 스프라이트 (마인크래프트 블록) ──────────────────────────────
+#  (x, y)=중심,  s=크기 배율.  32px 타일을 약 22*s 크기로 확대해 중앙 배치.
+def _blit_mc_mob(surf, key, x, y, s, col):
+    size = int(30 * s)
+    img = _mc_mob_surf(key, size, col)
+    surf.blit(img, (int(x - size / 2), int(y - size / 2)))
+
 def draw_skeleton(surf, x, y, s=3):
+    _blit_mc_mob(surf, 'blade_skeleton', x, y, s, (210, 70, 70))
+
+def draw_dark_knight(surf, x, y, s=4):
+    glow(surf, x, y, 30 * s, (80, 18, 130), 10)
+    glow(surf, x, y, 12 * s, (160, 40, 210), 5)
+    _blit_mc_mob(surf, 'dark_knight', x, y, s, (72, 70, 92))
+
+def draw_slime(surf, x, y, s=3, col=(70, 190, 90)):
+    _blit_mc_mob(surf, 'slime', x, y, s, col)
+
+def draw_reaper(surf, x, y, s=4):
+    glow(surf, x, y, 26 * s, (80, 200, 120), 9)
+    _blit_mc_mob(surf, 'lich', x, y, s, (120, 90, 200))
+
+
+def _draw_skeleton_LEGACY(surf, x, y, s=3):
     bc = (190, 185, 170)
     glow(surf, x, y - 8 * s, 22 * s, (60, 90, 200), 7)
     # 다리
@@ -231,7 +280,7 @@ def draw_skeleton(surf, x, y, s=3):
     R(surf, (20, 18, 28), x - 2*s, y - 10*s, 2*s, 2*s)
     R(surf, (20, 18, 28), x + 1*s, y - 10*s, 2*s, 2*s)
 
-def draw_dark_knight(surf, x, y, s=4):
+def _draw_dark_knight_LEGACY(surf, x, y, s=4):
     ac = (28, 25, 45);  al = (55, 50, 80);  agl = (80, 74, 110)
     ec = (220, 45, 45)
     # 오라
@@ -280,7 +329,7 @@ def draw_dark_knight(surf, x, y, s=4):
     R(surf, ec, x + 1*s, y - 15*s, 4*s, 2*s)
     R(surf, al, x - 7*s, y -  6*s, 14*s, 4*s)
 
-def draw_slime(surf, x, y, s=3, col=(55, 170, 75)):
+def _draw_slime_LEGACY(surf, x, y, s=3, col=(55, 170, 75)):
     lc = tuple(min(255, c + 90) for c in col)
     glow(surf, x, y, 18 * s, col, 6)
     C(surf, tuple(max(0, c-40) for c in col), x,      y,      10*s)
@@ -296,7 +345,7 @@ def draw_slime(surf, x, y, s=3, col=(55, 170, 75)):
     for dx, dy in [(-5, 9), (0, 11), (5, 9)]:
         C(surf, col, x + dx*s, y + dy*s, 3*s)
 
-def draw_reaper(surf, x, y, s=4):
+def _draw_reaper_LEGACY(surf, x, y, s=4):
     rc = (18, 16, 28);  rl = (40, 38, 60);  bc = (180, 172, 155)
     glow(surf, x, y - 5*s, 28*s, (80, 200, 80), 9)
     P(surf, rc, [(x-8*s,y),(x+8*s,y),(x+13*s,y+32*s),(x-13*s,y+32*s)])
@@ -346,20 +395,19 @@ def make_header(rng):
     # 천장 분위기 빛
     glow(surf, W // 2, H // 3, 200, (35, 30, 60), 10)
 
-    # 영웅 (왼쪽)
+    # 영웅 (왼쪽) — 뒤 오라 → 캐릭터 순서
     TH = 360
     hx = 30
     hw, _ = hero_size(TH, 'right')
-    hy = H - TH + 10
-    draw_hero(surf, hx, hy, TH, 'right')
+    hy = H - TH
     cx, cy = hx + hw // 2, hy + TH // 2
-    glow(surf, cx, cy, 80, ( 90, 110, 210), 9)
-    glow(surf, cx, cy, 35, (170, 180, 255), 5)
+    glow(surf, cx, cy + 30, 90, (55, 75, 175), 9)
+    draw_hero(surf, hx, hy, TH, 'right')
 
     # 적들
-    draw_skeleton(surf, 480, H - 160, 3)
-    draw_dark_knight(surf, 660, H - 200, 3)
-    draw_slime(surf, 370, H - 120, 2, (45, 165, 70))
+    draw_skeleton(surf, 500, H - 150, 3)
+    draw_dark_knight(surf, 680, H - 190, 3)
+    draw_slime(surf, 410, H - 110, 2, (45, 165, 70))
 
     # 파티클
     scatter_particles(surf, rng, 200, 70, 600, H - 100, 55,
@@ -384,10 +432,10 @@ def make_small(rng):
     TH = 160
     hx = 10
     hw, _ = hero_size(TH, 'right')
-    hy = H // 2 - TH // 2 + 4
-    draw_hero(surf, hx, hy, TH, 'right')
+    hy = H - TH
     cx, cy = hx + hw // 2, hy + TH // 2
-    glow(surf, cx, cy, 40, (80, 105, 200), 6)
+    glow(surf, cx, cy + 16, 46, (55, 75, 175), 6)
+    draw_hero(surf, hx, hy, TH, 'right')
 
     # 로고 (우측)
     f1, f2 = px(16), px(24)
@@ -414,15 +462,14 @@ def make_main(rng):
     # 천장 분위기
     glow(surf, W // 2, H // 3, 320, (28, 25, 55), 12)
 
-    # 영웅 (좌측, 크게)
-    TH = 560
-    hx = 60
+    # 영웅 (좌측, 크게) — 바닥 정렬
+    TH = 540
+    hx = 70
     hw, _ = hero_size(TH, 'right')
-    hy = H - TH + 20
-    draw_hero(surf, hx, hy, TH, 'right')
+    hy = H - TH
     cx, cy = hx + hw // 2, hy + TH // 2
-    glow(surf, cx, cy, 120, ( 75,  95, 205), 11)
-    glow(surf, cx, cy,  55, (155, 168, 255),  6)
+    glow(surf, cx, cy + 40, 130, ( 60,  80, 190), 11)   # 뒤 오라(캐릭터 뒤로)
+    draw_hero(surf, hx, hy, TH, 'right')
 
     # 보스 다크나이트 (우측)
     draw_dark_knight(surf, W - 210, H // 2 + 10, 5)
@@ -430,8 +477,8 @@ def make_main(rng):
     # 스켈레톤 (중앙)
     draw_skeleton(surf, 720, H - 195, 4)
 
-    # 슬라임 (후면 좌측)
-    draw_slime(surf, 510, H - 145, 3, (40, 160, 58))
+    # 슬라임 (후면, 영웅 우측 밖)
+    draw_slime(surf, 580, H - 135, 3, (40, 160, 58))
 
     # 리퍼 (후면 우측)
     draw_reaper(surf, 940, H - 230, 3)
@@ -475,19 +522,18 @@ def make_vertical(rng):
     ty2 = ty + f1.get_height() + 10
     txt_glow(surf, "DOOR",    f2, GOLD,   GOLD_D, W // 2 - f2.render("DOOR",True,GOLD).get_width()//2, ty2)
 
-    # 영웅 (중앙)
+    # 영웅 (중앙) — 뒤 오라 → 캐릭터
     TH = 430
     hw, _ = hero_size(TH, 'down')
     hx = W // 2 - hw // 2
     hy = H // 2 - TH // 2 + 40
-    draw_hero(surf, hx, hy, TH, 'down')
     cx, cy = W // 2, hy + TH // 2
-    glow(surf, cx, cy, 110, ( 75, 100, 210), 11)
-    glow(surf, cx, cy,  50, (160, 170, 255),  5)
+    glow(surf, cx, cy + 30, 130, (60, 82, 185), 11)
+    draw_hero(surf, hx, hy, TH, 'down')
 
     # 측면 적
-    draw_dark_knight(surf, W - 125, H // 2 + 55, 3)
-    draw_skeleton(surf, 120, H // 2 + 35, 3)
+    draw_dark_knight(surf, W - 115, H // 2 + 55, 3)
+    draw_skeleton(surf, 110, H // 2 + 35, 3)
     draw_slime(surf, W // 2 + 160, hy + TH - 80, 2, (40, 155, 65))
 
     # 바닥 광원
@@ -647,14 +693,14 @@ def make_library_header(rng):
     TH = 380
     hw, _ = hero_size(TH, 'right')
     hx = 24
-    hy = H - TH + 15
+    hy = H - TH
+    glow(surf, hx + hw // 2, hy + TH // 2 + 25, 95, (55, 75, 175), 9)
     draw_hero(surf, hx, hy, TH, 'right')
-    glow(surf, hx + hw // 2, hy + TH // 2, 90, (80, 100, 210), 9)
 
     # 적들 (중앙~우측)
-    draw_skeleton(surf,    500, H - 155, 3)
-    draw_dark_knight(surf, 670, H - 195, 3)
-    draw_slime(surf,       380, H - 115, 2, (45, 165, 70))
+    draw_skeleton(surf,    520, H - 150, 3)
+    draw_dark_knight(surf, 700, H - 190, 3)
+    draw_slime(surf,       410, H - 108, 2, (45, 165, 70))
 
     # 파티클
     scatter_particles(surf, rng, 180, 60, 580, H - 90, 55,
@@ -711,25 +757,24 @@ def make_library_hero(rng):
     surf.blit(fg, (0, H - 120))
 
     # ── 캐릭터 배치 (안전 영역 중앙 860×380 고려) ──────────────────
-    # 영웅 — 화면 중앙보다 약간 왼쪽
+    # 영웅 — 화면 중앙보다 약간 왼쪽 (뒤 오라 → 캐릭터)
     TH = 900
     hw, _ = hero_size(TH, 'right')
     hx = W // 2 - hw - 80
-    hy = H - TH + 40
+    hy = H - TH
+    glow(surf, hx + hw // 2, hy + TH // 2 + 60, 200, (55, 75, 175), 12)
     draw_hero(surf, hx, hy, TH, 'right')
-    glow(surf, hx + hw // 2, hy + TH // 2, 180, (70, 90, 200), 12)
-    glow(surf, hx + hw // 2, hy + TH // 2,  80, (140, 160, 255),  6)
 
     # 다크나이트 보스 — 중앙 오른쪽
-    draw_dark_knight(surf, W // 2 + 300, H - 320, 8)
-    glow(surf, W // 2 + 300, H - 200, 200, (80, 18, 130), 10)
+    draw_dark_knight(surf, W // 2 + 340, H - 300, 8)
+    glow(surf, W // 2 + 340, H - 190, 200, (80, 18, 130), 10)
 
     # 리치 — 우측
-    draw_reaper(surf, W * 3 // 4, H - 280, 7)
+    draw_reaper(surf, W * 3 // 4 + 40, H - 270, 7)
 
-    # 스켈레톤들 — 산발적으로
-    draw_skeleton(surf, W // 2 - 350, H - 220, 5)
-    draw_skeleton(surf, W * 3 // 4 + 280, H - 195, 4)
+    # 스켈레톤들 — 산발적으로 (영웅과 겹치지 않게)
+    draw_skeleton(surf, 820, H - 210, 5)
+    draw_skeleton(surf, W * 3 // 4 + 300, H - 190, 4)
 
     # 슬라임들
     draw_slime(surf, W // 4, H - 160, 4, (45, 165, 70))
@@ -850,34 +895,31 @@ def make_trailer_thumbnail(rng):
     surf.blit(fg, (0, H - 160))
 
     # ── 캐릭터 ──────────────────────────────────────────────────────
-    # 영웅 (좌측, 크게)
+    # 영웅 (좌측, 크게) — 뒤 오라 → 캐릭터
     TH = 780
     hw, _ = hero_size(TH, 'right')
     hx = int(W * 0.06)
-    hy = H - TH + 40
-    draw_hero(surf, hx, hy, TH, 'right')
+    hy = H - TH
     hcx, hcy = hx + hw // 2, hy + TH // 2
-    glow(surf, hcx, hcy, 200, (60, 85, 210), 13)
-    glow(surf, hcx, hcy,  90, (130, 150, 255),  6)
+    glow(surf, hcx, hcy + 50, 210, (55, 75, 180), 13)
     glow(surf, hcx, H - 30, 140, (50, 70, 190), 9)   # 발 아래 광원
+    draw_hero(surf, hx, hy, TH, 'right')
 
     # 다크나이트 보스 (우측, 매우 크게)
-    bkx = int(W * 0.78)
-    draw_dark_knight(surf, bkx, H - 330, 9)
-    glow(surf, bkx, H - 200, 260, (90, 16, 140), 12)
-    glow(surf, bkx, H - 200, 110, (160, 40, 210),  6)
+    bkx = int(W * 0.80)
+    draw_dark_knight(surf, bkx, H - 320, 9)
+    glow(surf, bkx, H - 190, 260, (90, 16, 140), 12)
 
     # 리퍼 (중앙 오른쪽)
-    draw_reaper(surf, int(W * 0.60), H - 270, 6)
+    draw_reaper(surf, int(W * 0.60), H - 260, 6)
 
-    # 스켈레톤 (중앙 왼쪽)
-    draw_skeleton(surf, int(W * 0.42), H - 220, 5)
+    # 스켈레톤 (중앙 왼쪽, 영웅 우측 밖)
+    draw_skeleton(surf, int(W * 0.46), H - 210, 5)
 
     # 배경 소적들 (작게, 분위기)
-    draw_slime(surf, int(W * 0.32), H - 135, 3, (40, 155, 65))
-    draw_slime(surf, int(W * 0.87), H - 130, 3, (40, 155, 65))
-    draw_skeleton(surf, int(W * 0.18), H - 180, 3)
-    draw_dark_knight(surf, int(W * 0.93), H - 200, 4)
+    draw_slime(surf, int(W * 0.35), H - 130, 3, (40, 155, 65))
+    draw_slime(surf, int(W * 0.90), H - 125, 3, (40, 155, 65))
+    draw_dark_knight(surf, int(W * 0.94), H - 195, 4)
 
     # ── 파티클 ─────────────────────────────────────────────────────
     scatter_particles(surf, rng, 100, 100, W - 200, H - 160, 220,

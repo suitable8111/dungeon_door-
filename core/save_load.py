@@ -50,6 +50,9 @@ def list_cards() -> list:
             cards.append({'slot': slot, 'exists': True,
                           'name': d.get('name') or pl.get('name') or 'Hero',
                           'char_class': d.get('char_class', 'warrior'),
+                          'appearance': d.get('appearance')
+                                        or pl.get('appearance')
+                                        or {'skin': 0, 'hair': 0, 'haircol': 0},
                           'floor': d.get('floor', 1),
                           'level': pl.get('level', 1)})
         else:
@@ -69,6 +72,8 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'floor': floor,
         'name':       name or getattr(player, 'char_name', '') or 'Hero',
         'char_class': char_class or getattr(player, 'char_class', 'warrior'),
+        'appearance': dict(getattr(player, 'appearance', None)
+                           or {'skin': 0, 'hair': 0, 'haircol': 0}),
         'player': {
             'hp': player.hp, 'max_hp': player.max_hp,
             'attack': player.attack, 'defense': player.defense,

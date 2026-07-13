@@ -12,6 +12,12 @@ except ImportError:
     DEFAULT_EQUIPPED = {'W': 'flash_dash', 'A': 'steel_whirl', 'S': 'regen_breath', 'D': 'judgment'}
 from core.lang import t, LANG_NAMES
 from map.tile import TileType
+from entities.avatar import (avatar_surface, SKIN_TONES, HAIR_STYLES,
+                             HAIR_COLORS, cycle as _appearance_cycle)
+from entities.item_icons import draw_mc_item
+
+# 아이템 아이콘을 마인크래프트 블록 스타일로 (False면 단색 스와치)
+USE_MC_ITEMS = True
 
 
 # ── 메뉴 전용 드로우 헬퍼 ────────────────────────────────────────────────
@@ -225,16 +231,17 @@ class HUD:
                     screen.blit(arr, (rect.left+8, rect.centery - arr.get_height()//2))
                 if card.get('exists'):
                     ccol = _CLASS_COL.get(card['char_class'], (200, 200, 210))
-                    # 직업 아이콘 (전사=검 / 궁수=활)
-                    self._draw_class_icon(screen, rect.left + 34, rect.centery,
-                                          card['char_class'], ccol)
+                    # 캐릭터 미니 아바타 (피부/헤어 반영)
+                    av = avatar_surface(bh - 6, card.get('appearance'),
+                                        card['char_class'], scale=2)
+                    screen.blit(av, (rect.left + 26, rect.centery - (bh - 6) // 2))
                     nm = self.font_lg.render(card['name'][:12], True, tc)
-                    screen.blit(nm, (rect.left + 54, rect.top + 6))
+                    screen.blit(nm, (rect.left + 70, rect.top + 6))
                     sub = self.font_sm.render(
                         f"{t('class_'+card['char_class'])}  ·  "
                         f"{t('card_floor_lv', card['floor'], card['level'])}",
                         True, ccol)
-                    screen.blit(sub, (rect.left + 54, rect.top + 30))
+                    screen.blit(sub, (rect.left + 70, rect.top + 30))
                     buttons.append((rect, f"slot:{card['slot']}"))
                     # 삭제 버튼 (우측 X)
                     dr = pygame.Rect(rect.right - 30, rect.centery - 10, 20, 20)
@@ -387,65 +394,126 @@ class HUD:
             pygame.draw.line(screen, (200, 205, 220), (cx - 6, cy + 6), (cx + 5, cy - 6), 3)
             pygame.draw.line(screen, col, (cx - 8, cy - 5), (cx - 3, cy - 8), 2)  # 가드
 
-    def render_char_create(self, screen, char_class, name, sel, mouse_pos=(0, 0)):
-        """캐릭터 생성 화면 — 직업 선택 + 이름 입력 + 미리보기."""
+    def _draw_selector_row(self, screen, x, y, w, label, value_surf, sel,
+                           row_idx, mouse_pos, buttons, swatch=None):
+        """라벨 + [◀ 값 ▶] 셀렉터 한 줄. prev/next 클릭 rect를 buttons에 추가."""
+        act = (sel == row_idx)
+        lbl = self.font_sm.render(label, True, (150, 150, 170))
+        screen.blit(lbl, (x, y - 15))
+        box = pygame.Rect(x, y, w, 38)
+        bg = (30, 28, 52) if act else (18, 16, 32)
+        bd = GOLD_COLOR if act else (66, 62, 96)
+        pygame.draw.rect(screen, bg, box, border_radius=5)
+        pygame.draw.rect(screen, bd, box, 2 if act else 1, border_radius=5)
+        # 화살표(삼각형 직접 그리기 — 픽셀 폰트에 ◀▶ 글리프 없음)
+        acol = GOLD_COLOR if act else (150, 150, 175)
+        cyv = box.centery
+        pygame.draw.polygon(screen, acol, [(box.left + 18, cyv - 7),
+                                           (box.left + 18, cyv + 7),
+                                           (box.left + 9,  cyv)])
+        pygame.draw.polygon(screen, acol, [(box.right - 18, cyv - 7),
+                                           (box.right - 18, cyv + 7),
+                                           (box.right - 9,  cyv)])
+        # 값: 색 스와치 또는 텍스트
+        if swatch is not None:
+            sw = pygame.Rect(box.centerx - 30, box.centery - 9, 60, 18)
+            pygame.draw.rect(screen, swatch, sw, border_radius=3)
+            pygame.draw.rect(screen, (10, 10, 20), sw, 1, border_radius=3)
+        if value_surf is not None:
+            screen.blit(value_surf, (box.centerx - value_surf.get_width() // 2,
+                                     box.centery - value_surf.get_height() // 2))
+        buttons.append((pygame.Rect(box.left, box.top, 34, 38), f'row_prev:{row_idx}'))
+        buttons.append((pygame.Rect(box.right - 34, box.top, 34, 38), f'row_next:{row_idx}'))
+
+    def render_char_create(self, screen, char_class, name, sel, mouse_pos=(0, 0),
+                           appearance=None):
+        """캐릭터 생성 화면 — 좌: 아바타 프리뷰 / 우: 직업·외형·이름 셀렉터."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         cx = W // 2
         screen.fill((7, 7, 16))
-        pw, ph = 520, 420
+        pw, ph = 620, 496
         px, py = cx - pw // 2, H // 2 - ph // 2
-        pygame.draw.rect(screen, (10, 10, 26, 240), (px, py, pw, ph), border_radius=8)
+        pygame.draw.rect(screen, (10, 10, 26), (px, py, pw, ph), border_radius=8)
         pygame.draw.rect(screen, (70, 66, 105), (px, py, pw, ph), 2, border_radius=8)
         title = self.font_lg.render(t('char_create_title'), True, GOLD_COLOR)
-        screen.blit(title, (cx - title.get_width() // 2, py + 18))
+        screen.blit(title, (cx - title.get_width() // 2, py + 20))
+        pygame.draw.line(screen, (50, 48, 78),
+                         (px + 24, py + 56), (px + pw - 24, py + 56))
 
         buttons = []
-        # ── 직업 선택 (◀ 전사 / 궁수 ▶) ──
-        cls_y = py + 74
-        is_archer = char_class == 'archer'
-        ccol = (120, 205, 150) if is_archer else (235, 185, 60)
-        # 좌우 화살표
-        larr = self.font_lg.render("◀", True, (180, 180, 200))
-        rarr = self.font_lg.render("▶", True, (180, 180, 200))
-        screen.blit(larr, (px + 40, cls_y + 30))
-        screen.blit(rarr, (px + pw - 40 - rarr.get_width(), cls_y + 30))
-        buttons.append((pygame.Rect(px + 30, cls_y + 20, 40, 50), 'class_prev'))
-        buttons.append((pygame.Rect(px + pw - 70, cls_y + 20, 40, 50), 'class_next'))
-        # 미리보기 아이콘 (크게)
-        self._draw_class_icon(screen, cx, cls_y + 8, char_class, ccol)
-        cls_name = self.font_lg.render(t('class_' + char_class), True, ccol)
-        screen.blit(cls_name, (cx - cls_name.get_width() // 2, cls_y + 38))
-        desc = self.font_sm.render(t('class_desc_' + char_class), True, (170, 170, 185))
-        screen.blit(desc, (cx - desc.get_width() // 2, cls_y + 66))
+        ccol = (120, 205, 150) if char_class == 'archer' else (235, 185, 60)
 
-        # ── 이름 입력 필드 ──
-        ny = cls_y + 108
-        lbl = self.font_md.render(t('char_name_label'), True, (150, 150, 170))
-        screen.blit(lbl, (px + 40, ny + 6))
-        field = pygame.Rect(px + 120, ny, pw - 160, 34)
-        pygame.draw.rect(screen, (20, 20, 38), field, border_radius=4)
-        pygame.draw.rect(screen, GOLD_COLOR if sel == 1 else (70, 66, 105),
-                         field, 2 if sel == 1 else 1, border_radius=4)
+        # ── 좌측: 아바타 프리뷰 박스 ──────────────────────────────────
+        prev_w, prev_h = 236, 320
+        prev_x, prev_y = px + 26, py + 78
+        pygame.draw.rect(screen, (16, 16, 30), (prev_x, prev_y, prev_w, prev_h),
+                         border_radius=6)
+        pygame.draw.rect(screen, ccol, (prev_x, prev_y, prev_w, prev_h), 2,
+                         border_radius=6)
+        # 바닥 원형 그림자
+        pygame.draw.ellipse(screen, (6, 6, 14),
+                            (prev_x + 58, prev_y + prev_h - 54, 120, 26))
+        av = avatar_surface(230, appearance, char_class, scale=11)
+        screen.blit(av, (prev_x + prev_w // 2 - 115, prev_y + 20))
+        cls_name = self.font_lg.render(t('class_' + char_class), True, ccol)
+        screen.blit(cls_name, (prev_x + prev_w // 2 - cls_name.get_width() // 2,
+                               prev_y + prev_h - 34))
+
+        # ── 우측: 셀렉터 열 ───────────────────────────────────────────
+        rx = px + 300
+        rw = pw - (rx - px) - 34
+        y = py + 94
+        gap = 60
+
+        # row 0: 직업
+        cv = self.font_md.render(t('class_' + char_class), True, ccol)
+        self._draw_selector_row(screen, rx, y, rw, t('char_class_label'),
+                                cv, sel, 0, mouse_pos, buttons)
+        y += gap
+        # row 1: 피부색
+        skin_col = SKIN_TONES[(appearance or {}).get('skin', 0) % len(SKIN_TONES)]
+        self._draw_selector_row(screen, rx, y, rw, t('char_skin_label'),
+                                None, sel, 1, mouse_pos, buttons, swatch=skin_col)
+        y += gap
+        # row 2: 헤어스타일
+        hi = (appearance or {}).get('hair', 0) % len(HAIR_STYLES)
+        hv = self.font_md.render(t('hair_' + HAIR_STYLES[hi]), True, (220, 220, 230))
+        self._draw_selector_row(screen, rx, y, rw, t('char_hair_label'),
+                                hv, sel, 2, mouse_pos, buttons)
+        y += gap
+        # row 3: 머리색
+        hair_col = HAIR_COLORS[(appearance or {}).get('haircol', 0) % len(HAIR_COLORS)]
+        self._draw_selector_row(screen, rx, y, rw, t('char_haircol_label'),
+                                None, sel, 3, mouse_pos, buttons, swatch=hair_col)
+        y += gap
+        # row 4: 이름 입력
+        nlbl = self.font_sm.render(t('char_name_label'), True, (150, 150, 170))
+        screen.blit(nlbl, (rx, y - 15))
+        field = pygame.Rect(rx, y, rw, 38)
+        act = (sel == 4)
+        pygame.draw.rect(screen, (20, 20, 38), field, border_radius=5)
+        pygame.draw.rect(screen, GOLD_COLOR if act else (66, 62, 96),
+                         field, 2 if act else 1, border_radius=5)
         shown = name or 'Hero'
-        caret = '_' if (sel == 1 and (pygame.time.get_ticks() // 500) % 2 == 0) else ''
+        caret = '_' if (act and (pygame.time.get_ticks() // 500) % 2 == 0) else ''
         ns = self.font_md.render(shown + caret, True,
                                  (255, 255, 255) if name else (110, 110, 130))
-        screen.blit(ns, (field.left + 10, field.centery - ns.get_height() // 2))
+        screen.blit(ns, (field.left + 12, field.centery - ns.get_height() // 2))
         buttons.append((field, 'name_field'))
 
-        # ── 생성 버튼 ──
-        cbtn = pygame.Rect(cx - 110, ny + 56, 220, 46)
-        act = sel == 2
-        bg_c, bd_c, tc = _btn_colors(act, cbtn.collidepoint(mouse_pos))
-        pygame.draw.rect(screen, bg_c, cbtn, border_radius=5)
-        pygame.draw.rect(screen, bd_c, cbtn, 2 if act else 1, border_radius=5)
+        # ── 생성 버튼 (하단 전체 폭) ──────────────────────────────────
+        cbtn = pygame.Rect(px + 26, py + ph - 66, pw - 52, 46)
+        cact = (sel == 5)
+        bg_c, bd_c, tc = _btn_colors(cact, cbtn.collidepoint(mouse_pos))
+        pygame.draw.rect(screen, bg_c, cbtn, border_radius=6)
+        pygame.draw.rect(screen, bd_c, cbtn, 2 if cact else 1, border_radius=6)
         cs = self.font_lg.render(t('char_create_btn'), True, tc)
         screen.blit(cs, (cbtn.centerx - cs.get_width() // 2,
                          cbtn.centery - cs.get_height() // 2))
         buttons.append((cbtn, 'create'))
 
         hint = self.font_sm.render(t('char_create_hint'), True, (90, 88, 120))
-        screen.blit(hint, (cx - hint.get_width() // 2, py + ph - 28))
+        screen.blit(hint, (cx - hint.get_width() // 2, py + ph - 92))
         self._char_create_buttons = buttons
         return buttons
 
@@ -1108,13 +1176,17 @@ class HUD:
 
             if i < len(inv):
                 item = inv[i]
-                # 아이콘 (색상 사각형)
-                ico_size = 28
+                # 아이콘
+                ico_size = 44 if USE_MC_ITEMS else 28
                 ico_x = sx + (cell - 2 - ico_size) // 2
-                ico_y = sy + 10
-                pygame.draw.rect(screen, item.color, (ico_x, ico_y, ico_size, ico_size), border_radius=3)
-                pygame.draw.rect(screen, tuple(max(0, c-60) for c in item.color),
-                                 (ico_x, ico_y, ico_size, ico_size), 1, border_radius=3)
+                ico_y = sy + 6
+                if USE_MC_ITEMS:
+                    draw_mc_item(screen, ico_x, ico_y, ico_size,
+                                 item.item_type, item.color)
+                else:
+                    pygame.draw.rect(screen, item.color, (ico_x, ico_y, ico_size, ico_size), border_radius=3)
+                    pygame.draw.rect(screen, tuple(max(0, c-60) for c in item.color),
+                                     (ico_x, ico_y, ico_size, ico_size), 1, border_radius=3)
                 # 이름 (2줄로 줄임)
                 name = item.name
                 if len(name) > 5:
@@ -2142,8 +2214,12 @@ class HUD:
             screen.blit(lbl_s, (sx + (SW - lbl_s.get_width()) // 2, sy + 4))
 
             if item:
-                ico = 10
-                pygame.draw.rect(screen, item.color, (sx + 5, sy + SH - ico - 5, ico, ico), border_radius=2)
+                ico = 16 if USE_MC_ITEMS else 10
+                if USE_MC_ITEMS:
+                    draw_mc_item(screen, sx + 3, sy + SH - ico - 3, ico,
+                                 item.item_type, item.color)
+                else:
+                    pygame.draw.rect(screen, item.color, (sx + 5, sy + SH - ico - 5, ico, ico), border_radius=2)
                 nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
                 broken = getattr(item, 'broken', False)
                 nm_s = self.font_sm.render(f"+{item.value} {nm}", True,
