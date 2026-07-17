@@ -233,6 +233,21 @@ def theme_index(floor_level: int) -> int:
     return min((floor_level - 1) // 50, len(_THEMES) - 1)
 
 
+THEME_COUNT = len(_THEMES)
+
+
+def theme_name(idx: int) -> str:
+    """테마 인덱스 → 현재 언어 이름 (정복 일지용)."""
+    if 0 <= idx < len(_THEMES):
+        return _THEMES[idx]['name']
+    return '???'
+
+
+def theme_floor_range(idx: int) -> tuple:
+    """테마 구간의 (시작층, 끝층)."""
+    return idx * 50 + 1, min((idx + 1) * 50, MAX_FLOOR)
+
+
 def is_new_theme(floor_level: int) -> bool:
     """이 층이 새 테마 구간의 첫 층인지."""
     return floor_level > 1 and (floor_level - 1) % 50 == 0

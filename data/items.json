@@ -502,5 +502,22 @@
     "type": "consumable",
     "effect": "repair",
     "value": 0
+  },
+  "abyss_maul": {
+    "name": "심연의 파쇄곤",
+    "color": [
+      150,
+      70,
+      225
+    ],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 999,
+    "tier": 0,
+    "endgame": true,
+    "name_en": "Abyss Maul",
+    "name_ja": "深淵の砕棍",
+    "name_zh": "深渊碎棍",
+    "name_ru": "Молот Бездны"
   }
 }

@@ -178,6 +178,38 @@ QUESTS = {
         },
     },
 
+    # ── 사냥꾼의 펫 계약 (villager_hunter) — 20층 도달 후 ──────────────
+    'pet_companion': {
+        'giver': 'villager_hunter', 'unlock': {'floor': 20},
+        'kind': 'kill_any', 'count': 20,
+        'reward': {'gold': 500, 'stones': 3, 'pet': 'attack'},
+        'text': {
+            'name':  {'ko': '길들일 동반자', 'en': 'A Loyal Companion', 'ja': '相棒の契約',
+                      'zh': '忠诚的伙伴', 'ru': 'Верный спутник'},
+            'desc':  {'ko': '몬스터 20마리 처치 → 펫 해금', 'en': 'Slay 20 monsters → unlock a pet',
+                      'ja': 'モンスター20体撃破 → ペット解禁', 'zh': '击杀20只怪物 → 解锁宠物',
+                      'ru': 'Убейте 20 монстров → питомец'},
+            'offer': {'ko': '20층까지 살아남았다니 대단해. 이 정도면 동반자 한 마리 맡겨도 되겠군. 몬스터 20마리만 잡아오면 길들인 정령을 붙여주지.',
+                      'en': "Survived to floor 20? Impressive. You've earned a companion. Cull 20 monsters and I'll bond a tamed spirit to you.",
+                      'ja': '20階まで生き延びたか、大したもんだ。相棒を一匹任せてもいい。モンスターを20体狩ってくれば、飼いならした精霊をつけてやる。',
+                      'zh': '能活到20层，了不起。够格带个伙伴了。猎杀20只怪物，我就把驯服的精灵交给你。',
+                      'ru': 'Дожил до 20 этажа? Впечатляет. Заслужил спутника. Убей 20 монстров — привяжу к тебе прирученного духа.'},
+            'active':{'ko': '아무 몬스터나 좋아. 20마리를 채워오게.', 'en': 'Any monster counts — bring me 20 kills.',
+                      'ja': 'どんなモンスターでもいい。20体分だ。', 'zh': '什么怪物都行，凑够20只。',
+                      'ru': 'Любые монстры сойдут — набей 20.'},
+            'done':  {'ko': '훌륭해! 자, 이 녀석이 이제 네 동반자다. B 키로 상태를 볼 수 있어.',
+                      'en': "Well done! This one's your companion now. Press B to check its status.",
+                      'ja': '見事だ! こいつが相棒だ。Bキーで状態を見られる。',
+                      'zh': '干得好！它现在是你的伙伴了。按B查看状态。',
+                      'ru': 'Отлично! Теперь он твой спутник. Нажми B для статуса.'},
+            'claimed':{'ko': '녀석을 잘 키워보게. 강화석은 사냥 중에 나올 걸세.',
+                       'en': "Raise it well. Upgrade stones drop as you hunt.",
+                       'ja': 'よく育ててやれ。強化石は狩りの最中に出る。',
+                       'zh': '好好养它。强化石会在狩猎中掉落。',
+                       'ru': 'Расти его. Камни выпадают на охоте.'},
+        },
+    },
+
     # ── 학자 이졸데 (villager_scholar) — 8층에서 등장 ─────────────────
     'scholar_depths': {
         'giver': 'villager_scholar', 'unlock': {'floor': 8},

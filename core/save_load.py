@@ -23,6 +23,20 @@ SAVE_PATH     = os.path.join(_DATA_DIR, 'savegame.json')   # 레거시(단일) �
 SETTINGS_PATH = os.path.join(_DATA_DIR, 'settings.json')
 RECORDS_PATH  = os.path.join(_DATA_DIR, 'records.json')
 
+
+def use_test_data(enable: bool = True):
+    """테스트 모드: 기록/창고를 격리된 *_test.json 파일로 리다이렉트.
+
+    test_main.py 에서 정복 일지/마스터 정산을 실제 세이브 오염 없이 시험할 때 사용.
+    """
+    global RECORDS_PATH, STORAGE_PATH
+    if enable:
+        RECORDS_PATH = os.path.join(_DATA_DIR, 'records_test.json')
+        STORAGE_PATH = os.path.join(_DATA_DIR, 'storage_test.json')
+    else:
+        RECORDS_PATH = os.path.join(_DATA_DIR, 'records.json')
+        STORAGE_PATH = os.path.join(_DATA_DIR, 'storage.json')
+
 # ── 세이브 슬롯 (캐릭터 카드) ────────────────────────────────────────
 SLOT_COUNT = 3
 
@@ -60,7 +74,15 @@ def list_cards() -> list:
     return cards
 
 _DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'en'}
-_DEFAULT_RECORDS  = {'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0}
+_DEFAULT_RECORDS  = {
+    'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0,
+    # ── 정복 일지 / 마스터 정산 (교차-런 프로필) ──
+    'theme_clears': {},        # {str(theme_idx): 클리어 횟수}
+    'game_cleared': False,     # 999층 최종 클리어 여부
+    'unlocked_titles': [],     # 해금 칭호 id 목록
+    'active_title': '',        # 현재 표시 칭호 id
+    'ng_plus': 0,              # New Game+ 회차 (골드 배율에 사용)
+}
 
 
 # ── 세이브 ──────────────────────────────────────────────────────────
@@ -83,6 +105,11 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
+            # 펫 시스템 (캐릭터 슬롯에 저장 — 런당 지속)
+            'is_pet_unlocked': player.is_pet_unlocked,
+            'pet_type':  player.pet_type,
+            'pet_level': player.pet_level,
+            'pet_stones': player.pet_stones,
             'inventory': [
                 {'key': item.key, 'enhance_level': item.enhance_level,
                  'durability': item.durability}
@@ -184,12 +211,19 @@ def save_storage(entries: list, capacity: int = STORAGE_BASE_CAP):
 
 # ── 최고 기록 ─────────────────────────────────────────────────────
 def load_records():
+    import copy
+    rec = copy.deepcopy(_DEFAULT_RECORDS)
     try:
         with open(RECORDS_PATH, encoding='utf-8') as f:
-            d = json.load(f)
-            return {**_DEFAULT_RECORDS, **d}
+            rec.update(json.load(f))
     except Exception:
-        return dict(_DEFAULT_RECORDS)
+        pass
+    # 가변 필드 방어 (구버전 세이브 호환)
+    if not isinstance(rec.get('theme_clears'), dict):
+        rec['theme_clears'] = {}
+    if not isinstance(rec.get('unlocked_titles'), list):
+        rec['unlocked_titles'] = []
+    return rec
 
 
 def save_records(d):
@@ -209,3 +243,40 @@ def update_records(floor, kills, gold):
     rec['best_gold']  = max(rec.get('best_gold',  0), gold)
     save_records(rec)
     return rec
+
+
+# ── 정복 일지 / 마스터 정산 ──────────────────────────────────────────────
+FINAL_TITLE = 'abyss_sovereign'   # [심연의 지배자]
+
+
+def record_theme_clear(theme_idx: int, records: dict | None = None) -> dict:
+    """지역 테마 한 구간을 완수했을 때 클리어 횟수 +1. 갱신 records 반환."""
+    rec = records if records is not None else load_records()
+    tc = rec.setdefault('theme_clears', {})
+    k = str(theme_idx)
+    tc[k] = tc.get(k, 0) + 1
+    save_records(rec)
+    return rec
+
+
+def grant_master_completion(records: dict | None = None) -> dict:
+    """999층 최종 클리어 영구 보상: 칭호 해금 + NG+ 회차 증가. records 반환.
+
+    종결 무기 지급은 storage(영구 창고)에서 별도 처리한다(게임 로직).
+    """
+    rec = records if records is not None else load_records()
+    rec['game_cleared'] = True
+    titles = rec.setdefault('unlocked_titles', [])
+    if FINAL_TITLE not in titles:
+        titles.append(FINAL_TITLE)
+    if not rec.get('active_title'):
+        rec['active_title'] = FINAL_TITLE
+    rec['ng_plus'] = rec.get('ng_plus', 0) + 1
+    save_records(rec)
+    return rec
+
+
+def ng_plus_gold_mult(records: dict | None = None) -> float:
+    """New Game+ 영구 골드 배율 (회차당 +50%)."""
+    rec = records if records is not None else load_records()
+    return 1.0 + 0.5 * rec.get('ng_plus', 0)

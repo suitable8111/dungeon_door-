@@ -17,6 +17,21 @@ def _smooth(t):
     return t * t * (3 - 2 * t)
 
 
+def _fade_text(txt, alpha):
+    """폰트 텍스트 서피스를 alpha로 안전하게 페이드.
+
+    set_alpha는 안티에일리어싱(픽셀 알파) 서피스에서 일부 환경(드라이버/포맷)
+    시 투명 배경이 불투명 사각형으로 깨진다 → convert_alpha + 픽셀 알파 곱.
+    """
+    try:
+        txt = txt.convert_alpha()
+    except Exception:
+        pass
+    txt.fill((255, 255, 255, max(0, min(255, alpha))),
+             special_flags=pygame.BLEND_RGBA_MULT)
+    return txt
+
+
 class Animator:
     def __init__(self):
         pygame.font.init()
@@ -146,15 +161,22 @@ class HitFlashAnim(_Anim):
         sx = (self.x - cam_x) * ts
         sy = (self.y - cam_y) * ts
 
-        # 데미지 없는 플래시(상태이상 표시 등)만 타일 틴트 사용 —
-        # 데미지 피격은 스프라이트 자체가 흰색으로 번쩍이므로 생략
+        # 데미지 없는 플래시(상태이상/버프 표시 등): 딱딱한 사각형 대신
+        # 부드러운 원형 글로우 펄스로 표시 (네모로 보이던 아티팩트 제거)
         if self.dmg <= 0:
-            if t < 0.3:
-                alpha = int(220 * (1 - t / 0.3))
-                flash = pygame.Surface((ts, ts))
-                flash.fill(self.color)
-                flash.set_alpha(alpha)
-                surf.blit(flash, (sx, sy))
+            if t < 0.55:
+                prog = t / 0.55
+                alpha = int(140 * (1 - prog))
+                if alpha > 4:
+                    rad = max(2, int(ts * (0.32 + 0.30 * prog)))
+                    cxp, cyp = sx + ts // 2, sy + ts // 2
+                    glow = pygame.Surface((ts * 2, ts * 2), pygame.SRCALPHA)
+                    c = self.color
+                    pygame.draw.circle(glow, (c[0], c[1], c[2], alpha), (ts, ts), rad)
+                    pygame.draw.circle(glow, (c[0], c[1], c[2], alpha // 2),
+                                       (ts, ts), min(ts, rad + 3), 2)
+                    surf.blit(glow, (cxp - ts, cyp - ts),
+                              special_flags=pygame.BLEND_ADD)
             return
 
         text_alpha = max(0, int(255 * (1 - t * 1.25)))
@@ -171,7 +193,7 @@ class HitFlashAnim(_Anim):
                 pop = 1.7 if t < 0.15 else 1.4
                 w, h = num_surf.get_size()
                 num_surf = pygame.transform.scale(num_surf, (int(w * pop), int(h * pop)))
-            num_surf.set_alpha(text_alpha)
+            num_surf = _fade_text(num_surf, text_alpha)
             nx = sx + ts // 2 - num_surf.get_width() // 2 + self._jx
             surf.blit(num_surf, (nx, float_y))
 
@@ -310,7 +332,7 @@ class CalloutAnim(_Anim):
             w, h = txt.get_size()
             k = 1.6 - 0.6 * (t / 0.18)
             txt = pygame.transform.scale(txt, (int(w * k), int(h * k)))
-        txt.set_alpha(alpha)
+        txt = _fade_text(txt, alpha)
         sx = (self.x - cam_x) * ts + ts // 2 - txt.get_width() // 2
         sy = (self.y - cam_y) * ts - 6 - int(_smooth(t) * 16)
         surf.blit(txt, (sx, sy))
@@ -336,7 +358,7 @@ class GoldPopAnim(_Anim):
             return
         sy = (self.y - cam_y) * ts + ts // 2 - int(_smooth(k) * ts * 0.9)
         txt = font.render(f"+{self.amount} G", True, (255, 214, 84))
-        txt.set_alpha(alpha)
+        txt = _fade_text(txt, alpha)
         surf.blit(txt, ((self.x - cam_x) * ts + ts // 2
                         - txt.get_width() // 2 + self._jx, sy))
 
@@ -382,12 +404,12 @@ class BannerAnim(_Anim):
         dark = f.render(self.text, True,
                         tuple(max(0, c // 4) for c in self.color))
         dark = pygame.transform.scale(dark, (sw, sh))
-        dark.set_alpha(alpha)
+        dark = _fade_text(dark, alpha)
         for dx, dy in ((-2, 0), (2, 0), (0, -2), (0, 2)):
             surf.blit(dark, (cx - sw // 2 + dx, self.y - sh // 2 + dy))
 
         main = pygame.transform.scale(base, (sw, sh))
-        main.set_alpha(alpha)
+        main = _fade_text(main, alpha)
         surf.blit(main, (cx - sw // 2, self.y - sh // 2))
 
 

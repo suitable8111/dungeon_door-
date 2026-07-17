@@ -56,6 +56,17 @@ class Player(Entity):
         self.damage_reduce_ms  = 0    # 버프 잔여 시간
         self.atk_bonus_pct     = 0.0  # 전투 함성: 공격력 증가율
         self.atk_bonus_ms      = 0    # 버프 잔여 시간
+        # 궁수 자동 사격 (Auto Volley) 버프
+        self.auto_volley_ms    = 0    # 버프 잔여 시간
+        self.auto_volley_mul   = 1.0  # 화살 위력 배율 (강화 레벨 연동)
+        self.auto_volley_tick  = 0    # 다음 발사까지 잔여 (ms)
+
+        # 펫(동반자) 시스템 — 값만 저장, 활성 Pet 객체는 Game이 보유
+        self.is_pet_unlocked   = False
+        self.pet_type          = 'attack'   # 'buff' | 'debuff' | 'attack'
+        self.pet_level         = 1
+        self.pet_stones        = 0          # 펫 전용 강화석 보유 수
+        self.active_pet        = None       # 런타임 Pet 객체 (직렬화 X)
 
         # 인벤토리 (최대 20칸)
         self.inventory: list    = []
@@ -247,6 +258,11 @@ class Player(Entity):
         p.attack_speed  = data.get('attack_speed', 1.0)
         p.evasion       = data.get('evasion', 0)
         p.move_speed    = data.get('move_speed', 1.0)
+        # 펫 (구버전 세이브 안전 기본값)
+        p.is_pet_unlocked = data.get('is_pet_unlocked', False)
+        p.pet_type        = data.get('pet_type', 'attack')
+        p.pet_level       = data.get('pet_level', 1)
+        p.pet_stones      = data.get('pet_stones', 0)
 
         def _make_item(entry, idd):
             # entry: 구 포맷 str or 신 포맷 {'key':..,'enhance_level':..}

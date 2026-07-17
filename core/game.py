@@ -17,17 +17,23 @@ from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRA
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
                          SKILL_SP_COST, ALL_SKILL_DEFS, DEFAULT_EQUIPPED,
                          ENCHANT_DEFS, ENCHANT_TYPES, ENCHANT_MAX_LEVEL,
-                         default_equipped_for)
+                         default_equipped_for, combo_def)
 from core.save_load import (save_game, load_game, has_save, delete_save,
                              load_settings, save_settings,
-                             load_records, update_records,
+                             load_records, update_records, save_records,
+                             record_theme_clear, grant_master_completion,
+                             ng_plus_gold_mult, FINAL_TITLE,
+                             load_storage, save_storage,
                              list_cards, migrate_legacy_save, SLOT_COUNT)
+from core.net_stub import NetworkManager, build_user_profile
+from map.theme import theme_index
 from core.lang import t, set_lang
 from core.combat import roll_damage
 from map.generator import generate_dungeon
 from map.tile import Tile, TileType
 from map.theme import get_theme, is_new_theme, MAX_FLOOR
 from entities.player import Player
+from entities.pet import Pet, PET_META, PET_TYPES
 from ui.hud import HUD
 from data_loader import load_enemies, load_items
 
@@ -359,9 +365,14 @@ class Game:
         # 일시정지
         self._pause_sel = 0
 
-        # 기록
+        # 기록 / 정복 일지 / 마스터 정산
         self._run_kills = 0
         self._records   = load_records()
+        self._gold_mult = ng_plus_gold_mult(self._records)   # NG+ 영구 골드 배율
+        self._title_badge = bool(self._records.get('active_title'))  # 칭호 뱃지 이펙트
+        self._journal_return_state = 'playing'
+        # 멀티플레이 스텁 (미래용 · 현재 비동작)
+        self._net = NetworkManager()
 
         # 테스트 모드
         self._is_test_mode = False
@@ -390,6 +401,9 @@ class Game:
         self._shoot_ms          = 0.0
         self.state  = 'menu'
         self.player  = None
+        self._pet    = None          # 활성 Pet 객체 (런타임)
+        self._pet_sel = 0            # 펫 상태창 커서
+        self._pet_trail = []         # 플레이어 경로(타일) — 펫이 밟고 따라감
         self.dungeon = None
         self.camera  = None
 
@@ -523,6 +537,11 @@ class Game:
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
+                    if self.player.char_class == 'archer':
+                        self._update_auto_volley(world_dt)
+                    if self._pet:                       # 펫: 경로 갱신 → 추종 + 능력
+                        self._update_pet_trail()
+                        self._pet.update(world_dt, self)
                     # 방어구 파손 경고 소비 (Player.take_damage가 기록)
                     for _broken in self.player.just_broken:
                         self.messages.append((t('armor_broken', _broken.name), 'bad'))
@@ -700,6 +719,13 @@ class Game:
     def start_test_mode(self, floor: int = 1, char_class='warrior'):
         """python3 main.py -test [층수] 로 호출 — 최대 스탯으로 지정 층 시작."""
         self._is_test_mode    = True
+        # 기록/창고를 격리된 *_test.json 으로 (실제 세이브 오염 없이 일지/정산 시험)
+        from core.save_load import use_test_data
+        use_test_data(True)
+        self._records = load_records()
+        self._storage, self._storage_cap = load_storage()
+        self._gold_mult = ng_plus_gold_mult(self._records)
+        self._title_badge = bool(self._records.get('active_title'))
         self._save_data       = None
         self._char_class      = char_class if char_class in ('warrior', 'archer') else 'warrior'
         self._char_name       = 'TestHero'
@@ -735,6 +761,9 @@ class Game:
         p.evasion      = 40     # 회피율 최대
         p.gold         = 99999
         self._skill_points = 99
+        # [TEST] 펫 즉시 해금 + 강화석 지급 (B 키로 상태창)
+        p.pet_stones = 50
+        self.unlock_pet('attack')
         # 강화 시스템 테스트용 아이템
         from entities.item import Item as _Item
         p.enhance_stones = 100
@@ -744,13 +773,29 @@ class Game:
         p.inventory.append(_Item(0, 0, _armor_data))
         self.dungeon.reveal_all()
         self.state = 'playing'
-        self.messages.append(('[TEST] 테스트 모드 — 저장 없음', 'info'))
+        self.messages.append(('[TEST] 테스트 모드 — 격리 기록(*_test.json)', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
+        self.messages.append(('[TEST] J 정복일지 · [ 테마+1 · ] 999정산 · \\ 리셋', 'info'))
 
     def start_town_test(self, floor: int = 1, char_class='warrior'):
         """python3 test_main.py town [층] — 던전 세션 생성 후 곧장 마을 진입."""
         self.start_test_mode(floor, char_class=char_class)
         self._enter_town()
+
+    def start_journal_test(self, char_class='warrior'):
+        """python3 test_main.py journal — 정복 일지/정산 시험용.
+
+        격리 기록에 샘플 데이터를 심고 마을에서 시작 (일지·칭호 뱃지 즉시 확인).
+        """
+        self.start_test_mode(floor=520, char_class=char_class)
+        from core.save_load import save_records
+        self._records.update({
+            'theme_clears': {'0': 7, '1': 4, '2': 3, '3': 2, '4': 1, '6': 1},
+            'best_floor': max(520, self._records.get('best_floor', 0)),
+        })
+        save_records(self._records)
+        self._enter_town()
+        self.messages.append(('[TEST] 샘플 일지 로드 — J로 열기, ] 로 999정산', 'good'))
 
     def start_burning_mode(self, char_class='warrior'):
         """python3 test_main.py bunning — 버닝 스테이지 직행."""
@@ -819,6 +864,7 @@ class Game:
         self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data,
                                         char_class=self._char_class, char_name=self._char_name,
                                         appearance=self._char_appearance)
+        self._attach_pet()
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         if not self._is_test_mode:
@@ -865,6 +911,12 @@ class Game:
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
+        # 펫: 층 이동 시 위치 재동기화 (신규게임이면 아직 미해금)
+        if self._pet:
+            self._pet.snap_to(self.player.x, self.player.y)
+            self._pet_trail = [(self.player.x, self.player.y)]
+        elif self.player and self.player.is_pet_unlocked:
+            self._attach_pet()
         if self._is_test_mode:
             self.dungeon.reveal_all()
         else:
@@ -1007,6 +1059,32 @@ class Game:
                         c = self._cards[self._menu_sel]
                         if c.get('exists'):
                             self._delete_card(c['slot'])
+                elif event.key == pygame.K_j:
+                    # 정복 일지 토글 (플레이/마을·창고·주막에서 열람)
+                    if self.state == 'journal':
+                        self._close_journal()
+                    elif self.state in ('playing', 'storage', 'inn'):
+                        self._open_journal()
+                elif self._is_test_mode and event.key == pygame.K_LEFTBRACKET:
+                    # [TEST] 현재 층 테마 클리어 +1
+                    self._record_theme_clear_for(self.floor)
+                    self.messages.append(('[TEST] 테마 클리어 +1 (일지 J)', 'good'))
+                elif self._is_test_mode and event.key == pygame.K_RIGHTBRACKET:
+                    # [TEST] 999 마스터 정산 강제 발동
+                    self._check_game_complete()
+                elif self._is_test_mode and event.key == pygame.K_BACKSLASH:
+                    # [TEST] 테스트 기록 초기화
+                    from core.save_load import save_records
+                    self._records = {**self._records, 'theme_clears': {},
+                                     'game_cleared': False, 'unlocked_titles': [],
+                                     'active_title': '', 'ng_plus': 0}
+                    save_records(self._records)
+                    self._gold_mult = 1.0; self._title_badge = False
+                    self.messages.append(('[TEST] 기록 초기화됨', 'info'))
+                elif event.key == pygame.K_b and self.state in ('playing', 'storage', 'inn'):
+                    self._open_pet_status()          # 펫 상태창 (B)
+                elif self.state == 'pet':
+                    self._handle_pet_key(event.key)
 
         # 캐릭터 생성 화면은 raw 키 입력 전용 — 액션 처리 건너뜀
         if self.state == 'char_create':
@@ -1035,6 +1113,10 @@ class Game:
                     self.state = 'playing'
                 elif self.state in ('storage', 'inn', 'questlog'):
                     self.state = 'playing'
+                elif self.state == 'journal':
+                    self._close_journal()
+                elif self.state == 'pet':
+                    self._close_pet_status()
                 elif self.state == 'dialog':
                     self._dialog_close(declined=True)
                 elif self.state == 'paused':
@@ -1593,11 +1675,17 @@ class Game:
         if target_tile.tile_type == TileType.DOOR:
             self.audio.play('stairs')
             if self.floor >= MAX_FLOOR:
+                # 999층 최종 클리어 — 마스터 정산 보상 지급 후 종료
+                self._record_theme_clear_for(self.floor)
+                self._check_game_complete()
                 self.messages.append((t('victory'), 'good'))
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
                 delete_save(self._save_slot)
                 self.state = 'game_over'
             else:
+                # 테마 구간 경계를 넘으면(예: 50→51) 방금 완수한 테마 +1
+                if theme_index(self.floor + 1) > theme_index(self.floor):
+                    self._record_theme_clear_for(self.floor)
                 self.floor += 1
                 if not self._is_test_mode:
                     self.achievements.check_floor(self.floor)
@@ -1679,7 +1767,7 @@ class Game:
             if now - self._last_exhaust_msg > 1500:
                 self._last_exhaust_msg = now
                 self.messages.append((t('exhausted'), 'warn'))
-                self.animator.add(CalloutAnim(p.x, p.y, '···',
+                self.animator.add(CalloutAnim(p.x, p.y, '...',
                                               (200, 200, 140)))
             self.audio.play('exhaust')
             return False
@@ -1953,8 +2041,15 @@ class Game:
             self._bump_kill_combo()
             self._on_prop_broken(enemy)
             return
-        gold = enemy.gold_drop
+        gold = int(enemy.gold_drop * self._gold_mult)   # NG+ 영구 골드 배율
         self._run_kills += 1
+        # 펫 강화석 드롭 (해금 후): 일반 3% · 보스/엘리트 30%
+        if self.player.is_pet_unlocked:
+            drop_p = 0.30 if (enemy.is_boss or enemy.elite) else 0.03
+            if random.random() < drop_p:
+                self.player.pet_stones += 1
+                self.animator.add(CalloutAnim(enemy.x, enemy.y, '+STONE', (185, 150, 255)))
+                self.messages.append((t('pet_stone_drop', self.player.pet_stones), 'good'))
         # 처치 SP 회복: 일반 15% / 엘리트 30% / 보스 전량 — 전투를 이어가는 연료
         pct = 1.0 if enemy.is_boss else (0.30 if enemy.elite else 0.15)
         self.player.stamina = min(self.player.stamina_max,
@@ -2029,7 +2124,8 @@ class Game:
                         self.player.level >= cdef['level_req'] and
                         all(self._skill_levels.get(self._equipped_skills.get(k, ''), 1) >= slv_req for k in cid)):
                     self._unlocked_combos.add(cid)
-                    self.messages.append((t('combo_unlock', cdef['name']), 'good'))
+                    _nm = combo_def(cid, self.player.char_class)['name']
+                    self.messages.append((t('combo_unlock', _nm), 'good'))
         self.dungeon.enemies.remove(enemy)
         # 드라마틱 마무리 슬로모션: 보스 막타 / 층의 마지막 몬스터
         if enemy.is_boss:
@@ -2077,7 +2173,7 @@ class Game:
     def _on_prop_broken(self, prop):
         self.player.stamina = min(self.player.stamina_max,
                                   self.player.stamina + 5)   # 소량 SP 회복
-        gold = prop.gold_drop
+        gold = int(prop.gold_drop * self._gold_mult)     # NG+ 영구 골드 배율
         if gold:
             self.player.gold += gold                          # 상태: 즉시 지급
             self.vfx_loot.spawn_gold(prop.x, prop.y, gold)    # 연출: 코인 산탄
@@ -2103,7 +2199,7 @@ class Game:
             return
         if item.effect == 'unlock_combo':
             combo_id = str(item.value)
-            cdef = COMBO_SKILL_DEFS.get(combo_id)
+            cdef = combo_def(combo_id, self.player.char_class)
             self.dungeon.remove_item(item)
             self.audio.play('pickup')
             if cdef:
@@ -2205,6 +2301,191 @@ class Game:
         if moved:
             self.messages.append((t('town_deposit', moved), 'info'))
         self.audio.play('stairs')
+        # 방 입장 시 자기 프로필 브로드캐스트 (스텁 · 미래 멀티플레이 결합점)
+        self._broadcast_user_profile()
+
+    # ── 정복 일지 / 마스터 정산 ─────────────────────────────────────────
+    def _record_theme_clear_for(self, floor):
+        """해당 층이 속한 테마 구간을 1회 완수 처리 (기록 누적).
+
+        테스트 모드에서는 격리된 *_test.json 에 기록된다(use_test_data).
+        """
+        idx = theme_index(floor)
+        self._records = record_theme_clear(idx, self._records)
+
+    def _check_game_complete(self):
+        """999층 최종 클리어 감지 → 영구 보상 지급 (최초 1회 강제)."""
+        first_time = not self._records.get('game_cleared', False)
+        # 칭호 해금 + NG+ 회차 증가 (반복 클리어도 NG+는 누적)
+        self._records = grant_master_completion(self._records)
+        self._grant_endgame_weapon()
+        self._gold_mult = ng_plus_gold_mult(self._records)   # 즉시 반영
+        self._title_badge = True
+        self._broadcast_user_profile()
+        self.messages.append((t('master_complete'), 'good'))
+        self.messages.append((t('title_unlock', t('title_abyss_sovereign')), 'good'))
+        self.messages.append((t('ngplus_on', int(self._gold_mult * 100)), 'good'))
+        if first_time:
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self.audio.play('levelup_big')
+
+    def _grant_endgame_weapon(self):
+        """종결 무기 [심연의 파쇄곤]을 영구 창고에 지급 (중복 방지)."""
+        if any(e.get('key') == 'abyss_maul' for e in self._storage):
+            return
+        if len(self._storage) >= self._storage_cap:
+            self._storage_cap += 1        # 보상은 용량 초과해도 반드시 지급
+        self._storage.append({'key': 'abyss_maul',
+                              'enhance_level': 0, 'durability': 999999})
+        save_storage(self._storage, self._storage_cap)
+        self.messages.append((t('endgame_weapon_grant'), 'good'))
+
+    def _broadcast_user_profile(self):
+        """USER_PROFILE 패킷 구성 후 네트워크 스텁으로 브로드캐스트."""
+        name = getattr(self, '_char_name', None) or getattr(self.player, 'char_name', 'Hero')
+        prof = build_user_profile(name, self._records)
+        self._net.broadcast_profile(prof)
+
+    def _open_journal(self):
+        self._journal_return_state = self.state
+        self.state = 'journal'
+        self.audio.play('menu_select')
+
+    def _close_journal(self):
+        self.state = getattr(self, '_journal_return_state', 'playing')
+
+    # ── 펫 시스템 ────────────────────────────────────────────────────────
+    def _attach_pet(self):
+        """플레이어 데이터로 활성 Pet 객체 (재)생성. 미해금이면 None."""
+        p = self.player
+        if p and getattr(p, 'is_pet_unlocked', False):
+            self._pet = Pet(p.pet_type, p.pet_level)
+            self._pet.snap_to(p.x, p.y)
+            self._pet_trail = [(p.x, p.y)]      # 경로 초기화
+            p.active_pet = self._pet
+        else:
+            self._pet = None
+            self._pet_trail = []
+            if p:
+                p.active_pet = None
+
+    def _update_pet_trail(self):
+        """플레이어가 새 타일로 이동할 때마다 경로에 기록.
+
+        인접 1칸 이동은 경로에 추가(펫이 그 길을 밟음), 대시/텔레포트 등
+        비인접 점프는 경로를 리셋하고 펫을 순간이동시켜 벽 통과를 막는다.
+        """
+        p = self.player
+        trail = self._pet_trail
+        cur = (p.x, p.y)
+        if not trail:
+            trail.append(cur); return
+        if trail[-1] == cur:
+            return
+        if abs(cur[0] - trail[-1][0]) + abs(cur[1] - trail[-1][1]) == 1:
+            trail.append(cur)
+            if len(trail) > 48:
+                trail.pop(0)
+                if self._pet:
+                    self._pet._ti = max(0, self._pet._ti - 1)
+        else:                                    # 대시/전이 — 경로 리셋
+            trail.clear(); trail.append(cur)
+            if self._pet:
+                self._pet.snap_to(p.x, p.y)
+
+    def unlock_pet(self, pet_type='attack'):
+        """펫 해금 트리거 — 기본 펫 지급 (20층 퀘스트 완료 시 호출)."""
+        p = self.player
+        if not p or p.is_pet_unlocked:
+            return False
+        p.is_pet_unlocked = True
+        p.pet_type = pet_type if pet_type in PET_TYPES else 'attack'
+        p.pet_level = 1
+        self._attach_pet()
+        self.messages.append((t('pet_unlocked', t(PET_META[p.pet_type]['name_key'])), 'good'))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.audio.play('levelup')
+        return True
+
+    # 능력 콜백 (Pet._activate 에서 호출) ─────────────────────────────────
+    def _pet_buff(self, pct, dur_ms):
+        p = self.player
+        p.atk_bonus_pct = max(getattr(p, 'atk_bonus_pct', 0.0), pct)
+        p.atk_bonus_ms  = max(getattr(p, 'atk_bonus_ms', 0), dur_ms)
+        self.animator.particles.emit_combo_tier(p.x, p.y, (255, 225, 120))
+
+    def _pet_debuff(self, enemy, slow_pct, dur_ms):
+        enemy.slowed_ms = max(getattr(enemy, 'slowed_ms', 0), dur_ms)
+        enemy.slow_pct  = max(getattr(enemy, 'slow_pct', 0.0), slow_pct)
+        self.animator.add(HitFlashAnim(enemy.x, enemy.y, 0, (170, 140, 255)))
+        self.animator.particles.emit_combo_tier(enemy.x, enemy.y, (170, 140, 255))
+
+    def _pet_attack(self, pet, enemy):
+        dmg = max(1, int(self._skill_atk * pet.atk_coeff))
+        self.animator.add(BoltAnim(pet.x, pet.y, enemy.x, enemy.y, (255, 150, 120)))
+        self.audio.play('skill_dash')
+        enemy.take_damage(dmg)
+        self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 150, 120)))
+        self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
+        if not enemy.is_alive():
+            self._on_enemy_killed(enemy)
+
+    # 펫 상태창 / 강화 ────────────────────────────────────────────────────
+    def _open_pet_status(self):
+        if not (self.player and self.player.is_pet_unlocked):
+            self.messages.append((t('pet_locked'), 'info'))
+            return
+        self._pet_return_state = self.state
+        self.state = 'pet'
+        self.audio.play('menu_select')
+
+    def _close_pet_status(self):
+        self.state = getattr(self, '_pet_return_state', 'playing')
+
+    def _cycle_pet_type(self, delta):
+        """펫 타입 전환 (상태창에서 ←→). 레벨/강화석은 유지."""
+        p = self.player
+        if not (p and p.is_pet_unlocked):
+            return
+        i = (PET_TYPES.index(p.pet_type) + delta) % len(PET_TYPES)
+        p.pet_type = PET_TYPES[i]
+        self._attach_pet()
+        self.audio.play('menu_select')
+
+    def upgrade_pet(self):
+        """골드+강화석 소모 → 성공 확률에 따라 펫 레벨/계수 상승."""
+        p = self.player
+        if not (p and p.is_pet_unlocked and self._pet):
+            return False
+        gold_cost, stone_cost = self._pet.next_cost()
+        if p.pet_stones < stone_cost:
+            self.messages.append((t('pet_need_stones', stone_cost), 'warn')); return False
+        if p.gold < gold_cost:
+            self.messages.append((t('pet_need_gold', gold_cost), 'warn')); return False
+        p.pet_stones -= stone_cost
+        p.gold       -= gold_cost
+        if random.random() < self._pet.success_chance():
+            p.pet_level += 1
+            self._attach_pet()
+            self.messages.append((t('pet_upgrade_ok', p.pet_level), 'good'))
+            self.animator.particles.emit_levelup(p.x, p.y)
+            self.audio.play('enhance_success' if False else 'levelup')
+        else:
+            self.messages.append((t('pet_upgrade_fail'), 'warn'))
+            self.audio.play('menu_select')
+        return True
+
+    def _handle_pet_key(self, key):
+        """펫 상태창 입력 (ESC는 액션 파이프라인이 처리)."""
+        import pygame as _pg
+        if key == _pg.K_b:
+            self._close_pet_status()
+        elif key in (_pg.K_LEFT, _pg.K_a):
+            self._cycle_pet_type(-1)
+        elif key in (_pg.K_RIGHT, _pg.K_d):
+            self._cycle_pet_type(1)
+        elif key in (_pg.K_u, _pg.K_RETURN):
+            self.upgrade_pet()
 
     def _return_from_town(self):
         """마을 포탈 재진입: 저장해 둔 던전 세션 복원 (사냥터 그 자리)."""
@@ -2400,6 +2681,10 @@ class Game:
         stones = r.get('stones', 0)
         if stones:
             self.player.enhance_stones += stones
+        # 펫 해금 보상 (예: 사냥꾼의 20층 게이팅 퀘스트)
+        pet = r.get('pet')
+        if pet:
+            self.unlock_pet(pet)
         for key in r.get('items', ()):
             if key in self._item_data and \
                     len(self.player.inventory) < self.player.max_inventory:
@@ -3211,7 +3496,7 @@ class Game:
 
     # ─────────────── 조합 스킬 ───────────────────────────────────────
     def _use_combo_skill(self, combo_id):
-        cdef = COMBO_SKILL_DEFS.get(combo_id)
+        cdef = combo_def(combo_id, self.player.char_class)
         if not cdef:
             return False
         if combo_id not in self._unlocked_combos:
@@ -3230,7 +3515,9 @@ class Game:
         if cancel_ok:
             self._do_drive_cancel()
         if combo_id == 'WS': return self._skill_fortify()
-        if combo_id == 'AD': return self._skill_thunder()
+        if combo_id == 'AD':
+            return (self._skill_auto_volley() if self.player.char_class == 'archer'
+                    else self._skill_thunder())
         if combo_id == 'WA': return self._skill_frost()
         if combo_id == 'WD': return self._skill_wind()
         return False
@@ -3294,6 +3581,59 @@ class Game:
         self.audio.play('skill_whirl')
         self.skills.trigger('AD')
         return True
+
+    # ── 궁수 자동 사격 (Auto Volley) ─────────────────────────────────────
+    _AUTO_VOLLEY_INTERVAL = 480   # ms, 발사 간격
+    _AUTO_VOLLEY_RANGE    = 11    # 타일 (맨해튼)
+
+    def _skill_auto_volley(self):
+        """발동 시 일정 시간 자동으로 화살을 발사하는 버프. 강화(D스킬 Lv) 연동."""
+        lvl = self._skill_levels.get(self._equipped_skills.get('D', 'power_shot'), 1)
+        lvl = max(1, min(3, lvl))
+        dur = 10000 * lvl                         # 10 / 20 / 30초
+        mul = 1.0 + 0.4 * (lvl - 1)               # Lv1 1.0 · Lv2 1.4 · Lv3 1.8
+        p = self.player
+        p.auto_volley_ms   = dur
+        p.auto_volley_mul  = mul
+        p.auto_volley_tick = 0                     # 즉시 첫 발
+        # 쿨다운 = 지속시간 + 5초 (짧은 공백)
+        self.skills.set_cd_override('AD', dur + 5000)
+        self.skills.trigger('AD')
+        self.audio.play('bow_shoot')
+        self.messages.append((t('skill_auto_volley', dur // 1000), 'good'))
+        self.animator.add(CalloutAnim(p.x, p.y, 'AUTO!', (120, 220, 255)))
+        return True
+
+    def _update_auto_volley(self, dt):
+        p = self.player
+        if getattr(p, 'auto_volley_ms', 0) <= 0:
+            return
+        p.auto_volley_ms = max(0, p.auto_volley_ms - dt)
+        p.auto_volley_tick -= dt
+        if p.auto_volley_tick > 0:
+            return
+        p.auto_volley_tick += self._AUTO_VOLLEY_INTERVAL
+        # 가장 가까운 시야 내 생존 적
+        best, bestd = None, 999
+        for e in self.dungeon.enemies:
+            if not e.is_alive() or not self.dungeon.tiles[e.y][e.x].visible:
+                continue
+            d = abs(e.x - p.x) + abs(e.y - p.y)
+            if d <= self._AUTO_VOLLEY_RANGE and d < bestd:
+                best, bestd = e, d
+        if best is None:
+            return
+        dx, dy = best.x - p.x, best.y - p.y
+        face = ('right' if dx > 0 else 'left') if abs(dx) >= abs(dy) \
+            else ('down' if dy > 0 else 'up')
+        self.animator.add(ArrowAnim(p.x, p.y, best.x, best.y, face, (150, 230, 255)))
+        self.audio.play('bow_shoot')
+        dmg = roll_damage(self._skill_atk, best.defense, p.auto_volley_mul)
+        best.take_damage(dmg)
+        self.animator.add(HitFlashAnim(best.x, best.y, dmg, (150, 230, 255)))
+        self.animator.particles.emit_basic_hit(best.x, best.y)
+        if not best.is_alive():
+            self._on_enemy_killed(best)
 
     def _skill_frost(self):
         px, py = self.player.x, self.player.y
@@ -3985,6 +4325,11 @@ class Game:
         elif self.state == 'questlog':
             self.hud.render_questlog(self.screen, self._quests,
                                      self._max_floor_reached)
+        elif self.state == 'journal':
+            self.hud.render_journal(self.screen, self._records,
+                                    max(self.floor, self._records.get('best_floor', 0)))
+        elif self.state == 'pet':
+            self.hud.render_pet_status(self.screen, self.player, self._pet)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel,
                                    mouse_pos=pygame.mouse.get_pos())
@@ -4104,6 +4449,10 @@ class Game:
             self._fortify_effect.draw_below(self._game_surf, px, py)
 
         self._draw_player_sprite(px, py)
+
+        # 펫 (플레이어 근처, 카메라 오프셋 적용)
+        if self._pet and not self._in_town:
+            self._pet.draw(self._game_surf, cx, cy)
 
         # 강화술 상승 파티클 (플레이어 위)
         if self._fortify_effect and self._fortify_effect.alive:
@@ -4470,6 +4819,26 @@ class Game:
                              phase, ap, cls)
             if cls == 'archer':
                 draw_archer_bow(self._game_surf, x, y, facing, phase)
+        # 칭호 뱃지 이펙트 (마을에서 [심연의 지배자] 반짝임)
+        if getattr(self, '_title_badge', False) and self._in_town:
+            self._draw_title_badge(x, y)
+
+    def _draw_title_badge(self, x, y):
+        """플레이어 머리 위 반짝이는 도트 왕관 뱃지."""
+        s = self._game_surf
+        tk = pygame.time.get_ticks()
+        bob = int(2 * math.sin(tk * 0.005))
+        cx, cy = x + TILE_SIZE // 2, y - 6 + bob
+        glow = (255, 235, 120) if (tk // 250) % 2 == 0 else (235, 185, 60)
+        # 작은 왕관 (도트)
+        for dx in (-4, 0, 4):
+            _r(s, glow, cx + dx - 1, cy - 3, 2, 2)
+        _r(s, glow, cx - 5, cy, 11, 3)
+        _r(s, (150, 108, 18), cx - 5, cy + 3, 11, 1)
+        # 반짝임 스파클
+        if (tk // 180) % 3 == 0:
+            _r(s, (255, 255, 255), cx + 6, cy - 5, 1, 1)
+            _r(s, (255, 255, 255), cx - 7, cy - 1, 1, 1)
 
     def _pick_hero_png(self, facing, phase):
         """기존 PNG 스프라이트 선택 (레거시 경로)."""
@@ -4499,8 +4868,8 @@ class Game:
     def _draw_enemy(self, enemy, x, y):
         fn = self._enemy_sprite_fn(enemy.key)
         ts = TILE_SIZE
-        # 피격 순간 흰 플래시 / 공격 전조 중 미세 떨림
-        col = (255, 255, 255) if enemy.hurt_ms > 0 else enemy.color
+        ticks = pygame.time.get_ticks()
+        hurt = enemy.hurt_ms > 0
         telegraphing = enemy.windup_ms > 0 or enemy._pending_skill is not None
         if telegraphing:
             x += random.randint(-1, 1)
@@ -4508,27 +4877,34 @@ class Game:
         # 엘리트 오라: 발밑에 어픽스 색 링이 맥동
         if enemy.elite:
             aura = ELITE_AFFIXES[enemy.elite]['aura']
-            pulse = int(2 * math.sin(pygame.time.get_ticks() * 0.008))
+            pulse = int(2 * math.sin(ticks * 0.008))
             pygame.draw.ellipse(self._game_surf, aura,
                                 (x + 3 - pulse, y + ts - 9 - pulse // 2,
                                  ts - 6 + pulse * 2, 8 + pulse), 2)
-        if enemy.is_boss:
-            tmp = pygame.Surface((ts, ts))
-            tmp.fill(_CKEY); tmp.set_colorkey(_CKEY)
-            fn(tmp, 0, 0, col, pygame.time.get_ticks())
-            big = pygame.transform.scale(tmp, (ts * 2, ts * 2))
-            big.set_colorkey(_CKEY)
-            blit_x, blit_y = x - ts // 2, y - ts // 2
-            self._game_surf.blit(big, (blit_x, blit_y))
-            # 보스 HP 바 (2배 너비)
-            bw = ts * 2 - 4
-            ratio = max(0.0, enemy.hp / enemy.max_hp)
-            _r(self._game_surf, (70, 20, 20), blit_x + 2, blit_y + 2, bw, 5)
-            if ratio > 0:
-                col = (200 + int(55*(1-ratio)), int(210*ratio), 40)
-                _r(self._game_surf, col, blit_x + 2, blit_y + 2, max(1, int(bw*ratio)), 5)
+        # 스프라이트는 항상 실제 색으로 그린 뒤, 피격 시 흰색을 가산 블렌드해
+        # '흰 실루엣' 플래시로 만든다. (col=흰색을 넘기면 checker 무늬가
+        #  흰/회 체커보드 네모로 보이는 아티팩트가 있었음)
+        if hurt or enemy.is_boss:
+            tmp = pygame.Surface((ts, ts), pygame.SRCALPHA)
+            fn(tmp, 0, 0, enemy.color, ticks)
+            if hurt:
+                tmp.fill((255, 255, 255), special_flags=pygame.BLEND_RGB_ADD)
+            if enemy.is_boss:
+                big = pygame.transform.scale(tmp, (ts * 2, ts * 2))
+                blit_x, blit_y = x - ts // 2, y - ts // 2
+                self._game_surf.blit(big, (blit_x, blit_y))
+                bw = ts * 2 - 4
+                ratio = max(0.0, enemy.hp / enemy.max_hp)
+                _r(self._game_surf, (70, 20, 20), blit_x + 2, blit_y + 2, bw, 5)
+                if ratio > 0:
+                    hc = (200 + int(55*(1-ratio)), int(210*ratio), 40)
+                    _r(self._game_surf, hc, blit_x + 2, blit_y + 2, max(1, int(bw*ratio)), 5)
+            else:
+                self._game_surf.blit(tmp, (x, y))
+                if not enemy.is_prop:
+                    draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
         else:
-            fn(self._game_surf, x, y, col, pygame.time.get_ticks())
+            fn(self._game_surf, x, y, enemy.color, ticks)
             if not enemy.is_prop:            # 프롭은 HP 바 없음
                 draw_hp_bar(self._game_surf, x, y, enemy.hp, enemy.max_hp)
         # 공격 전조 '!' 마커 (회피 타이밍 안내)

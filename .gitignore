@@ -4,6 +4,16 @@ settings.json
 records.json
 achievements.json
 steam_appid.txt
+storage.json
+save_slot*.json
+# 테스트 모드 격리 기록 (test_main.py)
+records_test.json
+storage_test.json
+
+# ── 대용량 소스 미디어 (트레일러 원본 녹화 등) ─────────────────────────────
+assets/steam/game_trailer*.mov
+assets/steam/game_tralier*.mov
+assets/sprites/hero.zip
 
 # ── Python 캐시 ──────────────────────────────────────────────────────────────
 __pycache__/

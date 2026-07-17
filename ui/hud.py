@@ -19,6 +19,45 @@ from entities.item_icons import draw_mc_item
 # 아이템 아이콘을 마인크래프트 블록 스타일로 (False면 단색 스와치)
 USE_MC_ITEMS = True
 
+# 픽셀 폰트가 못 그리는 글리프(이모지 등 → ≡ 두부)를 제거한다.
+# 폰트는 미지원 글자를 .notdef(두부)로 그리므로 metrics로는 판별 불가 →
+# 각 글자 비트맵을 '확실히 미지원인 글자'의 비트맵과 비교해 두부면 제거.
+_RENDERABLE_CACHE: dict = {}
+_TOFU_REF: dict = {}
+
+
+def _tofu_bytes(font):
+    fid = id(font)
+    if fid not in _TOFU_REF:
+        ref = font.render('\U000F0000', True, (255, 255, 255))   # PUA — 미지원
+        _TOFU_REF[fid] = (ref.get_size(), pygame.image.tobytes(ref, 'RGBA'))
+    return _TOFU_REF[fid]
+
+
+def _renderable(font, text):
+    key = (id(font), text)
+    cached = _RENDERABLE_CACHE.get(key)
+    if cached is not None:
+        return cached
+    tsz, tbytes = _tofu_bytes(font)
+    out = []
+    for ch in text:
+        if ch in ' \t' or ch.isalnum() or ord(ch) < 0x2000:
+            out.append(ch); continue          # 일반 문자/한글은 그대로
+        try:
+            g = font.render(ch, True, (255, 255, 255))
+            is_tofu = (g.get_size() == tsz and
+                       pygame.image.tobytes(g, 'RGBA') == tbytes)
+        except Exception:
+            is_tofu = False
+        if not is_tofu:
+            out.append(ch)
+    res = ''.join(out).lstrip()
+    if len(_RENDERABLE_CACHE) > 512:
+        _RENDERABLE_CACHE.clear()
+    _RENDERABLE_CACHE[key] = res
+    return res
+
 
 # ── 메뉴 전용 드로우 헬퍼 ────────────────────────────────────────────────
 
@@ -923,11 +962,13 @@ class HUD:
         y += 3
 
         # ── 강화 스킬 ────────────────────────────────────────────────
-        from core.skills import COMBO_SKILL_DEFS
+        from core.skills import COMBO_SKILL_DEFS, combo_def
         sec_header('sec_combo', (130, 110, 200))
         uc = unlocked_combos or set()
         sb = skill_books or set()
-        for cid, cdef in COMBO_SKILL_DEFS.items():
+        _cc = getattr(player, 'char_class', 'warrior')
+        for cid, _base in COMBO_SKILL_DEFS.items():
+            cdef = combo_def(cid, _cc)
             unlocked = cid in uc
             has_book = cid in sb
             ready    = skill_mgr.ready(cid) if (skill_mgr and unlocked) else False
@@ -1122,7 +1163,8 @@ class HUD:
         for i, (text, kind) in enumerate(recent):
             base = _MSG_COLORS.get(kind, MSG_INFO)
             col = base if i == total-1 else tuple(int(c*(0.35+0.55*(i+1)/max(total-1,1))) for c in base)
-            screen.blit(self.font_sm.render(text, True, col), (8, by+6+i*line_h))
+            clean = _renderable(self.font_sm, text)      # 이모지(≡ 두부) 제거
+            screen.blit(self.font_sm.render(clean, True, col), (8, by+6+i*line_h))
 
     def _label(self, screen, text, x, y, color):
         screen.blit(self.font_sm.render(text, True, color), (x, y))
@@ -1314,6 +1356,157 @@ class HUD:
         hint_key = 'dialog_offer_hint' if dialog['mode'] == 'offer' else 'dialog_close_hint'
         hint = self.font_sm.render(t(hint_key), True, (170, 150, 110))
         screen.blit(hint, (bx + pw - hint.get_width() - 16, by + ph - 22))
+
+    def render_journal(self, screen, records, best_floor=1):
+        """J — 정복 일지: 지역 테마별 클리어 횟수 + 최고층 + 칭호.
+
+        도트 감성 패널. 정복(999 클리어) 시 [심연의 지배자] 뱃지 노출.
+        """
+        from map.theme import theme_name, theme_floor_range, THEME_COUNT
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA)
+        ov.fill((0, 0, 0, 214))
+        screen.blit(ov, (0, 0))
+        pw, ph = 760, 620
+        bx, by = W // 2 - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (13, 16, 26), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (70, 66, 105), (bx, by, pw, ph), 2, border_radius=6)
+
+        cleared = bool(records.get('game_cleared', False))
+        tc = records.get('theme_clears', {}) or {}
+
+        # ── 타이틀 ──
+        title = self.font_lg.render(t('journal_title'), True, GOLD_COLOR)
+        screen.blit(title, (bx + pw // 2 - title.get_width() // 2, by + 16))
+        bf = self.font_md.render(t('journal_best_floor', best_floor), True, (170, 210, 255))
+        screen.blit(bf, (bx + pw // 2 - bf.get_width() // 2, by + 54))
+        pygame.draw.line(screen, (50, 48, 78), (bx + 24, by + 82), (bx + pw - 24, by + 82))
+
+        # ── 정복 배너 (999 클리어 시) ──
+        top = by + 92
+        if cleared:
+            spark = (255, 235, 120) if (pygame.time.get_ticks() // 300) % 2 == 0 else (235, 185, 60)
+            bnr = pygame.Rect(bx + 24, top, pw - 48, 34)
+            pygame.draw.rect(screen, (40, 30, 12), bnr, border_radius=4)
+            pygame.draw.rect(screen, spark, bnr, 2, border_radius=4)
+            cs = self.font_md.render('★ ' + t('journal_conquered') + ' ★', True, spark)
+            screen.blit(cs, (bnr.centerx - cs.get_width() // 2, bnr.y + 8))
+            top += 46
+
+        # ── 테마별 클리어 (2열) ──
+        cols = 2
+        rows = (THEME_COUNT + cols - 1) // cols
+        col_w = (pw - 48) // cols
+        row_h = (by + ph - 40 - top) // max(1, rows)
+        row_h = max(22, min(row_h, 30))
+        for idx in range(THEME_COUNT):
+            c = idx // rows
+            r = idx % rows
+            x = bx + 24 + c * col_w
+            y = top + r * row_h
+            cnt = int(tc.get(str(idx), 0))
+            done = cnt > 0
+            # 도트 아이콘
+            dot = (90, 210, 120) if done else (60, 60, 84)
+            pygame.draw.rect(screen, dot, (x, y + 4, 9, 9))
+            pygame.draw.rect(screen, (20, 22, 34), (x, y + 4, 9, 9), 1)
+            nm = theme_name(idx)
+            f0, f1 = theme_floor_range(idx)
+            ncol = (225, 228, 240) if done else (110, 112, 132)
+            ns = self.font_sm.render(f"{f0}-{f1}  {nm}", True, ncol)
+            screen.blit(ns, (x + 16, y + 2))
+            if done:
+                cx = self.font_sm.render(t('journal_clears', cnt), True, (235, 200, 90))
+                screen.blit(cx, (x + col_w - cx.get_width() - 20, y + 2))
+
+        hint = self.font_sm.render(t('journal_hint'), True, (90, 88, 120))
+        screen.blit(hint, (bx + pw // 2 - hint.get_width() // 2, by + ph - 26))
+
+    def render_pet_status(self, screen, player, pet):
+        """B — 펫 상태창: 이름·타입·레벨·강화석·다음 강화 비용·효과."""
+        from entities.pet import PET_META, PET_TYPES
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        ov = pygame.Surface((W, H), pygame.SRCALPHA); ov.fill((0, 0, 0, 214))
+        screen.blit(ov, (0, 0))
+        pw, ph = 500, 440
+        bx, by = W // 2 - pw // 2, H // 2 - ph // 2
+        pygame.draw.rect(screen, (13, 16, 26), (bx, by, pw, ph), border_radius=6)
+        pygame.draw.rect(screen, (70, 66, 105), (bx, by, pw, ph), 2, border_radius=6)
+        cx = bx + pw // 2
+
+        if pet is None:
+            msg = self.font_md.render(t('pet_locked'), True, (200, 200, 210))
+            screen.blit(msg, (cx - msg.get_width() // 2, by + ph // 2 - 10))
+            return
+
+        meta = PET_META[pet.type]; col = meta['color']
+        title = self.font_lg.render(t('pet_status_title'), True, GOLD_COLOR)
+        screen.blit(title, (cx - title.get_width() // 2, by + 18))
+        pygame.draw.line(screen, (50, 48, 78), (bx + 24, by + 56), (bx + pw - 24, by + 56))
+
+        # 펫 아이콘 (블록)
+        icx, icy = bx + 70, by + 120
+        pygame.draw.circle(screen, (*meta['accent'], 60), (icx, icy), 34)
+        def IB(gx, gy, c, w=1, h=1):
+            pygame.draw.rect(screen, c, (icx + gx * 6, icy + gy * 6, w * 6, h * 6))
+        dark = tuple(max(0, k - 40) for k in col)
+        IB(-3, -2, col, 6, 5); IB(-3, -2, meta['accent'], 6, 1); IB(-3, 2, dark, 6, 1)
+        IB(-2, 0, (30, 30, 40)); IB(1, 0, (30, 30, 40))
+
+        # 이름 + 타입 (←/→ 전환)
+        nm = self.font_lg.render(t(meta['name_key']), True, col)
+        screen.blit(nm, (bx + 130, by + 84))
+        la = self.font_md.render('◀', True, (170, 170, 195))
+        ra = self.font_md.render('▶', True, (170, 170, 195))
+        ti = PET_TYPES.index(pet.type)
+        screen.blit(la, (bx + 130, by + 120)); screen.blit(ra, (bx + 168, by + 120))
+        tstr = self.font_sm.render(f"{ti+1}/{len(PET_TYPES)}", True, (150, 150, 175))
+        screen.blit(tstr, (bx + 148, by + 122))
+
+        # 효과 설명
+        if pet.type == 'buff':
+            eff = t('pet_eff_buff', int(pet.buff_pct * 100))
+        elif pet.type == 'debuff':
+            eff = t('pet_eff_debuff', int(pet.slow_pct * 100))
+        else:
+            eff = t('pet_eff_attack', int(pet.atk_coeff * 100))
+        es = self.font_sm.render(eff, True, (200, 210, 225))
+        screen.blit(es, (bx + 130, by + 150))
+
+        # 스탯 (레벨 / 보유 강화석)
+        y = by + 200
+        lv = self.font_md.render(f"{t('pet_lvl')}: Lv.{pet.level}", True, (235, 235, 245))
+        screen.blit(lv, (bx + 40, y))
+        st = self.font_md.render(f"{t('pet_stones_lbl')}: 💠 {player.pet_stones}", True, (200, 170, 255))
+        screen.blit(st, (bx + 260, y))
+
+        # 강화 비용 / 성공률 바
+        gold_cost, stone_cost = pet.next_cost()
+        y2 = by + 250
+        cost = self.font_sm.render(t('pet_next_cost', gold_cost, stone_cost), True, (235, 220, 150))
+        screen.blit(cost, (bx + 40, y2))
+        chance = int(pet.success_chance() * 100)
+        sc = self.font_sm.render(t('pet_success', chance), True, (140, 220, 160))
+        screen.blit(sc, (bx + 40, y2 + 24))
+        # 성공률 바
+        bar = pygame.Rect(bx + 40, y2 + 48, pw - 80, 10)
+        pygame.draw.rect(screen, (30, 34, 48), bar, border_radius=3)
+        pygame.draw.rect(screen, (90, 200, 120),
+                         (bar.x, bar.y, int(bar.w * chance / 100), bar.h), border_radius=3)
+
+        # 강화 버튼
+        can = player.pet_stones >= stone_cost and player.gold >= gold_cost
+        btn = pygame.Rect(cx - 110, by + ph - 78, 220, 40)
+        bg = (34, 60, 34) if can else (40, 30, 30)
+        bd = (90, 200, 110) if can else (120, 70, 70)
+        pygame.draw.rect(screen, bg, btn, border_radius=5)
+        pygame.draw.rect(screen, bd, btn, 2, border_radius=5)
+        us = self.font_md.render('▲ ' + t('pet_lvl') + ' UP', True,
+                                 (150, 240, 170) if can else (170, 120, 120))
+        screen.blit(us, (btn.centerx - us.get_width() // 2, btn.centery - us.get_height() // 2))
+
+        hint = self.font_sm.render(t('pet_hint'), True, (90, 88, 120))
+        screen.blit(hint, (cx - hint.get_width() // 2, by + ph - 26))
 
     def render_questlog(self, screen, quests, max_floor=1):
         """Q — 퀘스트 일지: 진행 중 / 수락 가능 / 완료로 분류.

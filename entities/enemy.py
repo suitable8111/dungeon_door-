@@ -61,6 +61,8 @@ class Enemy(Entity):
         self._pending_skill = None
 
         self.staggered_ms = 0
+        self.slowed_ms    = 0     # 둔화(펫 디버프) 잔여 시간
+        self.slow_pct     = 0.0   # 둔화율 (0~1)
         self.hurt_ms      = 0     # 피격 흰 플래시 잔여 시간
         self.windup_ms    = 0     # 공격 전조(텔레그래프) 잔여 시간
         self.anim_ox      = 0.0   # 렌더 오프셋(px) — 타일 이동 슬라이드/넉백
@@ -125,8 +127,13 @@ class Enemy(Entity):
             self.staggered_ms = max(0, self.staggered_ms - dt_ms)
             return None
 
-        self._move_t   -= dt_ms
-        self._attack_t -= dt_ms
+        # 둔화(펫 디버프): 이동/공격 타이머가 느리게 감소
+        move_factor = 1.0
+        if self.slowed_ms > 0:
+            self.slowed_ms = max(0, self.slowed_ms - dt_ms)
+            move_factor = max(0.1, 1.0 - self.slow_pct)
+        self._move_t   -= dt_ms * move_factor
+        self._attack_t -= dt_ms * move_factor
 
         # 도망 AI (보물 고블린): 공격하지 않고 플레이어 반대편으로 달아난다
         if self.flee:

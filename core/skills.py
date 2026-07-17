@@ -606,6 +606,33 @@ COMBO_SKILL_DEFS = {
 }
 COMBO_SKILL_DEFS = localize_defs(COMBO_SKILL_DEFS)
 
+# 궁수 전용 Ctrl+A 대체 — '자동 사격'(지속 시간 동안 자동으로 화살 발사).
+# 표시/실행만 클래스로 분기하고 unlock/쿨다운 슬롯('AD')은 공용.
+_ARCHER_COMBO_OVERRIDE = {
+    'AD': localize_defs({
+        'name': '자동 사격', 'name_en': 'Auto Volley', 'name_ja': '自動射撃',
+        'name_zh': '自动射击', 'name_ru': 'Авто-залп',
+        'cooldown_ms': COMBO_SKILL_DEFS['AD']['cooldown_ms'],
+        'color': (120, 220, 255),
+        'level_req': COMBO_SKILL_DEFS['AD']['level_req'],
+        'skill_level_req': COMBO_SKILL_DEFS['AD']['skill_level_req'],
+        'book': COMBO_SKILL_DEFS['AD']['book'],
+        'desc': '일정 시간 자동으로 화살 발사 (10/20/30초) · 강화 시 위력↑',
+        'desc_en': 'Auto-fires arrows for a time (10/20/30s) · upgrade boosts power',
+        'desc_ja': '一定時間、矢を自動発射 (10/20/30秒) · 強化で威力↑',
+        'desc_zh': '一段时间自动射箭 (10/20/30秒) · 强化提升威力',
+        'desc_ru': 'Автострельба (10/20/30с) · улучшение усиливает урон',
+        'keys': 'Ctrl+A',
+    })
+}
+
+
+def combo_def(combo_id: str, char_class: str = 'warrior'):
+    """클래스별 조합 스킬 정의 (궁수는 일부 스킬이 대체됨)."""
+    if char_class == 'archer' and combo_id in _ARCHER_COMBO_OVERRIDE:
+        return _ARCHER_COMBO_OVERRIDE[combo_id]
+    return COMBO_SKILL_DEFS.get(combo_id)
+
 ULTIMATE_SKILL_DEFS = {
     'R': {
         'name': '던전 브레이커', 'name_en': 'Dungeon Breaker', 'name_ja': 'ダンジョンブレイカー',

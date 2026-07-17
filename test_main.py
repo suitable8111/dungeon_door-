@@ -2,6 +2,14 @@
 클래스:         warrior | archer   (예: python3 test_main.py 3 archer)
 버닝 스테이지:  python3 test_main.py bunning [클래스]
 마을:           python3 test_main.py town [복귀할 층수] [클래스]
+정복 일지:      python3 test_main.py journal [클래스]   (샘플 일지 + 마을 시작)
+
+정복 일지/정산 디버그 키 (테스트 모드 전용, 기록은 *_test.json 격리):
+  J = 정복 일지 열기/닫기
+  [ = 현재 층 테마 클리어 +1
+  ] = 999 마스터 정산(칭호·종결무기·NG+) 강제 발동
+  \\ = 테스트 기록 초기화
+  또는 python3 test_main.py 999 로 간 뒤 던전 문을 밟으면 실제 클리어로 정산.
 """
 import sys
 
@@ -34,6 +42,8 @@ arg1 = args[0].lower() if args else ''
 
 if arg1 == 'bunning':
     game.start_burning_mode(char_class=char_class)
+elif arg1 == 'journal':
+    game.start_journal_test(char_class=char_class)
 elif arg1 == 'town':
     TEST_FLOOR = int(args[1]) if len(args) > 1 else 1
     game.start_town_test(TEST_FLOOR, char_class=char_class)
