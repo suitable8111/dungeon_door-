@@ -82,7 +82,24 @@ _DEFAULT_RECORDS  = {
     'unlocked_titles': [],     # 해금 칭호 id 목록
     'active_title': '',        # 현재 표시 칭호 id
     'ng_plus': 0,              # New Game+ 회차 (골드 배율에 사용)
+    'classes_unlocked': False, # 궁수·마법사 해금 여부 (전사 Lv20·20층 달성 시)
 }
+
+# ── 상급 직업 해금 조건 ──────────────────────────────────────────────────
+ADVANCED_CLASSES = ('archer', 'mage')
+UNLOCK_LEVEL = 20
+UNLOCK_FLOOR = 20
+
+
+def advanced_classes_unlocked(records=None) -> bool:
+    """궁수·마법사 생성 가능 여부 — 엄격 게이팅.
+
+    오직 명시 플래그(classes_unlocked)로만 판정한다. 이 플래그는 전사로
+    Lv20 이상 + 20층 이상 클리어를 달성했을 때(_check_class_unlock) 설정된다.
+    과거 best_floor 기록으로는 해금되지 않는다(구제 없음).
+    """
+    rec = records if records is not None else load_records()
+    return bool(rec.get('classes_unlocked'))
 
 
 # ── 세이브 ──────────────────────────────────────────────────────────

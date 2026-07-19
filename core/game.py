@@ -1529,7 +1529,16 @@ class Game:
         return {'skin': self._create_skin, 'hair': self._create_hair,
                 'haircol': self._create_haircol}
 
+    def _class_locked(self, char_class) -> bool:
+        from core.save_load import ADVANCED_CLASSES, advanced_classes_unlocked
+        return (char_class in ADVANCED_CLASSES
+                and not advanced_classes_unlocked(self._records))
+
     def _do_create_character(self):
+        if self._class_locked(self._create_class):
+            self.messages.append((t('class_locked_blocked'), 'warn'))
+            self.audio.play('player_hit')
+            return
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
         self._new_game(char_class=self._create_class, char_name=name,
@@ -2695,6 +2704,26 @@ class Game:
         # 직업별 장비 보급 (10층마다)
         if cleared_floor % 10 == 0:
             self._grant_class_gear(cleared_floor)
+        # 상급 직업(궁수·마법사) 해금: 전사 Lv20 · 20층 클리어
+        self._check_class_unlock(cleared_floor)
+
+    def _check_class_unlock(self, cleared_floor):
+        """전사로 Lv20 이상 + 20층 이상 클리어 시 궁수·마법사 영구 해금."""
+        from core.save_load import (UNLOCK_LEVEL, UNLOCK_FLOOR, save_records)
+        if self._is_test_mode:
+            return
+        rec = self._records
+        if rec.get('classes_unlocked'):
+            return
+        if (self.player.char_class == 'warrior'
+                and self.player.level >= UNLOCK_LEVEL
+                and cleared_floor >= UNLOCK_FLOOR):
+            rec['classes_unlocked'] = True
+            save_records(rec)
+            self.messages.append((t('classes_unlocked_msg'), 'good'))
+            self.animator.add(BannerAnim(t('classes_unlocked_banner'),
+                                         (170, 130, 245), size=28))
+            self.audio.play('levelup_big')
 
     def _grant_class_gear(self, floor):
         """직업에 맞는 무기/방어구 1개를 깊이에 맞춰 강화된 상태로 지급."""
@@ -4837,7 +4866,8 @@ class Game:
             self.hud.render_char_create(
                 self.screen, self._create_class, self._create_name,
                 self._create_sel, pygame.mouse.get_pos(),
-                appearance=self._create_appearance())
+                appearance=self._create_appearance(),
+                locked=self._class_locked(self._create_class))
             pygame.display.flip()
             return
 

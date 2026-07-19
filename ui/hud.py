@@ -518,8 +518,11 @@ class HUD:
         buttons.append((pygame.Rect(box.right - 34, box.top, 34, 38), f'row_next:{row_idx}'))
 
     def render_char_create(self, screen, char_class, name, sel, mouse_pos=(0, 0),
-                           appearance=None):
-        """캐릭터 생성 화면 — 좌: 아바타 프리뷰 / 우: 직업·외형·이름 셀렉터."""
+                           appearance=None, locked=False):
+        """캐릭터 생성 화면 — 좌: 아바타 프리뷰 / 우: 직업·외형·이름 셀렉터.
+
+        locked=True 면 선택된 직업이 미해금 상태 → 자물쇠·요구조건 표시 + 생성 차단.
+        """
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         cx = W // 2
         screen.fill((7, 7, 16))
@@ -533,7 +536,9 @@ class HUD:
                          (px + 24, py + 56), (px + pw - 24, py + 56))
 
         buttons = []
-        ccol = (120, 205, 150) if char_class == 'archer' else (235, 185, 60)
+        _CC = {'warrior': (235, 185, 60), 'archer': (120, 205, 150),
+               'mage': (170, 130, 245)}
+        ccol = (108, 108, 128) if locked else _CC.get(char_class, (235, 185, 60))
 
         # ── 좌측: 아바타 프리뷰 박스 ──────────────────────────────────
         prev_w, prev_h = 236, 320
@@ -550,6 +555,20 @@ class HUD:
         cls_name = self.font_lg.render(t('class_' + char_class), True, ccol)
         screen.blit(cls_name, (prev_x + prev_w // 2 - cls_name.get_width() // 2,
                                prev_y + prev_h - 34))
+
+        # 미해금 직업: 자물쇠 + 요구조건 오버레이
+        if locked:
+            ov = pygame.Surface((prev_w, prev_h), pygame.SRCALPHA)
+            ov.fill((6, 6, 14, 175))
+            screen.blit(ov, (prev_x, prev_y))
+            lx, ly = prev_x + prev_w // 2, prev_y + prev_h // 2 - 26
+            pygame.draw.rect(screen, (210, 210, 225), (lx - 14, ly, 28, 22), border_radius=3)
+            pygame.draw.arc(screen, (210, 210, 225), (lx - 10, ly - 17, 20, 28),
+                            3.14, 6.28, 3)
+            pygame.draw.rect(screen, (55, 55, 75), (lx - 3, ly + 7, 6, 9))
+            req = self._fit_text(self.font_sm, t('class_locked_req'), prev_w - 18,
+                                 (255, 210, 120))
+            screen.blit(req, (prev_x + prev_w // 2 - req.get_width() // 2, ly + 40))
 
         # ── 우측: 셀렉터 열 ───────────────────────────────────────────
         rx = px + 300
@@ -597,9 +616,12 @@ class HUD:
         cbtn = pygame.Rect(px + 26, py + ph - 66, pw - 52, 46)
         cact = (sel == 5)
         bg_c, bd_c, tc = _btn_colors(cact, cbtn.collidepoint(mouse_pos))
+        if locked:
+            bg_c, bd_c, tc = (24, 22, 34), (70, 66, 90), (120, 120, 140)
         pygame.draw.rect(screen, bg_c, cbtn, border_radius=6)
         pygame.draw.rect(screen, bd_c, cbtn, 2 if cact else 1, border_radius=6)
-        cs = self.font_lg.render(t('char_create_btn'), True, tc)
+        cs = self.font_lg.render(t('class_locked_btn') if locked else t('char_create_btn'),
+                                 True, tc)
         screen.blit(cs, (cbtn.centerx - cs.get_width() // 2,
                          cbtn.centery - cs.get_height() // 2))
         buttons.append((cbtn, 'create'))
