@@ -301,7 +301,7 @@ class HUD:
             screen.blit(t2, (tx + t1.get_width() + 12, ty))
 
             # ── 세이브 카드 (슬롯별 캐릭터) ───────────────────────
-            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150)}
+            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150), 'mage': (170, 130, 245)}
             bw = p_w - 44; bh = 54
             bx = p_x + 22
             by0 = p_y + 88
@@ -472,11 +472,16 @@ class HUD:
 
     # ------------------------------------------------------------------ #
     def _draw_class_icon(self, screen, cx, cy, char_class, col):
-        """직업 미니 아이콘 — 전사=검, 궁수=활."""
+        """직업 미니 아이콘 — 전사=검, 궁수=활, 마법사=지팡이+오브."""
         if char_class == 'archer':
             pygame.draw.arc(screen, col, (cx - 6, cy - 9, 10, 18), -1.2, 1.2, 2)
             pygame.draw.line(screen, (220, 220, 225), (cx - 5, cy - 8), (cx - 5, cy + 8), 1)
             pygame.draw.line(screen, (200, 180, 130), (cx - 5, cy), (cx + 8, cy), 2)
+        elif char_class == 'mage':
+            # 지팡이(대각) + 빛나는 오브
+            pygame.draw.line(screen, (150, 120, 80), (cx - 7, cy + 8), (cx + 4, cy - 6), 2)
+            pygame.draw.circle(screen, col, (cx + 5, cy - 7), 4)
+            pygame.draw.circle(screen, (235, 220, 255), (cx + 5, cy - 7), 2)
         else:
             pygame.draw.line(screen, (200, 205, 220), (cx - 6, cy + 6), (cx + 5, cy - 6), 3)
             pygame.draw.line(screen, col, (cx - 8, cy - 5), (cx - 3, cy - 8), 2)  # 가드

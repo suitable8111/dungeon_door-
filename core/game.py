@@ -11,7 +11,7 @@ from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAni
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
                             DeathAnim, GoldPopAnim, BannerAnim,
                             SmearAnim, ThrustSmearAnim, AfterimageAnim, CalloutAnim,
-                            ArrowAnim)
+                            ArrowAnim, MagicBoltAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
@@ -226,6 +226,9 @@ class Game:
         self._spikes: list      = []   # [{'x','y','phase','armed'}] — 주기 가시
         self._shift_t         = 0.0    # 개폐/발동 공통 사이클 타이머(ms)
         self._shift_open_ms   = 0.0    # 압력판으로 전부 강제 개방 잔여시간
+        # 마법사 DoT 장판 / 소환수 (런타임 전용, 층 이동 시 소멸)
+        self._dot_zones: list = []     # [{'x','y','r','dps','ms','col','tick'}]
+        self._summons:   list = []     # entities.summon.Summon 목록
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -574,6 +577,9 @@ class Game:
                     if self._combo_ms == 0:
                         self._combo_count = 0
                 self._update_enemies(world_dt)
+                if not self._in_town:
+                    self._update_dots(world_dt)      # 점화 DoT + 화염 장판
+                    self._update_summons(world_dt)   # 소환수
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
             self._update_bgm()
@@ -665,6 +671,8 @@ class Game:
         self._spikes = []
         self._shift_t = 0.0
         self._shift_open_ms = 0.0
+        self._dot_zones = []            # 층 이동 시 장판/소환수 소멸
+        self._summons = []
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
                 for xx, tl in enumerate(row):
@@ -832,6 +840,68 @@ class Game:
         # 압력판은 눌리면 바닥으로 (재발동 방지)
         self.dungeon.tiles[y][x] = Tile.floor()
 
+    # ─────────────── 마법사 DoT (점화 + 화염 장판) ──────────────────────
+    def _hurt_enemy(self, enemy, dmg: int, col=(255, 140, 60), flash=True):
+        """DoT/장판/소환수 공용 피해 — 사망 시 중앙 처치 처리로 라우팅."""
+        if enemy is None or not enemy.is_alive() or dmg <= 0:
+            return
+        enemy.hp = max(0, enemy.hp - dmg)
+        enemy.hurt_ms = max(enemy.hurt_ms, 70)
+        if flash:
+            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, col))
+        if not enemy.is_alive():
+            self._on_enemy_killed(enemy)
+
+    def _spawn_dot_zone(self, x, y, r, dps, ms, col=(255, 120, 40)):
+        self._dot_zones.append({'x': x, 'y': y, 'r': r, 'dps': dps,
+                                'ms': float(ms), 'col': col, 'tick': 0.0})
+
+    def _update_dots(self, dt):
+        p = self.player
+        # 1) 적별 점화(burn) 틱
+        for enemy in list(self.dungeon.enemies):
+            if not enemy.is_alive():
+                continue
+            if enemy.burn_ms > 0:
+                enemy.burn_ms = max(0, enemy.burn_ms - dt)
+                enemy._burn_acc += enemy.burn_dps * dt / 1000.0
+                if enemy._burn_acc >= 1.0:
+                    d = int(enemy._burn_acc); enemy._burn_acc -= d
+                    if (dt > 0 and random.random() < dt / 120.0
+                            and self.dungeon.tiles[enemy.y][enemy.x].visible):
+                        self.animator.particles.emit_death(enemy.x, enemy.y, enemy.burn_col)
+                    self._hurt_enemy(enemy, d, enemy.burn_col, flash=False)
+                if enemy.burn_ms == 0:
+                    enemy.burn_dps = 0
+        # 2) 화염 장판 — 범위 내 적에게 점화 부여/갱신
+        for z in self._dot_zones:
+            z['ms'] -= dt
+            for enemy in self.dungeon.enemies:
+                if not enemy.is_alive():
+                    continue
+                if abs(enemy.x - z['x']) <= z['r'] and abs(enemy.y - z['y']) <= z['r']:
+                    self._apply_burn(enemy, dps=z['dps'], ms=700, col=z['col'])
+        self._dot_zones = [z for z in self._dot_zones if z['ms'] > 0]
+
+    # ─────────────── 마법사 소환수 ──────────────────────────────────────
+    def _spawn_summon(self, count, ms, power_mul):
+        from entities.summon import Summon
+        p = self.player
+        placed = 0
+        for ox, oy in ((0, -1), (-1, 0), (1, 0), (0, 1), (-1, -1), (1, 1)):
+            if placed >= count:
+                break
+            sx, sy = p.x + ox, p.y + oy
+            if self.dungeon.is_walkable(sx, sy):
+                self._summons.append(Summon(sx, sy, ms, power_mul))
+                self.animator.particles.emit_heal(sx, sy)
+                placed += 1
+
+    def _update_summons(self, dt):
+        for s in self._summons:
+            s.update(dt, self)
+        self._summons = [s for s in self._summons if s.alive]
+
     def _apply_distortion(self, surf):
         """사인파 수평 왜곡 — 화면 전체가 흐물흐물 일렁이는 착시.
 
@@ -895,7 +965,7 @@ class Game:
                   appearance=None):
         if slot is not None:
             self._save_slot = slot
-        self._char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self._char_class = char_class if char_class in CLASSES else 'warrior'
         self._char_name  = char_name or 'Hero'
         self._char_appearance = dict(appearance) if appearance else \
             {'skin': 0, 'hair': 0, 'haircol': 0}
@@ -947,7 +1017,7 @@ class Game:
         self._gold_mult = ng_plus_gold_mult(self._records)
         self._title_badge = bool(self._records.get('active_title'))
         self._save_data       = None
-        self._char_class      = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self._char_class      = char_class if char_class in CLASSES else 'warrior'
         self._char_name       = 'TestHero'
         self._char_appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
         self.floor            = max(1, min(floor, MAX_FLOOR))
@@ -1110,8 +1180,9 @@ class Game:
                                           or {'skin': 0, 'hair': 0, 'haircol': 0})
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
-            self.messages.append((t('archer_hint' if self.player.char_class == 'archer'
-                                     else 'combat_hint'), 'info'))
+            _hint = {'archer': 'archer_hint', 'mage': 'mage_hint'}.get(
+                self.player.char_class, 'combat_hint')
+            self.messages.append((t(_hint), 'info'))
         else:
             self.player.x, self.player.y = start
             self.messages.append((t('floor_arrive', self.floor), 'good'))
@@ -1470,7 +1541,8 @@ class Game:
         from entities.avatar import cycle
         sel = self._create_sel
         if sel == 0:
-            self._create_class = 'archer' if self._create_class == 'warrior' else 'warrior'
+            i = (CLASSES.index(self._create_class) + delta) % len(CLASSES)
+            self._create_class = CLASSES[i]
         elif sel == 1:
             self._create_skin = cycle('skin', self._create_skin, delta)
         elif sel == 2:
@@ -1888,6 +1960,8 @@ class Game:
                 return False  # 쿨다운 중: 이동 범프 공격 불가
             if self.player.char_class == 'archer':
                 return self._archer_shoot()          # 궁수는 근접 범프도 사격
+            if self.player.char_class == 'mage':
+                return self._mage_cast()             # 마법사는 근접 범프도 마법 볼트
             return self._chain_attack(dx, dy, enemy)  # 범프도 콤보 체인에 합류
         target_tile = self.dungeon.tiles[ny][nx]
 
@@ -2032,6 +2106,10 @@ class Game:
             if held:
                 self._facing = self._DIR_NAME[held]
             return self._archer_shoot()
+        if self.player.char_class == 'mage':
+            if held:
+                self._facing = self._DIR_NAME[held]
+            return self._mage_cast()
         fdx, fdy = self._DIRS.get(self._facing, (0, 1))
         if held:
             if held == (fdx, fdy):
@@ -2070,6 +2148,48 @@ class Game:
             self._player_attack(hit)
         self._atk_cd_timer = self.player.atk_cooldown_ms
         return True
+
+    # ── 마법사 기본 마법 볼트 (원거리 히트스캔 + 점화 DoT) ─────────────
+    _MAGE_RANGE = 7
+    _MAGE_BOLT_COL = (150, 110, 245)
+
+    def _mage_cast(self):
+        if not self._spend_stamina(self._STAMINA_COST['slash']):
+            return False
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        self._atk_variant = 'cast'
+        self._trigger_atk_anim()
+        end = (self.player.x, self.player.y)
+        hit = None
+        for i in range(1, self._MAGE_RANGE + 1):
+            cx, cy = self.player.x + dx * i, self.player.y + dy * i
+            if not self.dungeon.in_bounds(cx, cy) or self.dungeon.tiles[cy][cx].block_sight:
+                break
+            end = (cx, cy)
+            e = self.dungeon.get_enemy_at(cx, cy)
+            if e:
+                hit = e
+                break
+        self.animator.add(MagicBoltAnim(self.player.x, self.player.y,
+                                        end[0], end[1], self._facing,
+                                        self._MAGE_BOLT_COL))
+        self.audio.play('bow_shoot')
+        if hit:
+            self._player_attack(hit)
+            # 기본 볼트도 약한 점화(DoT) 부여 — 마법사 정체성
+            self._apply_burn(hit, dps=max(2, self.player.total_attack // 3),
+                             ms=2500, col=self._MAGE_BOLT_COL)
+        self._atk_cd_timer = self.player.atk_cooldown_ms
+        return True
+
+    def _apply_burn(self, enemy, dps: int, ms: int, col=(150, 110, 245)):
+        """적에게 점화/중독(DoT) 부여 — 더 강한 dps로 갱신(중첩 아님, 최댓값)."""
+        if enemy is None or not enemy.is_alive():
+            return
+        if getattr(enemy, 'burn_ms', 0) <= 0 or dps >= getattr(enemy, 'burn_dps', 0):
+            enemy.burn_dps = dps
+            enemy.burn_col = col
+        enemy.burn_ms = max(getattr(enemy, 'burn_ms', 0), ms)
 
     def _chain_attack(self, dx, dy, enemy=None):
         """3단 콤보 본체 (Space 공격·이동 범프 공격 공용)."""
@@ -2550,6 +2670,9 @@ class Game:
         'archer':  ['sword', 'broad_sword', 'swift_boots', 'shadow_boots',
                     'leather_armor', 'mythril_armor', 'iron_helm', 'magic_stone',
                     'silver_ring'],
+        'mage':    ['apprentice_staff', 'arcane_staff', 'leather_armor',
+                    'mythril_armor', 'leather_boots', 'magic_stone', 'silver_ring',
+                    'war_pendant', 'leather_helm'],
     }
 
     def _grant_floor_clear_reward(self, cleared_floor):
@@ -3285,7 +3408,8 @@ class Game:
     _SKILL_COOLDOWNS_ENABLED = False
 
     # 스킬 카테고리별 SP 소모량
-    _SKILL_STAMINA_COST = {'mobility': 15, 'defense': 20, 'attack': 22, 'buff': 20}
+    _SKILL_STAMINA_COST = {'mobility': 15, 'defense': 20, 'attack': 22,
+                           'buff': 20, 'blink': 38}
 
     def _use_skill(self, slot):
         skill_id = self._equipped_skills.get(slot)
@@ -3313,6 +3437,9 @@ class Game:
             'dark_pulse':  self._exec_dark_pulse,
             'power_shot':  self._exec_power_shot,
             'arrow_rain':  self._exec_arrow_rain,
+            'flame_pool':  self._exec_flame_pool,
+            'summon_familiar': self._exec_summon_familiar,
+            'arcane_blink': self._exec_arcane_blink,
         }
         fn = _exec_map.get(skill_id)
         if not fn:
@@ -3379,6 +3506,45 @@ class Game:
             self.skills.trigger(slot)
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
+        return True
+
+    def _exec_arcane_blink(self, slot):
+        """마법사 점멸 — 벽을 무시하고 사거리 내 가장 먼 착지 가능 칸으로 순간이동."""
+        lvl   = self._skill_levels.get('arcane_blink', 1)
+        stats = ALL_SKILL_DEFS['arcane_blink']['upgrades'][lvl - 1]
+        tiles = stats['tiles']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        # 먼 칸부터 검사 — 벽은 통과하되 착지는 바닥·적 없는 칸에만
+        dest = None
+        for i in range(tiles, 0, -1):
+            nx, ny = sx + dx * i, sy + dy * i
+            if not self.dungeon.in_bounds(nx, ny):
+                continue
+            if self.dungeon.tiles[ny][nx].blocked:
+                continue
+            if self.dungeon.get_enemy_at(nx, ny):
+                continue
+            dest = (nx, ny)
+            break
+        if dest is None:
+            self.messages.append((t('skill_blink_fail'), 'info'))
+            return False                       # 착지 불가 → 디스패치가 SP 환불
+        # 순간이동 연출: 출발/도착 파티클 + 마법 궤적
+        self.animator.particles.emit_death(sx, sy, (150, 110, 245))
+        self.animator.add(MagicBoltAnim(sx, sy, dest[0], dest[1], self._facing,
+                                        (170, 130, 250)))
+        self.player.x, self.player.y = dest
+        self.camera.center_on(dest[0], dest[1])
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(dest[0], dest[1])
+        self.animator.particles.emit_heal(dest[0], dest[1])
+        self._trigger_atk_anim()
+        self._gain_skill_xp('arcane_blink')
+        self.skills.trigger(slot)
+        self.audio.play('teleport')
+        self.messages.append((t('skill_blink', abs(dest[0] - sx) + abs(dest[1] - sy)),
+                              'warn'))
         return True
 
     def _exec_steel_whirl(self, slot, no_cooldown=False):
@@ -3616,6 +3782,46 @@ class Game:
         self.messages.append((t('skill_arrow_rain', hits) if hits
                               else t('skill_arrow_rain_miss'),
                               'warn' if hits else 'info'))
+        return True
+
+    # ── 마법사 스킬 ────────────────────────────────────────────────────
+    def _exec_flame_pool(self, slot):
+        lvl = self._skill_levels.get('flame_pool', 1)
+        stats = ALL_SKILL_DEFS['flame_pool']['upgrades'][lvl - 1]
+        r, base_dps, zone_ms = stats['radius'], stats['dps'], stats['zone_ms']
+        # 스킬 공격력에 비례해 dps 스케일 (후반에도 유효)
+        dps = base_dps + max(0, self._skill_atk // 8)
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        zx = self.player.x + dx * (r + 1)
+        zy = self.player.y + dy * (r + 1)
+        self._spawn_dot_zone(zx, zy, r, dps, zone_ms, col=(255, 120, 40))
+        # 즉시 첫 점화 + 연출
+        for e in self.dungeon.enemies:
+            if e.is_alive() and abs(e.x - zx) <= r and abs(e.y - zy) <= r:
+                self._apply_burn(e, dps=dps, ms=zone_ms, col=(255, 120, 40))
+        self.animator.add(MagicBoltAnim(self.player.x, self.player.y, zx, zy,
+                                        self._facing, (255, 140, 50)))
+        self.animator.particles.emit_fireball_hit(zx, zy)
+        self._gain_skill_xp('flame_pool', 2)
+        self.skills.trigger(slot)
+        self.audio.play('skill_dash')
+        self.messages.append((t('skill_flame_pool'), 'warn'))
+        return True
+
+    def _exec_summon_familiar(self, slot):
+        lvl = self._skill_levels.get('summon_familiar', 1)
+        stats = ALL_SKILL_DEFS['summon_familiar']['upgrades'][lvl - 1]
+        # 소환 상한(과다 방지)
+        room = max(0, 4 - len(self._summons))
+        n = min(stats['count'], room)
+        if n <= 0:
+            self.messages.append((t('skill_summon_full'), 'info'))
+            return False
+        self._spawn_summon(n, stats['summon_ms'], stats['mul'])
+        self._gain_skill_xp('summon_familiar', 2)
+        self.skills.trigger(slot)
+        self.audio.play('skill_heal')
+        self.messages.append((t('skill_summon', n), 'good'))
         return True
 
     def _exec_life_steal(self, slot):
@@ -4317,7 +4523,9 @@ class Game:
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
             return False
         if key == 'R':
-            result = self._skill_ultimate_breaker()
+            result = (self._skill_ultimate_inferno()
+                      if self.player.char_class == 'mage'
+                      else self._skill_ultimate_breaker())
         elif key == 'Ctrl_R':
             result = self._skill_ultimate_slash()
         else:
@@ -4350,6 +4558,34 @@ class Game:
             self.messages.append((t('ult_breaker_hit', hits), 'bad'))
         else:
             self.messages.append((t('ult_breaker_miss'), 'info'))
+        return True
+
+    def _skill_ultimate_inferno(self):
+        """인페르노(마법사 R): 화면 전역에 화염 장판 도배 + 전 적 강점화 + 정령 소환."""
+        cx, cy = self.camera.x, self.camera.y
+        dps = 20 + max(0, self._skill_atk // 5)
+        # 시야 격자 곳곳에 장판
+        for gy in range(2, VIEWPORT_TILES_Y - 1, 3):
+            for gx in range(2, VIEWPORT_TILES_X - 1, 3):
+                wx, wy = cx + gx, cy + gy
+                if self.dungeon.in_bounds(wx, wy) and self.dungeon.tiles[wy][wx].visible \
+                        and not self.dungeon.tiles[wy][wx].blocked:
+                    self._spawn_dot_zone(wx, wy, 1, dps, 6000, col=(255, 110, 35))
+        # 화면 내 전 적 즉시 강점화 + 초기 타격
+        hits = 0
+        for e in self.dungeon.enemies:
+            if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible:
+                self._hurt_enemy(e, roll_damage(self._skill_atk, e.defense, 1.5),
+                                 (255, 120, 40))
+                self._apply_burn(e, dps=dps, ms=6000, col=(255, 110, 35))
+                hits += 1
+        # 정령 지원군
+        self._spawn_summon(min(3, max(0, 4 - len(self._summons))), 10000, 0.9)
+        self._start_shake(8, 520)
+        self._start_punch_zoom(0.06, 160)
+        self.skills.trigger('R')
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_inferno'), 'bad'))
         return True
 
     def _skill_ultimate_slash(self):
@@ -4727,6 +4963,9 @@ class Game:
                     self._draw_item(item, (item.x-cx)*TILE_SIZE + int(iox),
                                     (item.y-cy)*TILE_SIZE + int(ioy))
 
+        # 마법사 화염 장판 (바닥 위, 적 아래)
+        self._draw_dot_zones(cx, cy)
+
         # 보스 스킬 위험 구역 (예고 중 붉게 점멸)
         for enemy in self.dungeon.enemies:
             if not (enemy.is_alive() and enemy._pending_skill):
@@ -4773,6 +5012,10 @@ class Game:
         # 펫 (플레이어 근처, 카메라 오프셋 적용)
         if self._pet and not self._in_town:
             self._pet.draw(self._game_surf, cx, cy)
+
+        # 마법사 소환수
+        for s in self._summons:
+            s.draw(self._game_surf, cx, cy)
 
         # 강화술 상승 파티클 (플레이어 위)
         if self._fortify_effect and self._fortify_effect.alive:
@@ -4926,6 +5169,34 @@ class Game:
                 pygame.draw.lines(s, arr, False, [(ax, cy-5), (ax+5, cy), (ax, cy+5)], 2)
             else:
                 pygame.draw.lines(s, arr, False, [(ax+5, cy-5), (ax, cy), (ax+5, cy+5)], 2)
+
+    def _draw_dot_zones(self, cx, cy):
+        """화염 장판 — 반경 타일에 맥동하는 반투명 원소 바닥."""
+        ts = TILE_SIZE
+        tnow = pygame.time.get_ticks()
+        for z in self._dot_zones:
+            r = z['r']; col = z['col']
+            fade = min(1.0, z['ms'] / 500.0)          # 소멸 직전 페이드아웃
+            pulse = 70 + int(45 * math.sin(tnow * 0.012 + z['x'] + z['y']))
+            for oy in range(-r, r + 1):
+                for ox in range(-r, r + 1):
+                    wx, wy = z['x'] + ox, z['y'] + oy
+                    if not self.dungeon.in_bounds(wx, wy):
+                        continue
+                    if not self.dungeon.tiles[wy][wx].visible:
+                        continue
+                    sx, sy = (wx - cx) * ts, (wy - cy) * ts
+                    a = int(pulse * fade)
+                    ov = pygame.Surface((ts, ts), pygame.SRCALPHA)
+                    ov.fill((*col, a))
+                    # 불꽃 코어 몇 점
+                    for _ in range(2):
+                        fx = sx + random.randint(4, ts - 4)
+                        fy = sy + random.randint(4, ts - 4)
+                        pygame.draw.circle(ov, (*[min(255, c + 60) for c in col],
+                                                min(255, a + 90)),
+                                           (fx - sx, fy - sy), 2)
+                    self._game_surf.blit(ov, (sx, sy))
 
     def _draw_trap(self, s, x, y, lit, tt, tile=None):
         """트랩·압력판 — 바닥 위 위험 표식. 가시는 주기 상태(솟음/경고/숨음) 반영."""
@@ -5221,18 +5492,29 @@ class Game:
         if self.player.char_class == 'archer':
             from entities.player_renderer import draw_archer_bow
             draw_archer_bow(self._game_surf, x, y, facing, phase)
+        elif self.player.char_class == 'mage':
+            from entities.player_renderer import draw_mage_staff
+            draw_mage_staff(self._game_surf, x, y, facing, phase,
+                            pygame.time.get_ticks())
 
     def _draw_avatar_player(self, x, y, facing, phase, scale):
         """절차적 아바타 + (궁수) 활 오버레이. 강화술 스퀴즈 스케일 지원."""
         from entities.avatar import draw_avatar_tile
-        from entities.player_renderer import draw_archer_bow
+        from entities.player_renderer import draw_archer_bow, draw_mage_staff
         ap  = getattr(self.player, 'appearance', None)
         cls = self.player.char_class
+        tk = pygame.time.get_ticks()
+
+        def _weapon(dst, ox, oy):
+            if cls == 'archer':
+                draw_archer_bow(dst, ox, oy, facing, phase)
+            elif cls == 'mage':
+                draw_mage_staff(dst, ox, oy, facing, phase, tk)
+
         if scale != 1.0:
             tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
             draw_avatar_tile(tmp, 0, 0, facing, self._walk_frame, phase, ap, cls)
-            if cls == 'archer':
-                draw_archer_bow(tmp, 0, 0, facing, phase)
+            _weapon(tmp, 0, 0)
             w = h = round(TILE_SIZE * scale)
             scaled = pygame.transform.scale(tmp, (w, h))
             off = (TILE_SIZE - w) // 2
@@ -5240,8 +5522,7 @@ class Game:
         else:
             draw_avatar_tile(self._game_surf, x, y, facing, self._walk_frame,
                              phase, ap, cls)
-            if cls == 'archer':
-                draw_archer_bow(self._game_surf, x, y, facing, phase)
+            _weapon(self._game_surf, x, y)
         # 칭호 뱃지 이펙트 (마을에서 [심연의 지배자] 반짝임)
         if getattr(self, '_title_badge', False) and self._in_town:
             self._draw_title_badge(x, y)

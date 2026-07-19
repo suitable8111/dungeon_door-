@@ -25,12 +25,13 @@ from core.game import Game
 def _pop_class(args):
     """인자 목록에서 warrior/archer(또는 w/a)를 골라 제거하고 반환."""
     cls = 'warrior'
+    _short = {'w': 'warrior', 'a': 'archer', 'm': 'mage'}
     for a in list(args):
         low = a.lower()
-        if low in ('warrior', 'archer'):
+        if low in ('warrior', 'archer', 'mage'):
             cls = low; args.remove(a)
-        elif low in ('w', 'a'):
-            cls = 'warrior' if low == 'w' else 'archer'; args.remove(a)
+        elif low in _short:
+            cls = _short[low]; args.remove(a)
     return cls
 
 pygame.init()

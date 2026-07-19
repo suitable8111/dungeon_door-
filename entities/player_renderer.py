@@ -48,6 +48,34 @@ def draw_archer_bow(surf, tile_x, tile_y, facing, phase):
             (int(ax[0] - px * 2), int(ax[1] - py * 2))])
 
 
+def draw_mage_staff(surf, tile_x, tile_y, facing, phase, t_ms=0):
+    """마법사 지팡이 오버레이 — 몸 앞으로 든 지팡이 + 빛나는 오브.
+
+    phase 1=시전 백스윙, 2=시전 직후(오브 밝게 발광).
+    """
+    import math
+    cx, cy = tile_x + 16, tile_y + 16
+    dx, dy = _DIR.get(facing, (0, 1))
+    # 손 위치(몸 앞), 지팡이는 손에서 위로 뻗음
+    hx = cx + dx * 7
+    hy = cy + dy * 7 + (2 if facing == 'down' else -2 if facing == 'up' else 0)
+    # 지팡이 상단(오브 위치) — 살짝 앞+위
+    tipx = int(hx + dx * 3)
+    tipy = int(hy - 11)
+    pygame.draw.line(surf, (140, 100, 62), (int(hx), int(hy + 6)), (tipx, tipy), 2)
+    pygame.draw.line(surf, (176, 134, 86), (int(hx), int(hy + 5)), (tipx, tipy), 1)
+    # 오브: 시전 직후 크게 발광
+    puls = 0.5 + 0.5 * math.sin(t_ms * 0.008)
+    base_r = 3 + (2 if phase == 2 else 0)
+    orb = (150, 110, 245)
+    glow = pygame.Surface((16, 16), pygame.SRCALPHA)
+    a = int(90 + 60 * puls) + (60 if phase == 2 else 0)
+    pygame.draw.circle(glow, (*orb, min(255, a)), (8, 8), base_r + 3)
+    surf.blit(glow, (tipx - 8, tipy - 8), special_flags=pygame.BLEND_ADD)
+    pygame.draw.circle(surf, (225, 210, 255), (tipx, tipy), base_r)
+    pygame.draw.circle(surf, orb, (tipx, tipy), base_r, 1)
+
+
 # ── 공통 드로우 헬퍼 ─────────────────────────────────────────────────────────
 def _c(s, col, x, y, r):
     pygame.draw.circle(s, col, (round(x), round(y)), max(1, r))

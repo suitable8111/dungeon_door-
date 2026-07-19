@@ -1,4 +1,5 @@
 from entities.entity import Entity
+from core.constants import CLASSES
 
 
 class Player(Entity):
@@ -9,7 +10,7 @@ class Player(Entity):
     def __init__(self, x, y, char_class='warrior', char_name='Hero'):
         super().__init__(x, y, "영웅", hp=30, max_hp=30, attack=5, defense=2)
         # 캐릭터 정체성 (세이브 카드)
-        self.char_class = char_class if char_class in ('warrior', 'archer') else 'warrior'
+        self.char_class = char_class if char_class in CLASSES else 'warrior'
         self.char_name  = char_name or 'Hero'
         # 외형 커스터마이즈 (피부/헤어스타일/머리색) — 세이브 카드 프리뷰용
         self.appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
@@ -17,6 +18,11 @@ class Player(Entity):
         if self.char_class == 'archer':
             self.hp = self.max_hp = 26
             self.attack = 5
+            self.defense = 1
+        # 마법사는 저HP·저방어 원거리 딜러 — 마법 볼트(무료) + DoT·소환 스킬 의존
+        elif self.char_class == 'mage':
+            self.hp = self.max_hp = 22
+            self.attack = 4
             self.defense = 1
         self.level = 1
         self.xp = 0

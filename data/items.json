@@ -519,5 +519,35 @@
     "name_ja": "深淵の砕棍",
     "name_zh": "深渊碎棍",
     "name_ru": "Молот Бездны"
+  },
+  "apprentice_staff": {
+    "name": "견습 지팡이",
+    "color": [
+      150,
+      120,
+      210
+    ],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 5,
+    "name_en": "Apprentice Staff",
+    "name_ja": "見習いの杖",
+    "name_zh": "学徒法杖",
+    "name_ru": "Посох ученика"
+  },
+  "arcane_staff": {
+    "name": "비전 지팡이",
+    "color": [
+      180,
+      140,
+      245
+    ],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 11,
+    "name_en": "Arcane Staff",
+    "name_ja": "秘術の杖",
+    "name_zh": "奥术法杖",
+    "name_ru": "Тайный посох"
   }
 }

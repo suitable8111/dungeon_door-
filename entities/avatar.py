@@ -32,6 +32,8 @@ _CLASS_KIT = {
                 'pants': (60, 62, 78),  'boot': (72, 52, 40)},
     'archer':  {'tunic': (74, 128, 78), 'trim': (150, 120, 74),
                 'pants': (72, 78, 60),  'boot': (86, 62, 42)},
+    'mage':    {'tunic': (86, 66, 150), 'trim': (176, 150, 235),
+                'pants': (52, 44, 92),  'boot': (60, 50, 84)},
 }
 
 
@@ -142,11 +144,20 @@ def draw_avatar(surf, cx, cy, scale, appearance=None, char_class='warrior'):
             P(9, gy, haircol)
         P(10, 4, haircol); P(10, 5, haircol)
 
-    # 직업 액세서리: 궁수=화살통, 전사=어깨 견장 + 세워 든 검
+    # 직업 액세서리: 궁수=화살통, 마법사=지팡이+오브, 전사=견장 + 세워 든 검
     if char_class == 'archer':
         for gy in range(9, 13):       # 등 뒤 화살통 암시(왼쪽)
             P(1, gy, (110, 80, 46))
         P(1, 8, (170, 150, 90))
+    elif char_class == 'mage':
+        P(2, 9, trim); P(9, 9, trim)  # 로브 어깨 장식
+        wood, wood_hi = (140, 100, 62), (176, 134, 86)
+        for gy in range(5, 16):       # 오른쪽에 세워 든 지팡이
+            P(11, gy, wood)
+        P(11, 15, wood_hi)
+        # 상단 오브(빛나는 보라)
+        P(11, 4, (225, 210, 255)); P(10, 4, (170, 130, 245))
+        P(11, 3, (170, 130, 245)); P(11, 5, (170, 130, 245)); P(12, 4, (170, 130, 245))
     else:
         P(2, 9, trim); P(9, 9, trim)  # 견장
         steel, steel_hi = (205, 210, 222), (236, 239, 246)

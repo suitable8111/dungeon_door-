@@ -63,6 +63,11 @@ class Enemy(Entity):
         self.staggered_ms = 0
         self.slowed_ms    = 0     # 둔화(펫 디버프) 잔여 시간
         self.slow_pct     = 0.0   # 둔화율 (0~1)
+        # 점화/중독(DoT) — 마법사. 게임 루프가 틱 처리하여 사망을 중앙 집계한다.
+        self.burn_ms      = 0
+        self.burn_dps     = 0
+        self.burn_col     = (150, 110, 245)
+        self._burn_acc    = 0.0   # 소수 피해 누적기
         self.hurt_ms      = 0     # 피격 흰 플래시 잔여 시간
         self.windup_ms    = 0     # 공격 전조(텔레그래프) 잔여 시간
         self.anim_ox      = 0.0   # 렌더 오프셋(px) — 타일 이동 슬라이드/넉백

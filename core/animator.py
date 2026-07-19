@@ -514,6 +514,35 @@ class ArrowAnim(_Anim):
                          (tx - int(px * 3), ty - int(py * 3)), 1)
 
 
+class MagicBoltAnim(_Anim):
+    """마법사 마법 볼트 — 빛나는 원소 구체가 목표까지 날아가며 꼬리를 남긴다."""
+    def __init__(self, sx, sy, tx, ty, facing='right', color=(150, 110, 245)):
+        super().__init__(170)
+        self.sx, self.sy = sx, sy
+        self.tx, self.ty = tx, ty
+        self.color = color
+
+    def draw(self, surf, cam_x, cam_y, font):
+        ts = TILE_SIZE
+        t = self.t
+        head = min(1.0, t * 1.15)
+        tail = max(0.0, head - 0.28)
+        hx = int((self.sx + (self.tx - self.sx) * head - cam_x) * ts + ts // 2)
+        hy = int((self.sy + (self.ty - self.sy) * head - cam_y) * ts + ts // 2)
+        txp = int((self.sx + (self.tx - self.sx) * tail - cam_x) * ts + ts // 2)
+        typ = int((self.sy + (self.ty - self.sy) * tail - cam_y) * ts + ts // 2)
+        c = self.color
+        lite = tuple(min(255, v + 70) for v in c)
+        # 꼬리(잔광)
+        pygame.draw.line(surf, tuple(v // 2 for v in c), (txp, typ), (hx, hy), 3)
+        # 외곽 글로우 → 코어
+        glow = pygame.Surface((18, 18), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (*c, 90), (9, 9), 8)
+        pygame.draw.circle(glow, (*c, 150), (9, 9), 5)
+        surf.blit(glow, (hx - 9, hy - 9), special_flags=pygame.BLEND_ADD)
+        pygame.draw.circle(surf, lite, (hx, hy), 3)
+
+
 class AttackSwingAnim(_Anim):
     """기본공격 검 휘두르기 — 7선 160° 부채꼴 + 팁 연결선 + 임팩트 플래시."""
     # 각 방향별 7방향 단위벡터 (±80° 범위)

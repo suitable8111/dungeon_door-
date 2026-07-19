@@ -493,6 +493,127 @@ ALL_SKILL_DEFS = {
         ],
         'sp_cost': [5, 10],
     },
+    # ── 마법사 전용 ─────────────────────────────────────────────────────
+    'flame_pool': {
+        'name': '화염 지대', 'name_en': 'Flame Pool', 'name_ja': '炎の地帯',
+        'name_zh': '烈焰地带', 'name_ru': 'Огненная лужа',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 7000,
+        'color': (255, 120, 40),
+        'category': 'attack',
+        'desc': '전방 바닥에 화염 장판 설치 — 안에 있는 적을 지속 점화(DoT)',
+        'desc_en': 'Lay a burning zone ahead — enemies inside take damage over time',
+        'desc_ja': '前方に炎の地帯を設置 — 中の敵を継続的に燃やす',
+        'desc_zh': '在前方铺设火焰地带 — 区域内敌人持续燃烧',
+        'desc_ru': 'Создаёт зону огня — враги внутри горят со временем',
+        'usage': '전방에 반경 N 화염 장판 (M초 지속)',
+        'usage_en': 'Radius N burning zone ahead (M s)',
+        'usage_ja': '前方に半径Nの炎地帯 (M秒)',
+        'usage_zh': '前方半径N火焰地带 (M秒)',
+        'usage_ru': 'Зона огня радиусом N (M с)',
+        'upgrades': [
+            {'radius': 1, 'dps': 6, 'zone_ms': 4000, 'cd_ms': 7000,
+             'level_desc': '반경 1 · 초당 6 · 4초 · 쿨 7초',
+             'level_desc_en': 'R1 · 6/s · 4s · CD 7s',
+             'level_desc_ja': '半径1 · 毎秒6 · 4秒 · CD7秒',
+             'level_desc_zh': '半径1 · 每秒6 · 4秒 · 冷却7秒',
+             'level_desc_ru': 'R1 · 6/с · 4с · КД 7с'},
+            {'radius': 1, 'dps': 10, 'zone_ms': 5000, 'cd_ms': 6500,
+             'level_desc': '반경 1 · 초당 10 · 5초 · 쿨 6.5초',
+             'level_desc_en': 'R1 · 10/s · 5s · CD 6.5s',
+             'level_desc_ja': '半径1 · 毎秒10 · 5秒 · CD6.5秒',
+             'level_desc_zh': '半径1 · 每秒10 · 5秒 · 冷却6.5秒',
+             'level_desc_ru': 'R1 · 10/с · 5с · КД 6,5с'},
+            {'radius': 2, 'dps': 15, 'zone_ms': 6000, 'cd_ms': 6000,
+             'level_desc': '반경 2 · 초당 15 · 6초 · 쿨 6초',
+             'level_desc_en': 'R2 · 15/s · 6s · CD 6s',
+             'level_desc_ja': '半径2 · 毎秒15 · 6秒 · CD6秒',
+             'level_desc_zh': '半径2 · 每秒15 · 6秒 · 冷却6秒',
+             'level_desc_ru': 'R2 · 15/с · 6с · КД 6с'},
+        ],
+        'sp_cost': [6, 12],
+    },
+    'summon_familiar': {
+        'name': '소환: 정령', 'name_en': 'Summon Familiar', 'name_ja': '召喚：精霊',
+        'name_zh': '召唤：精灵', 'name_ru': 'Призыв фамильяра',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 12000,
+        'color': (130, 200, 255),
+        'category': 'attack',
+        'desc': '마법 정령을 소환 — 가까운 적을 자동으로 공격(지속)',
+        'desc_en': 'Summon a familiar that auto-attacks nearby enemies',
+        'desc_ja': '精霊を召喚 — 近くの敵を自動攻撃',
+        'desc_zh': '召唤精灵 — 自动攻击附近敌人',
+        'desc_ru': 'Призывает фамильяра, атакующего врагов',
+        'usage': 'N체 소환 · M초 지속',
+        'usage_en': 'Summon N · lasts M s',
+        'usage_ja': 'N体召喚 · M秒持続',
+        'usage_zh': '召唤N个 · 持续M秒',
+        'usage_ru': 'Призвать N · длится M с',
+        'upgrades': [
+            {'count': 1, 'summon_ms': 8000, 'mul': 0.5, 'cd_ms': 12000,
+             'level_desc': '1체 · 8초 · 위력 50%',
+             'level_desc_en': '1 · 8s · 50% power',
+             'level_desc_ja': '1体 · 8秒 · 威力50%',
+             'level_desc_zh': '1个 · 8秒 · 威力50%',
+             'level_desc_ru': '1 · 8с · 50% силы'},
+            {'count': 1, 'summon_ms': 10000, 'mul': 0.7, 'cd_ms': 11000,
+             'level_desc': '1체 · 10초 · 위력 70%',
+             'level_desc_en': '1 · 10s · 70% power',
+             'level_desc_ja': '1体 · 10秒 · 威力70%',
+             'level_desc_zh': '1个 · 10秒 · 威力70%',
+             'level_desc_ru': '1 · 10с · 70% силы'},
+            {'count': 2, 'summon_ms': 12000, 'mul': 0.9, 'cd_ms': 10000,
+             'level_desc': '2체 · 12초 · 위력 90%',
+             'level_desc_en': '2 · 12s · 90% power',
+             'level_desc_ja': '2体 · 12秒 · 威力90%',
+             'level_desc_zh': '2个 · 12秒 · 威力90%',
+             'level_desc_ru': '2 · 12с · 90% силы'},
+        ],
+        'sp_cost': [8, 14],
+    },
+    'arcane_blink': {
+        'name': '점멸', 'name_en': 'Arcane Blink', 'name_ja': 'ブリンク',
+        'name_zh': '闪现', 'name_ru': 'Мерцание',
+        'slot_default': None,
+        'level_req': 5,
+        'cooldown_ms': 3500,
+        'color': (150, 110, 245),
+        'category': 'blink',                  # 높은 SP 소모(벽 통과 대가)
+        'desc': '벽을 통과해 바라보는 방향으로 순간이동 (SP 대량 소모)',
+        'desc_en': 'Teleport through walls in facing direction (high SP)',
+        'desc_ja': '壁を抜けて向いた方向へ瞬間移動 (SP大)',
+        'desc_zh': '穿墙向面向方向瞬移 (高SP)',
+        'desc_ru': 'Телепорт сквозь стены (много SP)',
+        'usage': '벽 무시, 사거리 내 가장 먼 착지 가능 칸으로 점멸',
+        'usage_en': 'Ignore walls; blink to farthest landable tile in range',
+        'usage_ja': '壁無視、射程内の最も遠い着地可能マスへ',
+        'usage_zh': '无视墙壁，闪现至范围内最远可落地格',
+        'usage_ru': 'Сквозь стены к дальней клетке в радиусе',
+        'upgrades': [
+            {'tiles': 4, 'cd_ms': 3500,
+             'level_desc': '벽 통과 4칸 점멸 · 쿨 3.5초',
+             'level_desc_en': 'Blink 4 tiles thru walls · 3.5s CD',
+             'level_desc_ja': '壁抜け4マス · CD3.5秒',
+             'level_desc_zh': '穿墙闪现4格 · 冷却3.5秒',
+             'level_desc_ru': 'Сквозь стены 4 · КД 3,5с'},
+            {'tiles': 5, 'cd_ms': 3200,
+             'level_desc': '벽 통과 5칸 점멸 · 쿨 3.2초',
+             'level_desc_en': 'Blink 5 tiles thru walls · 3.2s CD',
+             'level_desc_ja': '壁抜け5マス · CD3.2秒',
+             'level_desc_zh': '穿墙闪现5格 · 冷却3.2秒',
+             'level_desc_ru': 'Сквозь стены 5 · КД 3,2с'},
+            {'tiles': 6, 'cd_ms': 2800,
+             'level_desc': '벽 통과 6칸 점멸 · 쿨 2.8초',
+             'level_desc_en': 'Blink 6 tiles thru walls · 2.8s CD',
+             'level_desc_ja': '壁抜け6マス · CD2.8秒',
+             'level_desc_zh': '穿墙闪现6格 · 冷却2.8秒',
+             'level_desc_ru': 'Сквозь стены 6 · КД 2,8с'},
+        ],
+        'sp_cost': [6, 12],
+    },
 }
 ALL_SKILL_DEFS = localize_defs(ALL_SKILL_DEFS)
 
@@ -511,10 +632,21 @@ DEFAULT_EQUIPPED_ARCHER: dict[str, str] = {
     'D': 'power_shot',    # 관통 강사격
 }
 
+# 마법사 기본 장착 — 벽통과 점멸 + DoT 장판 + 회복 + 소환 (DoT/소환 정체성)
+DEFAULT_EQUIPPED_MAGE: dict[str, str] = {
+    'W': 'arcane_blink',      # 벽 통과 순간이동 (SP 대량 소모)
+    'A': 'flame_pool',        # 화염 장판(DoT)
+    'S': 'regen_breath',      # 회복
+    'D': 'summon_familiar',   # 소환수
+}
+
 
 def default_equipped_for(char_class: str) -> dict:
-    return dict(DEFAULT_EQUIPPED_ARCHER if char_class == 'archer'
-               else DEFAULT_EQUIPPED)
+    if char_class == 'archer':
+        return dict(DEFAULT_EQUIPPED_ARCHER)
+    if char_class == 'mage':
+        return dict(DEFAULT_EQUIPPED_MAGE)
+    return dict(DEFAULT_EQUIPPED)
 
 # 하위 호환 — 기존 SKILL_DEFS 리스트 (W/A/S/D 슬롯 기본 스킬)
 SKILL_DEFS = [
