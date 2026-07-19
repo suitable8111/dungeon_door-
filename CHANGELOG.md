@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.4.0 — The Mage & the Living Dungeon
+
+A whole new class, dungeons that fight back, and a reason to descend forever.
+
+### New Class: Mage 🧙
+- **Mage** — a fragile, high-ceiling ranged caster built around **damage-over-time and summons**.
+  - **Arcane bolts**: free elemental attacks that ignite enemies (burn DoT).
+  - **W · Arcane Blink**: teleport *through walls* up to range — at a high SP cost.
+  - **A · Flame Pool**: lay a burning zone on the ground; enemies inside keep taking damage.
+  - **D · Summon Familiar**: conjure spirits that auto-attack nearby foes for a while.
+  - **R · Inferno**: blanket the whole screen in flame zones, ignite every enemy, and call in extra familiars.
+  - Robe-and-staff look on the creation screen and in the dungeon.
+- **New systems** powering it: enemy **burn** status, ground **DoT zones**, and temporary **summons**.
+
+### Class Unlocks
+- **Archer and Mage are now earned**: start as the Warrior, reach **Level 20** and **clear floor 20**, and both advanced classes unlock permanently — with a celebratory banner.
+- The character creation screen shows locked classes with their unlock requirement.
+
+### The Living Dungeon (dynamic hazards)
+- **Shifting walls**: real-time gates in corridors open and close on a rhythm — read the pattern and dash through. Get caught and you're crushed (and shoved aside).
+- **Cyclic spike traps** in narrow passages: they rise and retract — time your run or take the hit.
+- **Web** (slow) and **curse** (attack-down) traps in open rooms.
+- **Pressure plates**: step on one for a gold + power reward that also flings every shifting wall open for a few seconds.
+- **Conveyor belts** are faster and stronger — and can shove you straight into a trap.
+
+### Dungeon Journal, reimagined
+- The conquest journal (**J**) is now a **visual gallery**: each region is a palette-driven mini dungeon-door scene, with clear counts, region colors, and locked regions shown behind a padlock.
+
+### Descend deeper, grow stronger
+- **Dungeon Tokens**: every floor cleared grants a token (Attack / Haste / Guard) that passively boosts your stats while held (with sensible caps).
+- **Class supply**: every 10 floors drops a piece of class-appropriate gear, scaled to your depth.
+
+### Fixes & polish
+- Fixed a **purple rectangle artifact** behind the COMBO label (and the quest-clear banner) on some systems.
+- Refreshed all **Steam store art** with 2D pixel key art of the real hero and enemy roster.
+
 ## v2.1.0 — Quests & the Living Town
 
 The town comes alive, and the villagers have stories to tell.
