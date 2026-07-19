@@ -233,6 +233,11 @@ def theme_index(floor_level: int) -> int:
     return min((floor_level - 1) // 50, len(_THEMES) - 1)
 
 
+def get_theme_by_index(idx: int) -> dict:
+    """구간 인덱스로 테마 팔레트 dict 조회 (정복 일지 썸네일용)."""
+    return _THEMES[max(0, min(idx, len(_THEMES) - 1))]
+
+
 THEME_COUNT = len(_THEMES)
 
 
@@ -246,6 +251,32 @@ def theme_name(idx: int) -> str:
 def theme_floor_range(idx: int) -> tuple:
     """테마 구간의 (시작층, 끝층)."""
     return idx * 50 + 1, min((idx + 1) * 50, MAX_FLOOR)
+
+
+# ── 동적 맵 이펙터: 테마별 연출 ──────────────────────────────────────────
+#  quake    : 상시 미세 지진 강도(px)   distort : 사인파 화면 왜곡 진폭
+#  conveyor : 흐르는 바닥 타일 스폰
+_THEME_FX = {
+    2:  {'distort': 0.9},                     # 서리 고성 — 냉기 아지랑이
+    3:  {'quake': 1.4},                       # 마그마 굴 — 용암 진동
+    4:  {'conveyor': True, 'shift': True},    # 기계 장치의 무덤 — 컨베이어 + 움직이는 벽
+    5:  {'distort': 1.2},                     # 환각의 숲 — 환각 왜곡
+    7:  {'quake': 0.8},                       # 바람 절벽 — 미세 진동
+    9:  {'distort': 1.5},                     # 심해 가라앉은 도시 — 수중 물결
+    10: {'conveyor': True, 'shift': True},    # 전기 회로 미로 — 컨베이어 + 움직이는 벽
+    12: {'quake': 1.0},                       # 붉은 사막 — 모래폭풍
+    13: {'distort': 1.0},                     # 연금술 실험실 — 마법 왜곡
+    14: {'quake': 1.2, 'shift': True},        # 무너지는 천공섬 — 붕괴 진동 + 움직이는 벽
+    15: {'distort': 1.1},                     # 그림자 영역 — 그림자 일렁임
+    17: {'distort': 1.9},                     # 왜곡된 시공간 — 강한 왜곡
+    18: {'quake': 1.4},                       # 고대 신의 무덤 — 신성 진동
+    19: {'distort': 1.6, 'quake': 1.2},       # 차원의 끝 — 왜곡 + 진동
+}
+
+
+def theme_fx(floor_level: int) -> dict:
+    """이 층의 동적 이펙트 설정 (없으면 빈 dict)."""
+    return _THEME_FX.get(theme_index(floor_level), {})
 
 
 def is_new_theme(floor_level: int) -> bool:

@@ -30,8 +30,8 @@ from map.theme import theme_index
 from core.lang import t, set_lang
 from core.combat import roll_damage
 from map.generator import generate_dungeon
-from map.tile import Tile, TileType
-from map.theme import get_theme, is_new_theme, MAX_FLOOR
+from map.tile import Tile, TileType, CONVEYOR_DIR
+from map.theme import get_theme, is_new_theme, MAX_FLOOR, theme_fx
 from entities.player import Player
 from entities.pet import Pet, PET_META, PET_TYPES
 from ui.hud import HUD
@@ -217,6 +217,18 @@ class Game:
         self._shake_timer     = 0
         self._shake_intensity = 0
         self._shake_max       = 1
+
+        # 동적 맵 이펙터
+        self._distort_amp     = 0.0    # 사인파 화면 왜곡 진폭(px, 0=없음)
+        self._conveyor_t      = 0.0    # 컨베이어 밀림 누적 타이머(ms)
+        # 동적 위험(이동벽 게이트 / 주기 가시) 상태
+        self._shift_walls: list = []   # [{'x','y','phase'}] — 이동벽 게이트/기둥
+        self._spikes: list      = []   # [{'x','y','phase','armed'}] — 주기 가시
+        self._shift_t         = 0.0    # 개폐/발동 공통 사이클 타이머(ms)
+        self._shift_open_ms   = 0.0    # 압력판으로 전부 강제 개방 잔여시간
+
+        # 엔딩 크레딧 / 엔들리스(심연) 모드
+        self._credits_scroll  = 0.0
 
         # 층 전환 페이드
         self._fade_alpha    = 0
@@ -512,6 +524,10 @@ class Game:
                                               self.player.stamina + dt * 0.022)
             self._update_fade(dt)
             self._update_shake(dt)
+            if self.camera:
+                self.camera.update(dt)          # 동적 지진(카메라 노이즈)
+            if self.state == 'credits':
+                self._update_credits(dt)
             self._update_move_anim(dt)
             if not self._is_fading:
                 self._handle_events(dt)
@@ -542,6 +558,9 @@ class Game:
                     if self._pet:                       # 펫: 경로 갱신 → 추종 + 능력
                         self._update_pet_trail()
                         self._pet.update(world_dt, self)
+                    if not self._in_town:
+                        self._update_conveyor(world_dt)
+                        self._update_hazards(world_dt)
                     # 방어구 파손 경고 소비 (Player.take_damage가 기록)
                     for _broken in self.player.just_broken:
                         self.messages.append((t('armor_broken', _broken.name), 'bad'))
@@ -629,6 +648,207 @@ class Game:
             return (0, 0)
         mag = max(0, int(self._shake_intensity * self._shake_timer / self._shake_max))
         return (random.randint(-mag, mag), random.randint(-mag, mag)) if mag > 0 else (0, 0)
+
+    # ─────────────── 동적 맵 이펙터 ──────────────────────────────────
+    def _apply_map_fx(self):
+        """현재 층 테마의 동적 이펙트를 카메라/렌더러에 설정."""
+        fx = {} if self._in_town else theme_fx(self.floor)
+        quake = fx.get('quake', 0.0)
+        if self.camera:
+            self.camera.set_ambient_shake(quake)
+            if quake > 0:                       # 층 진입 순간 강한 여진
+                self.camera.trigger_earthquake(quake * 4, 900)
+        self._distort_amp = fx.get('distort', 0.0)
+        self._conveyor_t = 0.0
+        # 이 층의 이동벽·주기 가시 수집
+        self._shift_walls = []
+        self._spikes = []
+        self._shift_t = 0.0
+        self._shift_open_ms = 0.0
+        if not self._in_town and self.dungeon:
+            for yy, row in enumerate(self.dungeon.tiles):
+                for xx, tl in enumerate(row):
+                    if tl.tile_type == TileType.SHIFT_WALL:
+                        self._shift_walls.append({'x': xx, 'y': yy, 'phase': tl.phase})
+                    elif tl.tile_type == TileType.SPIKE_TRAP:
+                        self._spikes.append({'x': xx, 'y': yy, 'phase': tl.phase,
+                                             'armed': False})
+
+    _CONVEYOR_PUSH_MS = 150     # 컨베이어 밀림 주기(ms) — 빠르고 강하게
+
+    # 이동벽: 닫힘 시간이 길고(개방 40%) 경고가 짧아 타이밍이 빡빡하다
+    _SHIFT_PERIOD_MS = 1900     # 개폐 한 주기(ms)
+    _SHIFT_OPEN_FRAC = 0.40     # 주기 중 열려 있는 비율(나머지는 닫힘)
+    _SHIFT_WARN_MS   = 300      # 닫히기 직전 경고(깜빡) 구간
+    # 주기 가시: 골목에서 튀어나오는 타이밍 패턴
+    _SPIKE_PERIOD_MS = 1500     # 발동 한 주기(ms)
+    _SPIKE_HOT_FRAC  = 0.42     # 가시가 솟아 피해를 주는 비율
+    _SPIKE_WARN_MS   = 300      # 솟기 직전 경고 구간
+
+    def _update_conveyor(self, dt):
+        """흐르는 바닥 위에 서 있으면 주기적으로 한 칸씩 밀린다."""
+        p = self.player
+        if not (p and self.dungeon.in_bounds(p.x, p.y)):
+            self._conveyor_t = 0.0; return
+        d = CONVEYOR_DIR.get(self.dungeon.tiles[p.y][p.x].tile_type)
+        if d is None:
+            self._conveyor_t = 0.0; return
+        self._conveyor_t += dt
+        if self._conveyor_t < self._CONVEYOR_PUSH_MS:
+            return
+        self._conveyor_t = 0.0
+        nx, ny = p.x + d, p.y
+        if self.dungeon.is_walkable(nx, ny) and not self.dungeon.get_enemy_at(nx, ny):
+            self._move_anim_offset[0] = max(-TILE_SIZE, min(TILE_SIZE,
+                self._move_anim_offset[0] - d * TILE_SIZE))
+            p.x, p.y = nx, ny
+            self.camera.center_on(p.x, p.y)
+            if not self._is_test_mode:
+                self.dungeon.update_visibility(p.x, p.y)
+            item = self.dungeon.get_item_at(nx, ny)
+            if item:
+                self._pickup(item)
+            self._on_enter_tile(nx, ny)     # 컨베이어가 트랩·압력판으로 밀 수 있음
+
+    # ─────────────── 동적 위험 (이동벽 + 주기 가시) ──────────────────
+    def _update_hazards(self, dt):
+        """이동벽 게이트 개폐 + 골목 주기 가시 발동. 실시간 맵 변화."""
+        if not (self._shift_walls or self._spikes):
+            return
+        if self._shift_open_ms > 0:
+            self._shift_open_ms = max(0.0, self._shift_open_ms - dt)
+        self._shift_t += dt
+        self._update_shift_walls()
+        self._update_spikes()
+
+    def _update_shift_walls(self):
+        per = self._SHIFT_PERIOD_MS
+        of  = self._SHIFT_OPEN_FRAC
+        warn_frac = self._SHIFT_WARN_MS / per
+        force_open = self._shift_open_ms > 0
+        px, py = self.player.x, self.player.y
+        for sw in self._shift_walls:
+            x, y = sw['x'], sw['y']
+            if not self.dungeon.in_bounds(x, y):
+                continue
+            tile = self.dungeon.tiles[y][x]
+            local = (self._shift_t / per + sw['phase']) % 1.0
+            want_open = force_open or (local < of)
+            # 개방 구간이 곧 끝남 → 닫힘 경고(깜빡)
+            tile.warn = (not force_open) and want_open and (of - local) < warn_frac
+            if not want_open and not tile.blocked:
+                if self.dungeon.get_enemy_at(x, y):   # 적 끼임 방지
+                    continue
+                if (px, py) == (x, y):
+                    self._crush_player(x, y)
+                tile.blocked = True
+                tile.block_sight = True
+            elif want_open and tile.blocked:
+                tile.blocked = False
+                tile.block_sight = False
+
+    def _update_spikes(self):
+        per = self._SPIKE_PERIOD_MS
+        hf  = self._SPIKE_HOT_FRAC
+        warn_frac = self._SPIKE_WARN_MS / per
+        px, py = self.player.x, self.player.y
+        for sp in self._spikes:
+            x, y = sp['x'], sp['y']
+            if not self.dungeon.in_bounds(x, y):
+                continue
+            tile = self.dungeon.tiles[y][x]
+            local = (self._shift_t / per + sp['phase']) % 1.0
+            hot = local < hf
+            tile.hot = hot
+            tile.warn = (not hot) and (1.0 - local) < warn_frac   # 솟기 직전
+            if hot and (px, py) == (x, y) and not sp['armed']:
+                self._spring_spike(x, y)
+                sp['armed'] = True
+            elif not hot:
+                sp['armed'] = False
+
+    def _spring_spike(self, x, y):
+        p = self.player
+        dmg = max(4, int(p.max_hp * 0.10))
+        p.take_damage(dmg)
+        self._hurt_flash_ms = 90
+        self.animator.add(CalloutAnim(x, y, t('hazard_spike', dmg), (255, 90, 70)))
+        self.animator.particles.emit_basic_hit(x, y)
+        self._start_shake(5, 200)
+        self.audio.play('hit')
+
+    def _crush_player(self, x, y):
+        """움직이는 벽이 플레이어를 덮침 — 피해 + 인접 빈칸으로 밀어냄."""
+        p = self.player
+        dmg = max(4, int(p.max_hp * 0.08))
+        p.take_damage(dmg)
+        self._hurt_flash_ms = 90
+        self.animator.add(CalloutAnim(x, y, t('hazard_crush'), (230, 120, 90)))
+        self.animator.particles.emit_death(x, y, (120, 130, 150))
+        self._start_shake(6, 260)
+        self.audio.play('hit')
+        # 인접 빈칸으로 밀어내기
+        for ox, oy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            nx, ny = x + ox, y + oy
+            if self.dungeon.is_walkable(nx, ny) and not self.dungeon.get_enemy_at(nx, ny):
+                p.x, p.y = nx, ny
+                self.camera.center_on(p.x, p.y)
+                break
+
+    # ─────────────── 트랩 / 압력판 발동 ──────────────────────────────
+    def _on_enter_tile(self, x, y):
+        """플레이어가 한 칸에 진입할 때 트랩·압력판 효과 발동."""
+        if not self.dungeon.in_bounds(x, y):
+            return
+        tt = self.dungeon.tiles[y][x].tile_type
+        # 가시는 주기형(_update_spikes에서 처리) — 여기선 방 트랩만
+        if tt == TileType.WEB_TRAP:
+            self.player.slowed_ms = max(self.player.slowed_ms, 2400)
+            self.animator.add(CalloutAnim(x, y, t('hazard_web'), (220, 235, 245)))
+            self.animator.particles.emit_basic_hit(x, y)
+            self.audio.play('hit')
+        elif tt == TileType.CURSE_TRAP:
+            self.player.atk_down_ms = max(self.player.atk_down_ms, 4200)
+            self.player.atk_down_pct = 0.30
+            self.animator.add(CalloutAnim(x, y, t('hazard_curse'), (190, 120, 235)))
+            self.animator.particles.emit_death(x, y, (150, 90, 210))
+            self.audio.play('hit')
+        elif tt == TileType.BUTTON:
+            self._press_button(x, y)
+
+    def _press_button(self, x, y):
+        """압력판 — 보상(골드+전투 함성 버프) + 이동벽 전부 개방. 1회성."""
+        p = self.player
+        reward = int(120 * getattr(self, '_gold_mult', 1.0)) + self.floor
+        p.gold += reward
+        p.atk_bonus_pct = max(p.atk_bonus_pct, 0.30)
+        p.atk_bonus_ms = max(p.atk_bonus_ms, 6000)
+        self._shift_open_ms = 3600.0                 # 움직이는 벽 잠시 전부 개방
+        self._gold_flash_ms = 200
+        self.animator.add(BannerAnim(t('hazard_button'), (255, 210, 90), size=26))
+        self.animator.particles.emit_levelup(x, y)
+        self._start_punch_zoom(0.05, 130)
+        self.audio.play('levelup')
+        # 압력판은 눌리면 바닥으로 (재발동 방지)
+        self.dungeon.tiles[y][x] = Tile.floor()
+
+    def _apply_distortion(self, surf):
+        """사인파 수평 왜곡 — 화면 전체가 흐물흐물 일렁이는 착시.
+
+        (셰이더 없이 수평 스트립을 좌우로 밀어 근사. GPU 셰이더 연동 시
+         이 함수를 프래그먼트 셰이더 uniform(amp, time)으로 대체하면 된다.)
+        """
+        amp = self._distort_amp
+        if amp <= 0:
+            return surf
+        w, h = surf.get_size()
+        out = pygame.Surface((w, h))
+        tphase = pygame.time.get_ticks() * 0.004
+        strip = 4                                  # 스트립 높이(성능/품질 절충)
+        for sy in range(0, h, strip):
+            dx = int(math.sin(sy * 0.05 + tphase) * amp)
+            out.blit(surf, (dx, sy), (0, sy, w, strip))
+        return out
 
     # ─────────────── 층 전환 페이드 ──────────────────────────────────
     def _start_fade(self, callback):
@@ -873,8 +1093,10 @@ class Game:
         self.state = 'playing'
 
     def _load_floor(self, is_new_game=False):
-        self.floor = min(self.floor, MAX_FLOOR)
-        self._quest_on_floor(self.floor)   # reach_floor 퀘스트 추적
+        # 엔들리스(심연): 999 클리어 후엔 999 너머로 하강 허용
+        if not self._records.get('game_cleared', False):
+            self.floor = min(self.floor, MAX_FLOOR)
+        self._quest_on_floor(min(self.floor, MAX_FLOOR))   # reach_floor 퀘스트 추적
         self.vfx_loot.clear()          # 이전 층 전리품 연출 정리
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
@@ -911,6 +1133,7 @@ class Game:
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
+        self._apply_map_fx()        # 테마별 지진/왜곡 설정 (컨베이어는 생성기)
         # 펫: 층 이동 시 위치 재동기화 (신규게임이면 아직 미해금)
         if self._pet:
             self._pet.snap_to(self.player.x, self.player.y)
@@ -1085,6 +1308,8 @@ class Game:
                     self._open_pet_status()          # 펫 상태창 (B)
                 elif self.state == 'pet':
                     self._handle_pet_key(event.key)
+                elif self.state == 'credits':        # 크레딧: 아무 키 → 스킵
+                    self._finish_credits()
 
         # 캐릭터 생성 화면은 raw 키 입력 전용 — 액션 처리 건너뜀
         if self.state == 'char_create':
@@ -1675,17 +1900,26 @@ class Game:
         if target_tile.tile_type == TileType.DOOR:
             self.audio.play('stairs')
             if self.floor >= MAX_FLOOR:
-                # 999층 최종 클리어 — 마스터 정산 보상 지급 후 종료
-                self._record_theme_clear_for(self.floor)
-                self._check_game_complete()
-                self.messages.append((t('victory'), 'good'))
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
-                delete_save(self._save_slot)
-                self.state = 'game_over'
+                if not self._records.get('game_cleared', False):
+                    # ── 최초 999 클리어 → 마스터 정산 + 엔딩 크레딧 (세이브 유지) ──
+                    self._record_theme_clear_for(self.floor)
+                    self._check_game_complete()   # game_cleared=True, 보상 지급
+                    self.messages.append((t('victory'), 'good'))
+                    self._credits_scroll = 0.0
+                    self.state = 'credits'
+                    self.audio.play('levelup_big')
+                else:
+                    # ── 엔들리스 심연: 999층 너머로 계속 하강 ──
+                    self._grant_floor_clear_reward(self.floor)
+                    self.floor += 1
+                    self._abyss_reward()
+                    self._start_fade(self._load_floor)
             else:
                 # 테마 구간 경계를 넘으면(예: 50→51) 방금 완수한 테마 +1
                 if theme_index(self.floor + 1) > theme_index(self.floor):
                     self._record_theme_clear_for(self.floor)
+                self._grant_floor_clear_reward(self.floor)
                 self.floor += 1
                 if not self._is_test_mode:
                     self.achievements.check_floor(self.floor)
@@ -1703,6 +1937,8 @@ class Game:
         item = self.dungeon.get_item_at(nx, ny)
         if item:
             self._pickup(item)
+        if not self._in_town:
+            self._on_enter_tile(nx, ny)     # 트랩·압력판 발동
 
         # ── 포탈 밟기: 마을 ↔ 던전 ──────────────────────────────────
         if self._in_town:
@@ -2297,12 +2533,67 @@ class Game:
         self._saved_camera = self.camera
         self.camera = Camera(TOWN_W, TOWN_H)
         self.camera.center_on(self.player.x, self.player.y)
+        self._apply_map_fx()        # 마을은 정적 (지진/왜곡 없음)
         self.messages.append((t('town_enter'), 'good'))
         if moved:
             self.messages.append((t('town_deposit', moved), 'info'))
         self.audio.play('stairs')
         # 방 입장 시 자기 프로필 브로드캐스트 (스텁 · 미래 멀티플레이 결합점)
         self._broadcast_user_profile()
+
+    # ── 층 클리어 보상: 던전 증표 + 직업 장비 보급 ──────────────────────
+    _TOKEN_CYCLE = ('guard', 'atk', 'haste')   # floor % 3 → 증표 종류
+    _CLASS_GEAR = {
+        'warrior': ['broad_sword', 'great_sword', 'chain_mail', 'plate_armor',
+                    'mythril_armor', 'iron_shield', 'tower_shield', 'knight_helm',
+                    'war_pendant'],
+        'archer':  ['sword', 'broad_sword', 'swift_boots', 'shadow_boots',
+                    'leather_armor', 'mythril_armor', 'iron_helm', 'magic_stone',
+                    'silver_ring'],
+    }
+
+    def _grant_floor_clear_reward(self, cleared_floor):
+        """한 층을 클리어(다음 층 문 통과)할 때마다 보상.
+
+        · 던전 증표 +1 (종류는 층에 따라 순환) — 소지 시 패시브 스탯 상승
+        · 10층마다 직업별 장비 보급
+        """
+        p = self.player
+        if p is None:
+            return
+        if not hasattr(p, 'tokens') or p.tokens is None:
+            p.tokens = {'atk': 0, 'haste': 0, 'guard': 0}
+        kind = self._TOKEN_CYCLE[cleared_floor % 3]
+        p.tokens[kind] = p.tokens.get(kind, 0) + 1
+        # 알림 스팸 방지: 5층마다 현재 증표 보너스 요약만 표시
+        if cleared_floor % 5 == 0:
+            self.messages.append((t('token_gain_sum', p.token_atk, p.token_def,
+                                     int(p.token_aspd * 100)), 'info'))
+        # 직업별 장비 보급 (10층마다)
+        if cleared_floor % 10 == 0:
+            self._grant_class_gear(cleared_floor)
+
+    def _grant_class_gear(self, floor):
+        """직업에 맞는 무기/방어구 1개를 깊이에 맞춰 강화된 상태로 지급."""
+        from entities.item import Item
+        p = self.player
+        cls = getattr(p, 'char_class', 'warrior')
+        pool = [k for k in self._CLASS_GEAR.get(cls, self._CLASS_GEAR['warrior'])
+                if k in self._item_data]
+        if not pool:
+            return
+        key = random.choice(pool)
+        d = dict(self._item_data[key])
+        d['key'] = key
+        d['enhance_level'] = min(18, floor // 50)
+        it = Item(0, 0, d)
+        if len(p.inventory) < p.max_inventory:
+            p.inventory.append(it)
+            self.messages.append((t('class_gear_grant', it.name), 'good'))
+        else:
+            # 인벤 가득 → 강화석 +2로 보상 전환 (바닥 드롭은 층 전환으로 소실되므로)
+            p.enhance_stones += 2
+            self.messages.append((t('class_gear_full', it.name), 'good'))
 
     # ── 정복 일지 / 마스터 정산 ─────────────────────────────────────────
     def _record_theme_clear_for(self, floor):
@@ -2345,6 +2636,28 @@ class Game:
         name = getattr(self, '_char_name', None) or getattr(self.player, 'char_name', 'Hero')
         prof = build_user_profile(name, self._records)
         self._net.broadcast_profile(prof)
+
+    # ── 엔딩 크레딧 / 엔들리스 심연 ──────────────────────────────────
+    def _update_credits(self, dt):
+        self._credits_scroll += dt * 0.05          # px/ms
+        if self._credits_scroll > self.hud.credits_height():
+            self._finish_credits()
+
+    def _finish_credits(self):
+        """크레딧 종료 → 마을로 (엔들리스 심연 재도전 거점)."""
+        self.messages.append((t('credits_done'), 'good'))
+        self.state = 'playing'
+        self._enter_town()
+
+    def _abyss_reward(self):
+        """엔들리스 심연 각 층 진입 보상 — 강화석·펫석·골드."""
+        self.player.enhance_stones += 2
+        if getattr(self.player, 'is_pet_unlocked', False):
+            self.player.pet_stones += 1
+        self.player.gold += int(400 * self._gold_mult)
+        self.messages.append((t('abyss_descend', self.floor), 'good'))
+        self.animator.add(BannerAnim(t('abyss_banner', self.floor),
+                                     (180, 90, 240), size=30))
 
     def _open_journal(self):
         self._journal_return_state = self.state
@@ -2505,6 +2818,7 @@ class Game:
             if not self._is_test_mode:
                 self.dungeon.update_visibility(self.player.x, self.player.y)
             self.camera.center_on(self.player.x, self.player.y)
+            self._apply_map_fx()        # 복귀한 층의 지진/왜곡 재적용
             self.messages.append((t('town_return', self.floor), 'good'))
             self.audio.play('teleport')
         else:
@@ -2818,10 +3132,11 @@ class Game:
         alpha = 255 if k > 0.25 else int(255 * k / 0.25)
         title = self._quest_clear_font.render(f"✦ {t('quest_clear')} ✦", True,
                                               (255, 235, 150))
-        title.set_alpha(alpha)
+        # per-pixel alpha 안전 페이드 (set_alpha는 일부 SDL에서 직사각형 아티팩트)
+        title.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
         self._game_surf.blit(title, (cx - title.get_width() // 2, cy - 24))
         nm = self.hud.font_md.render(self._quest_clear_name, True, (255, 250, 220))
-        nm.set_alpha(alpha)
+        nm.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
         self._game_surf.blit(nm, (cx - nm.get_width() // 2, cy + 8))
 
     # ── 잡화점 (마을 상인): 소모품 위주, 던전 상점보다 저렴 ───────────
@@ -4290,6 +4605,11 @@ class Game:
             pygame.display.flip()
             return
 
+        if self.state == 'credits':
+            self.hud.render_credits(self.screen, self._credits_scroll, self._records)
+            pygame.display.flip()
+            return
+
         self._render_dungeon()
         self.hud.render(self.screen, self.player, self.messages, self.floor,
                         self.dungeon, self.skills,
@@ -4486,12 +4806,16 @@ class Game:
             w, h = txt.get_size()
             txt = pygame.transform.scale(txt, (int(w * scale), int(h * scale)))
             # 티어 진입 시 뒤에 글로우 잔광 (확대 저알파 사본)
+            # NOTE: set_alpha()는 일부 SDL 블리터에서 per-pixel alpha를 무시해
+            #       투명 영역(폰트색·alpha 0)이 통째로 채워진 '보라 직사각형'으로
+            #       렌더된다. BLEND_RGBA_MULT로 per-pixel alpha에 곱해 확실히 처리.
             if tier:
                 glow = pygame.transform.scale(txt, (txt.get_width() + 12,
                                                     txt.get_height() + 12))
-                glow.set_alpha(alpha // 4)
+                ga = max(0, min(255, alpha // 4))
+                glow.fill((255, 255, 255, ga), special_flags=pygame.BLEND_RGBA_MULT)
                 self._game_surf.blit(glow, ((GAME_W - glow.get_width()) // 2, 28))
-            txt.set_alpha(alpha)
+            txt.fill((255, 255, 255, alpha), special_flags=pygame.BLEND_RGBA_MULT)
             self._game_surf.blit(txt, ((GAME_W - txt.get_width()) // 2, 34))
 
         # 피격 붉은 비네트 (가장자리 테두리, 잔여 시간에 따라 옅어짐)
@@ -4526,20 +4850,24 @@ class Game:
             flash.fill((255, 218, 100, a))
             self._game_surf.blit(flash, (0, 0))
 
-        # 화면 흔들림 + 펀치 줌 적용
+        # 사인파 왜곡(수중/마법 층) → 화면 흔들림(+카메라 지진) + 펀치 줌
+        src = self._apply_distortion(self._game_surf)
         sox, soy = self._shake_offset
+        if self.camera:                          # 동적 지진 오프셋 합산
+            sox += int(self.camera.offset_x)
+            soy += int(self.camera.offset_y)
         if self._punch_zoom_ms > 0:
             k  = self._punch_zoom_ms / self._punch_zoom_max
             z  = 1.0 + self._punch_zoom_amt * k
             zw, zh = int(GAME_W * z), int(GAME_H * z)
-            zoomed = pygame.transform.scale(self._game_surf, (zw, zh))
+            zoomed = pygame.transform.scale(src, (zw, zh))
             clip = self.screen.get_clip()
             self.screen.set_clip(pygame.Rect(GAME_X, GAME_Y, GAME_W, GAME_H))
             self.screen.blit(zoomed, (GAME_X - (zw - GAME_W) // 2 + sox,
                                       GAME_Y - (zh - GAME_H) // 2 + soy))
             self.screen.set_clip(clip)
         else:
-            self.screen.blit(self._game_surf, (GAME_X + sox, GAME_Y + soy))
+            self.screen.blit(src, (GAME_X + sox, GAME_Y + soy))
 
     def _draw_tile(self, tile, x, y, lit):
         ts = TILE_SIZE; s = self._game_surf; tt = tile.tile_type
@@ -4563,6 +4891,13 @@ class Game:
                 ccx, ccy = x+ts//2, y+ts//2
                 pygame.draw.circle(s, SHOP_COLOR, (ccx, ccy), 6, 2)
                 _r(s, SHOP_COLOR, ccx, ccy-1, 5, 2)
+        elif tt in (TileType.CONVEYOR_LEFT, TileType.CONVEYOR_RIGHT):
+            self._draw_conveyor(s, x, y, lit, tt)
+        elif tt in (TileType.SPIKE_TRAP, TileType.WEB_TRAP,
+                    TileType.CURSE_TRAP, TileType.BUTTON):
+            self._draw_trap(s, x, y, lit, tt, tile)
+        elif tt == TileType.SHIFT_WALL:
+            self._draw_shift_wall(s, x, y, lit, tile)
         else:
             col = th['floor_lit'] if lit else th['floor_dim']
             pygame.draw.rect(s, col, (x,y,ts,ts))
@@ -4572,6 +4907,94 @@ class Game:
                 ccx, ccy = x+ts//2, y+ts//2
                 pygame.draw.polygon(s, sc, [(ccx,ccy+7),(ccx-6,ccy-3),(ccx+6,ccy-3)])
                 pygame.draw.line(s, sc, (ccx-4,ccy-3),(ccx+4,ccy-3), 2)
+
+    def _draw_conveyor(self, s, x, y, lit, tt):
+        """흐르는 바닥 — 방향 화살표(쉐브론)가 흘러가는 애니메이션."""
+        ts = TILE_SIZE
+        d = CONVEYOR_DIR[tt]
+        base = (58, 64, 82) if lit else (32, 36, 48)
+        pygame.draw.rect(s, base, (x, y, ts, ts))
+        if lit:
+            pygame.draw.rect(s, (86, 94, 116), (x, y, ts, ts), 1)
+        arr = (150, 165, 205) if lit else (66, 74, 96)
+        period = 12
+        off = int(pygame.time.get_ticks() * 0.04) % period
+        cy = y + ts // 2
+        for i in range(-1, ts // period + 2):
+            ax = x + i * period + (off if d > 0 else period - off)
+            if d > 0:
+                pygame.draw.lines(s, arr, False, [(ax, cy-5), (ax+5, cy), (ax, cy+5)], 2)
+            else:
+                pygame.draw.lines(s, arr, False, [(ax+5, cy-5), (ax, cy), (ax+5, cy+5)], 2)
+
+    def _draw_trap(self, s, x, y, lit, tt, tile=None):
+        """트랩·압력판 — 바닥 위 위험 표식. 가시는 주기 상태(솟음/경고/숨음) 반영."""
+        ts = TILE_SIZE; th = self._theme
+        col = th['floor_lit'] if lit else th['floor_dim']
+        pygame.draw.rect(s, col, (x, y, ts, ts))
+        if lit:
+            pygame.draw.rect(s, th['floor_edge'], (x, y, ts, ts), 1)
+        cx, cy = x + ts // 2, y + ts // 2
+        dim = 0.5 if not lit else 1.0
+        pulse = 0.6 + 0.4 * abs(math.sin(pygame.time.get_ticks() * 0.004))
+        def C(c): return tuple(min(255, int(v * dim * (pulse if lit else 1))) for v in c)
+        if tt == TileType.SPIKE_TRAP:
+            # 바닥 판(구멍) — 항상
+            pygame.draw.rect(s, (int(60*dim), int(58*dim), int(70*dim)),
+                             (x + 3, y + 3, ts - 6, ts - 6))
+            hot  = getattr(tile, 'hot', False)
+            warn = getattr(tile, 'warn', False)
+            if hot:                                   # 솟음 — 위험(밝은 강철 가시)
+                for sx in (-6, 0, 6):
+                    pygame.draw.polygon(s, C((225, 120, 110)),
+                        [(cx + sx - 4, cy + 7), (cx + sx, cy - 8), (cx + sx + 4, cy + 7)])
+                    pygame.draw.polygon(s, C((255, 200, 190)),
+                        [(cx + sx - 1, cy + 5), (cx + sx, cy - 7), (cx + sx + 1, cy + 5)])
+            elif warn and (pygame.time.get_ticks() // 110) % 2 == 0:
+                for sx in (-6, 0, 6):                 # 솟기 직전 — 붉은 예고선
+                    pygame.draw.line(s, (210, 90, 70), (cx + sx, cy + 4), (cx + sx, cy - 2), 2)
+            else:                                     # 숨음 — 안전(작은 홈)
+                for sx in (-6, 0, 6):
+                    pygame.draw.circle(s, (int(90*dim), int(84*dim), int(96*dim)),
+                                       (cx + sx, cy + 3), 2)
+        elif tt == TileType.WEB_TRAP:
+            wc = C((200, 220, 235))
+            for a in range(0, 360, 45):
+                r = math.radians(a)
+                pygame.draw.line(s, wc, (cx, cy),
+                                 (cx + int(math.cos(r) * 8), cy + int(math.sin(r) * 8)), 1)
+            pygame.draw.circle(s, wc, (cx, cy), 5, 1)
+            pygame.draw.circle(s, wc, (cx, cy), 8, 1)
+        elif tt == TileType.CURSE_TRAP:
+            mc = C((165, 95, 220))
+            pygame.draw.circle(s, mc, (cx, cy), 8, 2)
+            pygame.draw.circle(s, C((120, 60, 180)), (cx, cy), 4)
+            pygame.draw.line(s, mc, (cx - 4, cy - 4), (cx + 4, cy + 4), 1)
+            pygame.draw.line(s, mc, (cx + 4, cy - 4), (cx - 4, cy + 4), 1)
+        elif tt == TileType.BUTTON:
+            gc = C((255, 205, 90))
+            pygame.draw.circle(s, C((90, 70, 30)), (cx, cy), 9)
+            pygame.draw.circle(s, gc, (cx, cy), 9, 2)
+            pygame.draw.circle(s, gc, (cx, cy), 4)
+
+    def _draw_shift_wall(self, s, x, y, lit, tile):
+        """움직이는 벽 — 닫히면 금속 기둥, 열리면 바닥 위 격자. 경고 시 깜빡."""
+        ts = TILE_SIZE; th = self._theme
+        if tile.blocked:
+            col = th['wall_lit'] if lit else th['wall_dim']
+            pygame.draw.rect(s, col, (x, y, ts, ts))
+            pygame.draw.rect(s, th['wall_top'], (x, y, ts, ts), 2)
+            pygame.draw.line(s, th['wall_top'], (x + 4, y + 4), (x + ts - 5, y + 4))
+            pygame.draw.line(s, th['wall_bot'], (x + 4, y + ts - 5), (x + ts - 5, y + ts - 5))
+        else:
+            col = th['floor_lit'] if lit else th['floor_dim']
+            pygame.draw.rect(s, col, (x, y, ts, ts))
+            grate = (90, 100, 120) if lit else (48, 54, 68)
+            # 경고 중이면 붉게 깜빡 (곧 솟아오름)
+            if getattr(tile, 'warn', False) and (pygame.time.get_ticks() // 120) % 2 == 0:
+                grate = (230, 110, 80)
+            for gx in range(x + 3, x + ts - 2, 6):
+                pygame.draw.line(s, grate, (gx, y + 3), (gx, y + ts - 3), 1)
 
     def _draw_door(self, s, x, y, lit, th):
         ts = TILE_SIZE

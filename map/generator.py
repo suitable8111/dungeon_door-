@@ -1,7 +1,7 @@
 import random
 from map.tile import Tile, TileType
 from map.dungeon import Dungeon
-from map.theme import theme_index, MAX_FLOOR
+from map.theme import theme_index, theme_fx, MAX_FLOOR
 
 
 class Room:
@@ -101,9 +101,126 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
         dungeon.has_shop = True
         dungeon.shop_items = _make_shop_items(floor_level, item_data)
 
+    # 흐르는 바닥(컨베이어) — 기계/전기 테마 층
+    if theme_fx(floor_level).get('conveyor') and len(rooms) >= 3:
+        _place_conveyors(dungeon, rooms)
+
+    # 동적 위험: 트랩 + 압력판(모든 층) + 움직이는 벽(shift 테마)
+    if not is_boss_floor:
+        _place_hazards(dungeon, rooms, floor_level)
+
     _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor)
 
     return dungeon, rooms[0].center
+
+
+def _place_conveyors(dungeon, rooms):
+    """일부 방에 가로 컨베이어 띠를 깐다 (시작방 제외, 방향 교대)."""
+    # 시작방/마지막(보스·문)방은 제외
+    candidates = rooms[1:-1] or rooms[1:]
+    random.shuffle(candidates)
+    direction = 1
+    for room in candidates[:max(1, len(candidates) // 2)]:
+        ry = room.y + room.h // 2                 # 방 중앙 가로줄
+        for rx in range(room.x, room.x + room.w):
+            if dungeon.in_bounds(rx, ry) and \
+                    dungeon.tiles[ry][rx].tile_type == TileType.FLOOR:
+                dungeon.tiles[ry][rx] = Tile.conveyor(direction)
+        direction *= -1                            # 방마다 방향 교대
+
+
+def _place_hazards(dungeon, rooms, floor_level):
+    """골목(통로) 중심의 패턴형 위험 배치.
+
+    · 통로에 '주기 가시'와 '이동벽 게이트' — 넓은 방과 달리 우회 불가,
+      플레이어가 개폐/발동 패턴을 파악해 타이밍으로 돌파해야 한다.
+    · 넓은 방에는 거미줄/저주(회피 가능) + 압력판(보상).
+    · shift 테마 층은 방 하나를 '파도 관문'으로 추가 구성.
+    · 움직이는 벽은 모든 비-보스 층에 등장(얕은 층은 게이트 수만 적음).
+    """
+    if len(rooms) < 2:
+        return
+    interior = set()
+    for r in rooms:
+        for yy in range(r.y, r.y + r.h):
+            for xx in range(r.x, r.x + r.w):
+                interior.add((xx, yy))
+    protected = set()
+    for r in (rooms[0], rooms[-1]):                 # 시작/마지막 방 + 넉넉한 여백
+        for yy in range(r.y - 2, r.y + r.h + 2):
+            for xx in range(r.x - 2, r.x + r.w + 2):
+                protected.add((xx, yy))
+
+    def is_floor(x, y):
+        return (dungeon.in_bounds(x, y)
+                and dungeon.tiles[y][x].tile_type == TileType.FLOOR)
+
+    def phase_of(x, y):                             # 위치 기반 위상 → 연속 위험이 파도를 이룸
+        return (x * 0.13 + y * 0.17) % 1.0
+
+    # 골목 타일 = 방 밖 바닥(통로)
+    corridor = [(x, y) for (x, y) in (
+                    (xx, yy) for yy in range(dungeon.height)
+                    for xx in range(dungeon.width))
+                if is_floor(x, y) and (x, y) not in interior and (x, y) not in protected]
+    random.shuffle(corridor)
+    used = set()
+
+    # 1) 골목 주기 가시 (패턴 타이밍 돌파)
+    n_spike = min(16, 5 + floor_level // 25)
+    placed = 0
+    for x, y in corridor:
+        if placed >= n_spike:
+            break
+        if (x, y) in used:
+            continue
+        dungeon.tiles[y][x] = Tile.trap(TileType.SPIKE_TRAP, phase_of(x, y))
+        used.add((x, y)); placed += 1
+
+    # 2) 골목 이동벽 게이트 (모든 층, 서로 붙지 않게)
+    n_gate = min(10, 3 + floor_level // 40)
+    placed = 0
+    for x, y in corridor:
+        if placed >= n_gate:
+            break
+        if (x, y) in used:
+            continue
+        if any((x + dx, y + dy) in used for dx in (-1, 0, 1) for dy in (-1, 0, 1)):
+            continue
+        dungeon.tiles[y][x] = Tile.shift_wall(phase_of(x, y))
+        used.add((x, y)); placed += 1
+
+    # 3) 넓은 방: 거미줄/저주(회피 가능) + 압력판
+    room_spots = [(x, y) for r in (rooms[1:-1] or rooms[1:])
+                  for y in range(r.y, r.y + r.h) for x in range(r.x, r.x + r.w)
+                  if is_floor(x, y) and (x, y) not in protected and (x, y) not in used]
+    random.shuffle(room_spots)
+    n_room = min(8, 2 + floor_level // 50)
+    for x, y in room_spots[:n_room]:
+        dungeon.tiles[y][x] = Tile.trap(random.choice((TileType.WEB_TRAP,
+                                                       TileType.CURSE_TRAP)))
+        used.add((x, y))
+    for x, y in room_spots[n_room:n_room + random.randint(1, 2)]:
+        if (x, y) not in used:
+            dungeon.tiles[y][x] = Tile.button(); used.add((x, y))
+
+    # 4) shift 테마: 방 하나를 파도 관문으로
+    if theme_fx(floor_level).get('shift'):
+        _place_barrier_room(dungeon, rooms, protected, is_floor)
+
+
+def _place_barrier_room(dungeon, rooms, protected, is_floor):
+    """방을 세로 기둥열로 채워 파도식 관문 — 열들이 시차로 열려 틈이 이동한다."""
+    cands = [r for r in (rooms[1:-1] or rooms[1:]) if r.w >= 7 and r.h >= 4]
+    if not cands:
+        return
+    r = random.choice(cands)
+    for ci, cx in enumerate(range(r.x + 1, r.x + r.w - 1, 2)):
+        ph = (ci * 0.24) % 1.0                       # 열마다 위상 시차 → 파도
+        for yy in range(r.y + 1, r.y + r.h - 1):
+            if is_floor(cx, yy) and (cx, yy) not in protected:
+                dungeon.tiles[yy][cx] = Tile.shift_wall(ph)
+                protected.add((cx, yy))
 
 
 def _carve_room(dungeon, room):

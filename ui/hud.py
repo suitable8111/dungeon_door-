@@ -154,6 +154,54 @@ class HUD:
         self._bottom_bar(screen, messages)
 
     # ------------------------------------------------------------------ #
+    def _credits_lines(self):
+        """엔딩 크레딧 라인 — (text, font, color, 위쪽 여백)."""
+        big = self.font_pixel_title or self.font_lg
+        return [
+            ('DUNGEON DOOR', big, GOLD_COLOR, 60),
+            (t('credits_end'), self.font_lg, (235, 235, 245), 26),
+            ('', None, None, 60),
+            (t('credits_to_conqueror'), self.font_md, (180, 210, 255), 0),
+            ('★ ' + t('title_abyss_sovereign') + ' ★', self.font_lg, (255, 222, 105), 14),
+            ('', None, None, 70),
+            (t('credits_staff'), self.font_md, (150, 150, 195), 0),
+            (t('credits_role'), self.font_sm, (215, 215, 228), 8),
+            ('', None, None, 70),
+            (t('credits_thanks'), self.font_md, (255, 220, 150), 0),
+            ('', None, None, 50),
+            (t('credits_abyss_open'), self.font_md, (195, 120, 245), 0),
+            (t('credits_return_town'), self.font_sm, (170, 170, 195), 8),
+            ('', None, None, 90),
+            (t('credits_skip'), self.font_sm, (95, 92, 125), 0),
+        ]
+
+    def credits_height(self):
+        return getattr(self, '_credits_total_h', 2200)
+
+    def render_credits(self, screen, scroll, records=None):
+        """엔딩 스태프롤 — 아래에서 위로 스크롤."""
+        W, H = WINDOW_WIDTH, WINDOW_HEIGHT
+        screen.fill((5, 4, 12))
+        import random as _rnd
+        rng = _rnd.Random(3)
+        for _ in range(120):
+            sx, sy = rng.randint(0, W), rng.randint(0, H)
+            b = rng.randint(35, 120)
+            screen.set_at((sx, sy), (b, b, min(255, b + 25)))
+        y = H - int(scroll)
+        total = 0
+        for text, font, col, gap in self._credits_lines():
+            y += gap; total += gap
+            if text and font:
+                surf = font.render(text, True, col)
+                if -40 < y < H + 40:
+                    screen.blit(surf, (W // 2 - surf.get_width() // 2, y))
+                lh = surf.get_height() + 14
+            else:
+                lh = 18
+            y += lh; total += lh
+        self._credits_total_h = total + H
+
     def render_game_over(self, screen, floor_num, records=None):
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
@@ -861,15 +909,24 @@ class HUD:
         def_bonus = player.total_defense - player.defense
         atk_str = str(player.total_attack) + (f" (+{atk_bonus})" if atk_bonus else "")
         def_str = str(player.total_defense) + (f" (+{def_bonus})" if def_bonus else "")
+        aspd_total = getattr(player, 'total_attack_speed', player.attack_speed)
+        aspd_str = f"{aspd_total:.2f}" + (
+            f" (+{player.token_aspd:.2f})" if getattr(player, 'token_aspd', 0) else "")
         stats = [
             (t('stat_atk'),  atk_str,                         WHITE),
             (t('stat_def'),  def_str,                         (130, 180, 255)),
-            (t('stat_aspd'), f"{player.attack_speed:.2f}",    (255, 200, 80)),
+            (t('stat_aspd'), aspd_str,                        (255, 200, 80)),
             (t('stat_eva'),  f"{player.evasion}%",            (80, 220, 160)),
             (t('stat_mspd'), f"{player.move_speed:.2f}",      (160, 160, 255)),
             (t('stat_spred'), f"-{getattr(player, 'total_sp_reduce', 0.0) * 100:.0f}%",
              (170, 220, 80)),
         ]
+        # 던전 증표 보유 시 요약 표시 (⚔공격 · ⚡신속 · 🛡수호)
+        _tok = getattr(player, 'tokens', None)
+        if _tok and sum(_tok.values()) > 0:
+            stats.append((t('stat_tokens'),
+                          f"{_tok.get('atk',0)}/{_tok.get('haste',0)}/{_tok.get('guard',0)}",
+                          (235, 200, 90)))
         for label, val, col in stats:
             lbl_s = self.font_sm.render(label, True, (100, 100, 130))
             val_s = self.font_sm.render(val, True, col)
@@ -1357,70 +1414,100 @@ class HUD:
         hint = self.font_sm.render(t(hint_key), True, (170, 150, 110))
         screen.blit(hint, (bx + pw - hint.get_width() - 16, by + ph - 22))
 
-    def render_journal(self, screen, records, best_floor=1):
-        """J — 정복 일지: 지역 테마별 클리어 횟수 + 최고층 + 칭호.
+    def _fit_text(self, font, text, max_w, color):
+        """max_w 안에 맞게 말줄임(…) 처리한 렌더 서피스."""
+        surf = font.render(text, True, color)
+        if surf.get_width() <= max_w:
+            return surf
+        while text and font.size(text + '…')[0] > max_w:
+            text = text[:-1]
+        return font.render(text + '…', True, color)
 
-        도트 감성 패널. 정복(999 클리어) 시 [심연의 지배자] 뱃지 노출.
+    def render_journal(self, screen, records, best_floor=1):
+        """J — 정복 일지: 테마별 던전 아트 썸네일 갤러리 + 클리어 횟수 + 칭호.
+
+        각 구간 테마를 팔레트 기반 미니 던전 씬 썸네일로 시각화한다.
+        정복(999 클리어) 시 [심연의 지배자] 뱃지 노출. 미해금 테마는 자물쇠.
         """
-        from map.theme import theme_name, theme_floor_range, THEME_COUNT
+        from map.theme import (theme_name, theme_floor_range, THEME_COUNT,
+                               get_theme_by_index)
+        from ui.theme_art import draw_theme_thumb
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
-        ov.fill((0, 0, 0, 214))
+        ov.fill((0, 0, 0, 220))
         screen.blit(ov, (0, 0))
-        pw, ph = 760, 620
+        pw, ph = 852, 660
         bx, by = W // 2 - pw // 2, H // 2 - ph // 2
         pygame.draw.rect(screen, (13, 16, 26), (bx, by, pw, ph), border_radius=6)
         pygame.draw.rect(screen, (70, 66, 105), (bx, by, pw, ph), 2, border_radius=6)
 
         cleared = bool(records.get('game_cleared', False))
         tc = records.get('theme_clears', {}) or {}
+        done_cnt = sum(1 for i in range(THEME_COUNT) if int(tc.get(str(i), 0)) > 0)
+        tnow = pygame.time.get_ticks()
 
-        # ── 타이틀 ──
+        # ── 타이틀 + 진행도 ──
         title = self.font_lg.render(t('journal_title'), True, GOLD_COLOR)
-        screen.blit(title, (bx + pw // 2 - title.get_width() // 2, by + 16))
+        screen.blit(title, (bx + pw // 2 - title.get_width() // 2, by + 14))
         bf = self.font_md.render(t('journal_best_floor', best_floor), True, (170, 210, 255))
-        screen.blit(bf, (bx + pw // 2 - bf.get_width() // 2, by + 54))
+        screen.blit(bf, (bx + 26, by + 56))
+        prog = self.font_md.render(f"{done_cnt} / {THEME_COUNT}", True, (150, 220, 160))
+        screen.blit(prog, (bx + pw - prog.get_width() - 26, by + 56))
+        if cleared:
+            spark = (255, 235, 120) if (tnow // 300) % 2 == 0 else (235, 185, 60)
+            cs = self._fit_text(self.font_md, '★ ' + t('journal_conquered') + ' ★',
+                                pw - 220, spark)
+            screen.blit(cs, (bx + pw // 2 - cs.get_width() // 2, by + 56))
         pygame.draw.line(screen, (50, 48, 78), (bx + 24, by + 82), (bx + pw - 24, by + 82))
 
-        # ── 정복 배너 (999 클리어 시) ──
+        # ── 테마 썸네일 갤러리 (4열 × 5행) ──
+        cols, rows = 4, 5
+        mgx, gap = 24, 10
+        tw = (pw - mgx * 2 - gap * (cols - 1)) // cols
         top = by + 92
-        if cleared:
-            spark = (255, 235, 120) if (pygame.time.get_ticks() // 300) % 2 == 0 else (235, 185, 60)
-            bnr = pygame.Rect(bx + 24, top, pw - 48, 34)
-            pygame.draw.rect(screen, (40, 30, 12), bnr, border_radius=4)
-            pygame.draw.rect(screen, spark, bnr, 2, border_radius=4)
-            cs = self.font_md.render('★ ' + t('journal_conquered') + ' ★', True, spark)
-            screen.blit(cs, (bnr.centerx - cs.get_width() // 2, bnr.y + 8))
-            top += 46
-
-        # ── 테마별 클리어 (2열) ──
-        cols = 2
-        rows = (THEME_COUNT + cols - 1) // cols
-        col_w = (pw - 48) // cols
-        row_h = (by + ph - 40 - top) // max(1, rows)
-        row_h = max(22, min(row_h, 30))
+        avail_h = (by + ph - 30) - top
+        th = min(96, (avail_h - gap * (rows - 1)) // rows)
         for idx in range(THEME_COUNT):
-            c = idx // rows
-            r = idx % rows
-            x = bx + 24 + c * col_w
-            y = top + r * row_h
+            c, r = idx % cols, idx // cols
+            x = bx + mgx + c * (tw + gap)
+            y = top + r * (th + gap)
             cnt = int(tc.get(str(idx), 0))
             done = cnt > 0
-            # 도트 아이콘
-            dot = (90, 210, 120) if done else (60, 60, 84)
-            pygame.draw.rect(screen, dot, (x, y + 4, 9, 9))
-            pygame.draw.rect(screen, (20, 22, 34), (x, y + 4, 9, 9), 1)
-            nm = theme_name(idx)
+            rect = pygame.Rect(x, y, tw, th)
+            theme = get_theme_by_index(idx)
+            draw_theme_thumb(screen, rect, idx, theme, done, tnow // 90)
+
+            # 이름 스트립 (하단 반투명)
+            strip = pygame.Surface((tw, 17), pygame.SRCALPHA)
+            strip.fill((0, 0, 0, 165))
+            screen.blit(strip, (x, y + th - 17))
+            nm = theme_name(idx) if done else '???'
+            ncol = (232, 234, 245) if done else (120, 122, 142)
+            ns = self._fit_text(self.font_sm, nm, tw - 8, ncol)
+            screen.blit(ns, (x + 4, y + th - 16))
+
+            # 층 범위 배지 (좌상단)
             f0, f1 = theme_floor_range(idx)
-            ncol = (225, 228, 240) if done else (110, 112, 132)
-            ns = self.font_sm.render(f"{f0}-{f1}  {nm}", True, ncol)
-            screen.blit(ns, (x + 16, y + 2))
+            fr = self.font_sm.render(f"{f0}-{f1}", True, (210, 214, 230))
+            fb = pygame.Surface((fr.get_width() + 6, fr.get_height() + 2), pygame.SRCALPHA)
+            fb.fill((0, 0, 0, 150))
+            screen.blit(fb, (x + 3, y + 3))
+            screen.blit(fr, (x + 6, y + 4))
+
+            # 클리어 횟수 배지 (우상단)
             if done:
-                cx = self.font_sm.render(t('journal_clears', cnt), True, (235, 200, 90))
-                screen.blit(cx, (x + col_w - cx.get_width() - 20, y + 2))
+                cx = self.font_sm.render('×' + str(cnt), True, (32, 26, 6))
+                cb = pygame.Rect(x + tw - cx.get_width() - 9, y + 3,
+                                 cx.get_width() + 6, cx.get_height() + 2)
+                pygame.draw.rect(screen, GOLD_COLOR, cb, border_radius=3)
+                screen.blit(cx, (cb.x + 3, cb.y + 1))
+
+            # 테두리
+            bcol = theme['stairs_lit'] if done else (58, 58, 76)
+            pygame.draw.rect(screen, bcol, rect, 1, border_radius=3)
 
         hint = self.font_sm.render(t('journal_hint'), True, (90, 88, 120))
-        screen.blit(hint, (bx + pw // 2 - hint.get_width() // 2, by + ph - 26))
+        screen.blit(hint, (bx + pw // 2 - hint.get_width() // 2, by + ph - 22))
 
     def render_pet_status(self, screen, player, pet):
         """B — 펫 상태창: 이름·타입·레벨·강화석·다음 강화 비용·효과."""

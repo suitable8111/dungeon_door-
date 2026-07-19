@@ -105,6 +105,7 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
+            'tokens':       dict(getattr(player, 'tokens', {}) or {}),
             # 펫 시스템 (캐릭터 슬롯에 저장 — 런당 지속)
             'is_pet_unlocked': player.is_pet_unlocked,
             'pet_type':  player.pet_type,

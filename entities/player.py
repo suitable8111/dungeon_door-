@@ -29,10 +29,12 @@ class Player(Entity):
         self.evasion      = 0     # 회피율 (0~100 %)
         self.move_speed   = 1.0   # 높을수록 연속이동 빠름
 
-        # 디버프 (저주/슬로우/두려움)
+        # 디버프 (저주/슬로우/두려움/공격약화)
         self.cursed_ms  = 0   # 받는 피해 50% 증가
         self.slowed_ms  = 0   # 이동속도 30% 감소
         self.feared_ms  = 0   # 명중률 40%로 저하
+        self.atk_down_ms  = 0     # 공격력 저하 지속시간 (저주 트랩)
+        self.atk_down_pct = 0.0   # 공격력 저하율 (0~1)
 
         # 드라이브 게이지 (캔슬 자원): 3칸, 시간·타격으로 회복
         self.drive:     float = 3.0
@@ -68,6 +70,10 @@ class Player(Entity):
         self.pet_stones        = 0          # 펫 전용 강화석 보유 수
         self.active_pet        = None       # 런타임 Pet 객체 (직렬화 X)
 
+        # 던전 증표 (이번 런 누적) — 소지 시 패시브 스탯 상승.
+        #   atk=공격의 증표, haste=신속의 증표, guard=수호의 증표. 층 클리어마다 획득.
+        self.tokens: dict = {'atk': 0, 'haste': 0, 'guard': 0}
+
         # 인벤토리 (최대 20칸)
         self.inventory: list    = []
         self.max_inventory: int = 20
@@ -78,7 +84,23 @@ class Player(Entity):
             'off_hand': None, 'accessory': None, 'feet': None,
         }
 
-    # ── 유효 능력치 (기본 + 전체 장비 보너스) ────────────────────
+    # ── 던전 증표 패시브 보너스 (누적 개수에 비례, 상한 有) ──────────
+    @property
+    def token_atk(self) -> int:
+        """공격의 증표: 4개당 공격력 +1 (최대 +60)."""
+        return min(60, self.tokens.get('atk', 0) // 4)
+
+    @property
+    def token_def(self) -> int:
+        """수호의 증표: 4개당 방어력 +1 (최대 +45)."""
+        return min(45, self.tokens.get('guard', 0) // 4)
+
+    @property
+    def token_aspd(self) -> float:
+        """신속의 증표: 5개당 공격속도 +0.02 (최대 +0.40)."""
+        return min(0.40, (self.tokens.get('haste', 0) // 5) * 0.02)
+
+    # ── 유효 능력치 (기본 + 전체 장비 보너스 + 던전 증표) ────────────
     @property
     def total_attack(self) -> int:
         bonus = sum(
@@ -89,9 +111,11 @@ class Player(Entity):
             item.enhance_level for item in self.equipment.values()
             if item and not item.broken and item.item_type == 'weapon'
         )
-        base = self.attack + bonus + enhance
+        base = self.attack + bonus + enhance + self.token_atk
         if self.atk_bonus_ms > 0:
             base = int(base * (1.0 + self.atk_bonus_pct))
+        if self.atk_down_ms > 0:
+            base = max(1, int(base * (1.0 - self.atk_down_pct)))
         return base
 
     @property
@@ -105,7 +129,7 @@ class Player(Entity):
             if item and not item.broken and item.item_type in ('armor', 'off_hand')
         )
         heal_buf = self.heal_def_bonus if self.heal_def_ms > 0 else 0
-        return self.defense + bonus + enhance + heal_buf
+        return self.defense + bonus + enhance + heal_buf + self.token_def
 
     @property
     def dungeon_inventory(self) -> list:
@@ -171,6 +195,10 @@ class Player(Entity):
             self.slowed_ms = max(0, self.slowed_ms - dt_ms)
         if self.feared_ms > 0:
             self.feared_ms = max(0, self.feared_ms - dt_ms)
+        if self.atk_down_ms > 0:
+            self.atk_down_ms = max(0, self.atk_down_ms - dt_ms)
+            if self.atk_down_ms == 0:
+                self.atk_down_pct = 0.0
         if self.invincible_ms > 0:
             self.invincible_ms = max(0, self.invincible_ms - dt_ms)
         if self.heal_def_ms > 0:
@@ -203,8 +231,13 @@ class Player(Entity):
 
     # ── 쿨다운 / 이동 간격 계산 ────────────────────────────────────
     @property
+    def total_attack_speed(self) -> float:
+        """기본 공격속도 + 신속의 증표 보너스."""
+        return self.attack_speed + self.token_aspd
+
+    @property
     def atk_cooldown_ms(self) -> int:
-        return max(100, int(self.BASE_ATK_CD_MS / self.attack_speed))
+        return max(100, int(self.BASE_ATK_CD_MS / self.total_attack_speed))
 
     @property
     def move_repeat_ms(self) -> int:
@@ -258,6 +291,11 @@ class Player(Entity):
         p.attack_speed  = data.get('attack_speed', 1.0)
         p.evasion       = data.get('evasion', 0)
         p.move_speed    = data.get('move_speed', 1.0)
+        # 던전 증표 (구버전 세이브 안전 기본값)
+        _tok = data.get('tokens') or {}
+        p.tokens = {'atk': int(_tok.get('atk', 0)),
+                    'haste': int(_tok.get('haste', 0)),
+                    'guard': int(_tok.get('guard', 0))}
         # 펫 (구버전 세이브 안전 기본값)
         p.is_pet_unlocked = data.get('is_pet_unlocked', False)
         p.pet_type        = data.get('pet_type', 'attack')
