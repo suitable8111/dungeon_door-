@@ -186,6 +186,154 @@ def draw_vignette(surf, w, h, alpha=210, fade=0.36):
         surf.blit(ts2, (0, i))
         surf.blit(ts2, (0, h - 1 - i))
 
+# ─── 이끼 낀 고딕 던전 배경 (sample_image 무드) ──────────────────────────
+_DG = dict(
+    deep=(11, 22, 21), base=(18, 32, 30),
+    brick=(30, 52, 46), brick_hi=(46, 74, 64), brick_lo=(19, 35, 31),
+    mortar=(13, 25, 23), moss=(60, 108, 62), moss_d=(42, 82, 46),
+    arch=(6, 14, 14), teal=(46, 150, 158), vine=(48, 100, 54),
+    floor=(22, 40, 34), floor_hi=(34, 58, 48),
+)
+
+
+def _brick_wall(surf, x0, y0, w, h, rng, bw=34, bh=18):
+    """이끼 낀 벽돌 텍스처."""
+    dg = _DG
+    R(surf, dg['base'], x0, y0, w, h)
+    for i, ry in enumerate(range(y0, y0 + h, bh)):
+        off = (bw // 2) if (i % 2) else 0
+        for rx in range(x0 - bw, x0 + w, bw):
+            bx = rx + off
+            v = rng.randint(-8, 8)
+            c = tuple(max(0, min(255, k + v)) for k in dg['brick'])
+            R(surf, c, bx + 1, ry + 1, bw - 2, bh - 2)
+            L(surf, dg['brick_hi'], bx + 1, ry + 1, bx + bw - 2, ry + 1)   # 상단 광
+            L(surf, dg['brick_lo'], bx + 1, ry + bh - 2, bx + bw - 2, ry + bh - 2)
+            if rng.random() < 0.18:                                       # 이끼 얼룩
+                mc = dg['moss'] if rng.random() < 0.5 else dg['moss_d']
+                R(surf, mc, bx + rng.randint(2, bw - 8), ry + bh - 4,
+                  rng.randint(4, 10), 4)
+
+
+def _gothic_arch(surf, cx, top, aw, ah, rng, glow_col=None):
+    """고딕 아치 개구부(깊은 어둠 + 벽돌 테두리 + 안쪽 발광)."""
+    dg = _DG
+    half = aw // 2
+    # 아치 실루엣 (사각 몸통 + 반원 상단)
+    P(surf, dg['arch'], [(cx - half, top + ah), (cx - half, top + half),
+                         (cx, top), (cx + half, top + half), (cx + half, top + ah)])
+    pygame.draw.circle(surf, dg['arch'], (cx, top + half), half)
+    if glow_col:
+        g = pygame.Surface((aw, ah), pygame.SRCALPHA)
+        for r in range(half, 0, -3):
+            a = int(70 * (r / half))
+            pygame.draw.circle(g, (*glow_col, 60 - a // 2),
+                               (half, ah - half), r)
+        surf.blit(g, (cx - half, top), special_flags=pygame.BLEND_ADD)
+    # 벽돌 테두리 (아치 곡선 따라)
+    import math as _m
+    for a in range(0, 181, 8):
+        rad = _m.radians(a)
+        bx = cx - int(_m.cos(rad) * half)
+        by = top + half - int(_m.sin(rad) * half)
+        R(surf, dg['brick_hi'], bx - 2, by - 2, 5, 5)
+        R(surf, dg['brick'], bx - 1, by - 1, 3, 3)
+
+
+def draw_dungeon_bg(surf, w, h, rng, arches=True):
+    """어두운 청록 이끼 고딕 던전 — 캡슐 공용 배경."""
+    dg = _DG
+    # 수직 그라데이션 베이스
+    for y in range(h):
+        t = y / h
+        c = tuple(int(dg['deep'][i] + (dg['base'][i] - dg['deep'][i]) * (t * 0.7))
+                  for i in range(3))
+        pygame.draw.line(surf, c, (0, y), (w, y))
+    # 벽돌 벽 (전면)
+    _brick_wall(surf, 0, 0, w, h, rng, bw=max(26, w // 34), bh=max(15, h // 34))
+    # 배경 아치(깊이감)
+    if arches:
+        aw = int(w * 0.30)
+        _gothic_arch(surf, int(w * 0.30), int(h * 0.10), int(aw * 0.7),
+                     int(h * 0.55), rng)
+        _gothic_arch(surf, int(w * 0.62), int(h * 0.06), aw, int(h * 0.7),
+                     rng, glow_col=dg['teal'])
+    # 천장 매달린 이끼/덩굴
+    for _ in range(int(w / 22)):
+        vx = rng.randint(0, w)
+        vl = rng.randint(int(h * 0.04), int(h * 0.16))
+        vc = dg['vine'] if rng.random() < 0.6 else dg['moss_d']
+        for k in range(0, vl, 3):
+            R(surf, vc, vx + rng.randint(-1, 1), k, 2, 3)
+        C(surf, dg['moss'], vx, vl, 2)
+    # 바닥 이끼 석재
+    fy = int(h * 0.86)
+    R(surf, dg['floor'], 0, fy, w, h - fy)
+    for rx in range(0, w, max(24, w // 30)):
+        L(surf, dg['floor_hi'], rx, fy, rx, h)
+        if rng.random() < 0.5:
+            R(surf, dg['moss'], rx + rng.randint(0, 12), fy - 2,
+              rng.randint(6, 16), 3)
+    L(surf, dg['brick_hi'], 0, fy, w, fy)
+    # 중앙 청록 대기광
+    glow(surf, int(w * 0.6), int(h * 0.42), int(w * 0.22), (24, 70, 74), 12)
+
+
+# ─── 발광 돌 골렘 보스 (sample_image) ────────────────────────────────────
+def draw_golem(surf, cx, cy, s=4, staff=True):
+    """이끼 낀 돌 골렘 — 발광 눈 + 지팡이 오브."""
+    st = (58, 120, 92);  st_l = (86, 158, 120); st_d = (34, 78, 60)
+    moss = (70, 130, 66); eye = (150, 255, 250); eyeg = (60, 220, 220)
+    def B(gx, gy, c, wd=1, ht=1):
+        R(surf, c, cx + gx * s, cy + gy * s, wd * s, ht * s)
+    glow(surf, cx, cy, 30 * s, (20, 90, 90), 10)
+    # 다리
+    B(-6, 12, st_d, 5, 7); B(2, 12, st_d, 5, 7)
+    B(-6, 18, st, 5, 2); B(2, 18, st, 5, 2)
+    # 몸통(바위 블록)
+    for (bx, by, ww, hh) in [(-8, 2, 16, 11)]:
+        B(bx, by, st, ww, hh)
+    for gx in range(-8, 8, 3):                       # 블록 균열
+        B(gx, 2, st_d, 1, 11)
+    for gy in range(2, 13, 3):
+        B(-8, gy, st_d, 16, 1)
+    B(-8, 2, st_l, 16, 1); B(-8, 2, st_l, 1, 11)     # 상/좌 광
+    # 어깨/팔 (거대)
+    B(-12, 0, st, 5, 8); B(-13, 0, st_l, 1, 8)       # 왼팔
+    B(9, 0, st, 5, 9); B(13, 0, st_d, 1, 9)          # 오른팔(지팡이 쥠)
+    B(-12, 8, st_d, 6, 4); B(9, 9, st_d, 6, 4)       # 주먹
+    # 머리
+    B(-5, -6, st, 10, 8); B(-5, -6, st_l, 10, 1)
+    B(-6, -4, st, 1, 5); B(5, -4, st, 1, 5)          # 볼
+    # 발광 눈(하나, 사이클롭스)
+    glow(surf, cx + 0, cy - 2 * s, 5 * s, eyeg, 7)
+    B(-2, -3, eye, 4, 3); B(-1, -3, (255, 255, 255), 2, 2)
+    B(-4, -6, st_d, 3, 1); B(2, -6, st_d, 3, 1)      # 눈두덩
+    # 이끼 덩굴 (어깨/머리)
+    B(-4, -7, moss, 3, 1); B(3, 1, moss, 2, 2); B(-9, 3, moss, 2, 2)
+    # 지팡이 + 발광 오브
+    if staff:
+        for gy in range(-10, 14):
+            B(13, gy, (120, 100, 60))
+        ox, oy = cx + 13 * s + s // 2, cy - 11 * s
+        glow(surf, ox, oy, 9 * s, (70, 230, 230), 9)
+        C(surf, (40, 160, 170), ox, oy, 4 * s)
+        C(surf, (120, 245, 245), ox, oy, 3 * s)
+        C(surf, (255, 255, 255), ox, oy, s + 1)
+
+
+# ─── 청록 크리스탈 군집 ───────────────────────────────────────────────────
+def draw_crystals(surf, x, y, s=4):
+    cy_ = (120, 235, 240); cy_l = (200, 255, 255); cy_d = (50, 150, 170)
+    glow(surf, x, y, 10 * s, (40, 160, 180), 8)
+    shards = [(-4, 0, -6, -10, -1, 0), (0, 2, -1, -16, 2, 2), (3, 1, 5, -9, 6, 1)]
+    for (ax, ay, tx, ty, bx, by) in shards:
+        P(surf, cy_d, [(x+ax*s, y+ay*s), (x+tx*s, y+ty*s), (x+bx*s, y+by*s)])
+        P(surf, cy_, [(x+ax*s+s, y+ay*s), (x+tx*s, y+ty*s),
+                      (x+(tx+bx)//2*s, y+(ty+by)//2*s)])
+        L(surf, cy_l, x+tx*s, y+ty*s, x+(ax+tx)//2*s, y+(ay+ty)//2*s, max(1, s//2))
+
+
 def scatter_particles(surf, rng, x, y, w, h, n=60, pal=None):
     pal = pal or [(235, 185, 60), (180, 140, 40), (255, 220, 100),
                   (200, 160, 255), (150, 190, 255)]
