@@ -83,12 +83,24 @@ _DEFAULT_RECORDS  = {
     'active_title': '',        # 현재 표시 칭호 id
     'ng_plus': 0,              # New Game+ 회차 (골드 배율에 사용)
     'classes_unlocked': False, # 궁수·마법사 해금 여부 (전사 Lv20·20층 달성 시)
+    'axeman_unlocked': False,  # 도끼맨 해금 여부 (Lv30·40층 달성 시 — 4번째 클래스)
 }
 
 # ── 상급 직업 해금 조건 ──────────────────────────────────────────────────
 ADVANCED_CLASSES = ('archer', 'mage')
 UNLOCK_LEVEL = 20
 UNLOCK_FLOOR = 20
+
+# 도끼맨은 4번째 클래스 — 더 높은 조건(직업 무관)
+AXEMAN_UNLOCK_LEVEL = 30
+AXEMAN_UNLOCK_FLOOR = 40
+
+
+def axeman_unlocked(records=None) -> bool:
+    """도끼맨 생성 가능 여부 — 명시 플래그(axeman_unlocked)로만 판정.
+    어떤 캐릭터로든 Lv30 이상 + 40층 이상 클리어 시 해금된다."""
+    rec = records if records is not None else load_records()
+    return bool(rec.get('axeman_unlocked'))
 
 
 def advanced_classes_unlocked(records=None) -> bool:

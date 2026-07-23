@@ -34,6 +34,8 @@ _CLASS_KIT = {
                 'pants': (72, 78, 60),  'boot': (86, 62, 42)},
     'mage':    {'tunic': (86, 66, 150), 'trim': (176, 150, 235),
                 'pants': (52, 44, 92),  'boot': (60, 50, 84)},
+    'axeman':  {'tunic': (150, 92, 44), 'trim': (214, 150, 78),
+                'pants': (70, 56, 44),  'boot': (58, 44, 34)},
 }
 
 
@@ -158,6 +160,16 @@ def draw_avatar(surf, cx, cy, scale, appearance=None, char_class='warrior'):
         # 상단 오브(빛나는 보라)
         P(11, 4, (225, 210, 255)); P(10, 4, (170, 130, 245))
         P(11, 3, (170, 130, 245)); P(11, 5, (170, 130, 245)); P(12, 4, (170, 130, 245))
+    elif char_class == 'axeman':
+        P(2, 9, trim); P(9, 9, trim)  # 견장
+        haft, haft_hi = (128, 92, 54), (168, 126, 78)
+        blade, blade_hi = (200, 205, 216), (238, 240, 248)
+        for gy in range(4, 16):       # 오른쪽에 세워 든 긴 자루
+            P(11, gy, haft)
+        P(11, 15, haft_hi)
+        # 상단 넓은 양손도끼날
+        P(10, 4, blade); P(12, 4, blade); P(10, 5, blade); P(12, 5, blade)
+        P(10, 3, blade); P(11, 4, blade_hi); P(10, 6, blade)
     else:
         P(2, 9, trim); P(9, 9, trim)  # 견장
         steel, steel_hi = (205, 210, 222), (236, 239, 246)

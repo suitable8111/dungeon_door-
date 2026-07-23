@@ -24,6 +24,11 @@ class Player(Entity):
             self.hp = self.max_hp = 22
             self.attack = 4
             self.defense = 1
+        # 도끼맨은 고HP·고공격·중방어 근접 딜러 — 대신 공격속도가 매우 느리다
+        elif self.char_class == 'axeman':
+            self.hp = self.max_hp = 34
+            self.attack = 8
+            self.defense = 3
         self.level = 1
         self.xp = 0
         self.xp_next = 15
@@ -34,6 +39,15 @@ class Player(Entity):
         self.attack_speed = 1.0   # 높을수록 공격 쿨다운 단축
         self.evasion      = 0     # 회피율 (0~100 %)
         self.move_speed   = 1.0   # 높을수록 연속이동 빠름
+        # 도끼맨: 기본 공격속도가 느리다(한 방이 강한 대신 굼뜸)
+        if self.char_class == 'axeman':
+            self.attack_speed = 0.6
+
+        # 도끼맨 광폭화(버프) — 공속↑ + 흡혈
+        self.aspd_buff_ms  = 0     # 공격속도 버프 잔여(ms)
+        self.aspd_buff_pct = 0.0   # 공격속도 버프율
+        self.lifesteal_ms  = 0     # 흡혈 잔여(ms)
+        self.lifesteal_pct = 0.0   # 가한 피해의 흡혈 비율
 
         # 디버프 (저주/슬로우/두려움/공격약화)
         self.cursed_ms  = 0   # 받는 피해 50% 증가
@@ -219,6 +233,14 @@ class Player(Entity):
             self.atk_bonus_ms = max(0, self.atk_bonus_ms - dt_ms)
             if self.atk_bonus_ms == 0:
                 self.atk_bonus_pct = 0.0
+        if self.aspd_buff_ms > 0:
+            self.aspd_buff_ms = max(0, self.aspd_buff_ms - dt_ms)
+            if self.aspd_buff_ms == 0:
+                self.aspd_buff_pct = 0.0
+        if self.lifesteal_ms > 0:
+            self.lifesteal_ms = max(0, self.lifesteal_ms - dt_ms)
+            if self.lifesteal_ms == 0:
+                self.lifesteal_pct = 0.0
 
     @property
     def total_move_speed(self) -> float:
@@ -238,8 +260,11 @@ class Player(Entity):
     # ── 쿨다운 / 이동 간격 계산 ────────────────────────────────────
     @property
     def total_attack_speed(self) -> float:
-        """기본 공격속도 + 신속의 증표 보너스."""
-        return self.attack_speed + self.token_aspd
+        """기본 공격속도 + 신속의 증표 보너스 + 광폭화 버프."""
+        spd = self.attack_speed + self.token_aspd
+        if self.aspd_buff_ms > 0:
+            spd *= (1.0 + self.aspd_buff_pct)
+        return spd
 
     @property
     def atk_cooldown_ms(self) -> int:

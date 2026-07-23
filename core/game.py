@@ -236,6 +236,8 @@ class Game:
         self._crumble: dict   = {}     # {(x,y): 무너지는 시각(ms)}
         self._collapse_reward = None   # 제단으로 예약된 탈출 보상(탈출 성공 시 지급)
         self._keys = 0                 # 현재 층에서 주운 금고 열쇠 수
+        self._thrown_axe = None        # 도끼맨: 바닥에 던져진 도끼 {x,y} (밟아 회수)
+        self._ragnarok_ms = 0          # 도끼맨: 라그나로크(무적 돌진) 잔여 ms
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -584,6 +586,8 @@ class Game:
                     if self._combo_ms == 0:
                         self._combo_count = 0
                 self._update_enemies(world_dt)
+                if self._ragnarok_ms > 0:
+                    self._ragnarok_ms = max(0, self._ragnarok_ms - world_dt)
                 if not self._in_town:
                     self._update_dots(world_dt)      # 점화 DoT + 화염 장판
                     self._update_summons(world_dt)   # 소환수
@@ -689,6 +693,8 @@ class Game:
         self._crumble = {}
         self._collapse_reward = None    # 탈출 못하면 제단 보상은 소멸
         self._keys = 0                  # 열쇠는 층 단위(다음 층에서 초기화)
+        self._thrown_axe = None         # 던져진 도끼는 층 이동 시 회수(소멸)
+        self._ragnarok_ms = 0
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
                 for xx, tl in enumerate(row):
@@ -824,6 +830,9 @@ class Game:
         """플레이어가 한 칸에 진입할 때 트랩·압력판·비밀방 발견 처리."""
         if not self.dungeon.in_bounds(x, y):
             return
+        # 도끼맨: 던져진 도끼 위에 올라서면 회수(재투척 가능)
+        if self._thrown_axe is not None and (x, y) == (self._thrown_axe['x'], self._thrown_axe['y']):
+            self._retrieve_axe()
         # 숨겨진 보물방 최초 진입 연출 (1회)
         sr = getattr(self.dungeon, 'secret_room', None)
         if sr and (x, y) == sr and not getattr(self, '_secret_found', False):
@@ -1078,6 +1087,7 @@ class Game:
         'warrior': ['great_sword', 'broad_sword'],
         'archer':  ['broad_sword', 'sword'],
         'mage':    ['arcane_staff', 'apprentice_staff'],
+        'axeman':  ['great_axe', 'battle_axe'],
     }
 
     def _try_open_vault(self, x, y):
@@ -1485,7 +1495,8 @@ class Game:
                                           or {'skin': 0, 'hair': 0, 'haircol': 0})
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
-            _hint = {'archer': 'archer_hint', 'mage': 'mage_hint'}.get(
+            _hint = {'archer': 'archer_hint', 'mage': 'mage_hint',
+                     'axeman': 'axeman_hint'}.get(
                 self.player.char_class, 'combat_hint')
             self.messages.append((t(_hint), 'info'))
         else:
@@ -1839,7 +1850,10 @@ class Game:
                 'haircol': self._create_haircol}
 
     def _class_locked(self, char_class) -> bool:
-        from core.save_load import ADVANCED_CLASSES, advanced_classes_unlocked
+        from core.save_load import (ADVANCED_CLASSES, advanced_classes_unlocked,
+                                    axeman_unlocked)
+        if char_class == 'axeman':
+            return not axeman_unlocked(self._records)
         return (char_class in ADVANCED_CLASSES
                 and not advanced_classes_unlocked(self._records))
 
@@ -2434,6 +2448,11 @@ class Game:
             if held:
                 self._facing = self._DIR_NAME[held]
             return self._mage_cast()
+        # 라그나로크 발동 중: 도끼맨 휘두르기가 중거리 광역으로 확장
+        if self.player.char_class == 'axeman' and self._ragnarok_ms > 0:
+            if held:
+                self._facing = self._DIR_NAME[held]
+            return self._ragnarok_swing()
         fdx, fdy = self._DIRS.get(self._facing, (0, 1))
         if held:
             if held == (fdx, fdy):
@@ -2690,6 +2709,7 @@ class Game:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
         enemy.on_hurt(self.player.x, self.player.y)
+        self._apply_lifesteal(dmg)
         if crit:
             self.juice.crit()
         else:
@@ -3014,6 +3034,9 @@ class Game:
         'mage':    ['apprentice_staff', 'arcane_staff', 'leather_armor',
                     'mythril_armor', 'leather_boots', 'magic_stone', 'silver_ring',
                     'war_pendant', 'leather_helm'],
+        'axeman':  ['battle_axe', 'great_axe', 'chain_mail', 'plate_armor',
+                    'mythril_armor', 'iron_helm', 'knight_helm', 'war_pendant',
+                    'iron_boots'],
     }
 
     def _grant_floor_clear_reward(self, cleared_floor):
@@ -3040,14 +3063,13 @@ class Game:
         self._check_class_unlock(cleared_floor)
 
     def _check_class_unlock(self, cleared_floor):
-        """전사로 Lv20 이상 + 20층 이상 클리어 시 궁수·마법사 영구 해금."""
+        """직업 해금: 전사 Lv20·20층 → 궁수·마법사 / (직업무관) Lv30·40층 → 도끼맨."""
         from core.save_load import (UNLOCK_LEVEL, UNLOCK_FLOOR, save_records)
         if self._is_test_mode:
             return
         rec = self._records
-        if rec.get('classes_unlocked'):
-            return
-        if (self.player.char_class == 'warrior'
+        if (not rec.get('classes_unlocked')
+                and self.player.char_class == 'warrior'
                 and self.player.level >= UNLOCK_LEVEL
                 and cleared_floor >= UNLOCK_FLOOR):
             rec['classes_unlocked'] = True
@@ -3055,6 +3077,17 @@ class Game:
             self.messages.append((t('classes_unlocked_msg'), 'good'))
             self.animator.add(BannerAnim(t('classes_unlocked_banner'),
                                          (170, 130, 245), size=28))
+            self.audio.play('levelup_big')
+        # 도끼맨(4번째 클래스): 직업 무관 Lv30 + 40층 클리어 시 해금
+        from core.save_load import AXEMAN_UNLOCK_LEVEL, AXEMAN_UNLOCK_FLOOR
+        if (not rec.get('axeman_unlocked')
+                and self.player.level >= AXEMAN_UNLOCK_LEVEL
+                and cleared_floor >= AXEMAN_UNLOCK_FLOOR):
+            rec['axeman_unlocked'] = True
+            save_records(rec)
+            self.messages.append((t('axeman_unlocked_msg'), 'good'))
+            self.animator.add(BannerAnim(t('axeman_unlocked_banner'),
+                                         (220, 120, 60), size=28))
             self.audio.play('levelup_big')
 
     def _grant_class_gear(self, floor):
@@ -3801,6 +3834,9 @@ class Game:
             'flame_pool':  self._exec_flame_pool,
             'summon_familiar': self._exec_summon_familiar,
             'arcane_blink': self._exec_arcane_blink,
+            'axe_throw':   self._exec_axe_throw,
+            'berserk':     self._exec_berserk,
+            'leap_smash':  self._exec_leap_smash,
         }
         fn = _exec_map.get(skill_id)
         if not fn:
@@ -3906,6 +3942,167 @@ class Game:
         self.audio.play('teleport')
         self.messages.append((t('skill_blink', abs(dest[0] - sx) + abs(dest[1] - sy)),
                               'warn'))
+        return True
+
+    # ── 도끼맨 전용 스킬 ──────────────────────────────────────────────
+    def _apply_lifesteal(self, dmg):
+        """광폭화/라그나로크 중이면 가한 피해의 일부를 흡혈로 회복."""
+        p = self.player
+        if p.lifesteal_ms > 0 and dmg > 0:
+            p.hp = min(p.max_hp, p.hp + max(1, int(dmg * p.lifesteal_pct)))
+
+    def _exec_axe_throw(self, slot):
+        """도끼 투척 — 직선 강타 후 바닥에 낙하. 이미 던진 도끼가 있으면 회수 필요."""
+        if self._thrown_axe is not None:
+            self.messages.append((t('axe_need_recall'), 'info'))
+            return False
+        lvl = self._skill_levels.get('axe_throw', 1)
+        stats = ALL_SKILL_DEFS['axe_throw']['upgrades'][lvl - 1]
+        rng, mul = stats['range'], stats['mul']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        land = (sx, sy)
+        hits = 0
+        for i in range(1, rng + 1):
+            nx, ny = sx + dx * i, sy + dy * i
+            if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].blocked:
+                break
+            enemy = self.dungeon.get_enemy_at(nx, ny)
+            if enemy:
+                dmg = roll_damage(self._skill_atk, enemy.defense, mul)
+                enemy.take_damage(dmg); enemy.on_hurt(sx, sy)
+                self._apply_lifesteal(dmg)
+                self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 150, 70)))
+                self.animator.particles.emit_power_hit(nx, ny)
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+            land = (nx, ny)
+        self._thrown_axe = {'x': land[0], 'y': land[1]}
+        self.animator.add(MagicBoltAnim(sx, sy, land[0], land[1], self._facing, (235, 170, 90)))
+        self._trigger_atk_anim()
+        self._gain_skill_xp('axe_throw', hits)
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((t('axe_thrown', hits) if hits else t('axe_thrown_miss'),
+                              'warn' if hits else 'info'))
+        return True
+
+    def _retrieve_axe(self):
+        """던져진 도끼 회수 — 다시 던질 수 있게 됨."""
+        self._thrown_axe = None
+        self.animator.add(CalloutAnim(self.player.x, self.player.y,
+                                      t('axe_recall'), (245, 200, 110)))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self.audio.play('pickup')
+
+    def _exec_berserk(self, slot):
+        """광폭화 — 공속↑ + 흡혈 + 공격력↑ 자가 버프 (느린 공속 보완)."""
+        lvl = self._skill_levels.get('berserk', 1)
+        s = ALL_SKILL_DEFS['berserk']['upgrades'][lvl - 1]
+        p = self.player
+        p.aspd_buff_ms = s['dur_ms'];  p.aspd_buff_pct = s['aspd_pct']
+        p.lifesteal_ms = s['dur_ms'];  p.lifesteal_pct = s['lifesteal_pct']
+        p.atk_bonus_ms = max(p.atk_bonus_ms, s['dur_ms'])
+        p.atk_bonus_pct = max(p.atk_bonus_pct, s['atk_pct'])
+        self.animator.add(BannerAnim(t('skill_berserk'), (235, 80, 60), size=24))
+        self.animator.particles.emit_power_hit(p.x, p.y)
+        self._white_flash_ms = 80
+        self._gain_skill_xp('berserk')
+        self.skills.trigger(slot)
+        self.audio.play('levelup')
+        return True
+
+    def _exec_leap_smash(self, slot):
+        """도약 강타 — 방향으로 도약 후 착지 지점 광역 강타."""
+        lvl = self._skill_levels.get('leap_smash', 1)
+        s = ALL_SKILL_DEFS['leap_smash']['upgrades'][lvl - 1]
+        tiles, radius, mul = s['tiles'], s['radius'], s['mul']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        dest = (sx, sy)
+        for i in range(1, tiles + 1):
+            nx, ny = sx + dx * i, sy + dy * i
+            if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].blocked:
+                break
+            if self.dungeon.get_enemy_at(nx, ny):
+                break
+            dest = (nx, ny)
+        self.player.x, self.player.y = dest
+        self.camera.center_on(*dest)
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(*dest)
+        self.animator.particles.emit_dash_trail((sx, sy), dest)
+        hits = 0
+        for ddx in range(-radius, radius + 1):
+            for ddy in range(-radius, radius + 1):
+                if ddx == 0 and ddy == 0:
+                    continue
+                nx, ny = dest[0] + ddx, dest[1] + ddy
+                enemy = self.dungeon.get_enemy_at(nx, ny)
+                if not enemy:
+                    continue
+                dmg = roll_damage(self._skill_atk, enemy.defense, mul)
+                enemy.take_damage(dmg); enemy.on_hurt(*dest)
+                self._apply_lifesteal(dmg)
+                self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 150, 70)))
+                self.animator.particles.emit_basic_hit(nx, ny)
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        self.animator.add(WhirlAnim(dest[0], dest[1]))
+        self.animator.particles.emit_whirl(*dest)
+        self._start_shake(6, 220)
+        self._trigger_atk_anim()
+        self._gain_skill_xp('leap_smash', hits)
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_leap', hits), 'warn'))
+        return True
+
+    def _ragnarok_swing(self):
+        """라그나로크 중 기본 휘두르기 — 중거리(반경 2) 광역 강타."""
+        if not self._spend_stamina(self._STAMINA_COST['slash']):
+            return False
+        self._trigger_atk_anim()
+        px, py = self.player.x, self.player.y
+        self.animator.add(WhirlAnim(px, py))
+        self.animator.particles.emit_whirl(px, py)
+        hits = 0
+        for ddx in range(-2, 3):
+            for ddy in range(-2, 3):
+                if ddx == 0 and ddy == 0:
+                    continue
+                enemy = self.dungeon.get_enemy_at(px + ddx, py + ddy)
+                if not enemy:
+                    continue
+                dmg = max(1, int(roll_damage(self.player.total_attack, enemy.defense, 1.4)))
+                enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                self._apply_lifesteal(dmg)
+                self.animator.add(SlashAnim(px, py, px + ddx, py + ddy, (255, 130, 60)))
+                self.animator.add(HitFlashAnim(px + ddx, py + ddy, dmg, (255, 90, 60)))
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        self._atk_cd_timer = self.player.atk_cooldown_ms
+        self.audio.play('skill_whirl')
+        return True
+
+    def _skill_ultimate_ragnarok(self):
+        """라그나로크(도끼맨 R) — 수 초간 무적 + 이동·공격 강화 + 중거리 광역 휘두르기."""
+        dur = 5000
+        p = self.player
+        p.invincible_ms = max(p.invincible_ms, dur)
+        self._ragnarok_ms = dur
+        p.aspd_buff_ms = max(p.aspd_buff_ms, dur); p.aspd_buff_pct = max(p.aspd_buff_pct, 0.8)
+        p.lifesteal_ms = max(p.lifesteal_ms, dur); p.lifesteal_pct = max(p.lifesteal_pct, 0.3)
+        self.animator.add(BannerAnim(t('ult_ragnarok'), (255, 90, 50), size=30))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self._start_punch_zoom(0.08, 200)
+        self._start_shake(7, 400)
+        self.skills.trigger('R')
+        self.audio.play('levelup_big')
+        self.messages.append((t('ult_ragnarok'), 'good'))
         return True
 
     def _exec_steel_whirl(self, slot, no_cooldown=False):
@@ -4884,9 +5081,12 @@ class Game:
             self.messages.append((t('skill_cd', self.skills.remaining_sec(key)), 'info'))
             return False
         if key == 'R':
-            result = (self._skill_ultimate_inferno()
-                      if self.player.char_class == 'mage'
-                      else self._skill_ultimate_breaker())
+            if self.player.char_class == 'mage':
+                result = self._skill_ultimate_inferno()
+            elif self.player.char_class == 'axeman':
+                result = self._skill_ultimate_ragnarok()
+            else:
+                result = self._skill_ultimate_breaker()
         elif key == 'Ctrl_R':
             result = self._skill_ultimate_slash()
         else:
@@ -5396,6 +5596,12 @@ class Game:
         for b in self._bombs:
             self._draw_bomb(b, cx, cy)
 
+        # 도끼맨: 바닥에 박힌 도끼(회수 대기)
+        if self._thrown_axe is not None:
+            ax, ay = self._thrown_axe['x'], self._thrown_axe['y']
+            if self.dungeon.in_bounds(ax, ay) and self.dungeon.tiles[ay][ax].visible:
+                self._draw_thrown_axe(ax - cx, ay - cy)
+
         # 강화술 상승 파티클 (플레이어 위)
         if self._fortify_effect and self._fortify_effect.alive:
             self._fortify_effect.draw_above(self._game_surf, px, py)
@@ -5811,6 +6017,23 @@ class Game:
             pygame.draw.line(ov, cc, (ts // 2, 2), (ts // 2 - 4, ts - 2), 1)
             pygame.draw.line(ov, cc, (4, ts // 2), (ts - 3, ts // 2 + 3), 1)
             s.blit(ov, (sx + jx, sy))
+
+    def _draw_thrown_axe(self, tx, ty):
+        """바닥에 박힌 도끼 — 회수 안내(맥동 광휘 + 도끼 글리프)."""
+        ts = TILE_SIZE
+        s = self._game_surf
+        px, py = tx * ts + ts // 2, ty * ts + ts // 2
+        pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 220.0)
+        gr = int(9 + 4 * pulse)
+        glow = pygame.Surface((gr * 2, gr * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (240, 170, 80, int(70 + 60 * pulse)), (gr, gr), gr)
+        s.blit(glow, (px - gr, py - gr), special_flags=pygame.BLEND_ADD)
+        # 자루 + 도끼날
+        pygame.draw.line(s, (140, 100, 60), (px - 5, py + 6), (px + 4, py - 6), 2)
+        pygame.draw.polygon(s, (210, 215, 225), [(px + 2, py - 8), (px + 8, py - 6),
+                                                 (px + 7, py - 1), (px + 1, py - 3)])
+        pygame.draw.polygon(s, (245, 248, 252), [(px + 2, py - 8), (px + 5, py - 7),
+                                                 (px + 4, py - 4), (px + 1, py - 3)])
 
     def _draw_bomb(self, b, cx, cy):
         ts = TILE_SIZE

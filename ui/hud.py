@@ -301,7 +301,7 @@ class HUD:
             screen.blit(t2, (tx + t1.get_width() + 12, ty))
 
             # ── 세이브 카드 (슬롯별 캐릭터) ───────────────────────
-            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150), 'mage': (170, 130, 245)}
+            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150), 'mage': (170, 130, 245), 'axeman': (222, 120, 58)}
             bw = p_w - 44; bh = 54
             bx = p_x + 22
             by0 = p_y + 88
@@ -482,6 +482,13 @@ class HUD:
             pygame.draw.line(screen, (150, 120, 80), (cx - 7, cy + 8), (cx + 4, cy - 6), 2)
             pygame.draw.circle(screen, col, (cx + 5, cy - 7), 4)
             pygame.draw.circle(screen, (235, 220, 255), (cx + 5, cy - 7), 2)
+        elif char_class == 'axeman':
+            # 양손도끼 — 긴 자루 + 넓은 도끼날
+            pygame.draw.line(screen, (150, 110, 70), (cx - 6, cy + 9), (cx + 5, cy - 8), 2)
+            pygame.draw.polygon(screen, col, [(cx + 3, cy - 9), (cx + 9, cy - 7),
+                                              (cx + 8, cy - 1), (cx + 2, cy - 3)])
+            pygame.draw.polygon(screen, (235, 235, 240), [(cx + 3, cy - 9), (cx + 6, cy - 8),
+                                                          (cx + 5, cy - 4), (cx + 2, cy - 3)])
         else:
             pygame.draw.line(screen, (200, 205, 220), (cx - 6, cy + 6), (cx + 5, cy - 6), 3)
             pygame.draw.line(screen, col, (cx - 8, cy - 5), (cx - 3, cy - 8), 2)  # 가드
@@ -537,7 +544,7 @@ class HUD:
 
         buttons = []
         _CC = {'warrior': (235, 185, 60), 'archer': (120, 205, 150),
-               'mage': (170, 130, 245)}
+               'mage': (170, 130, 245), 'axeman': (222, 120, 58)}
         ccol = (108, 108, 128) if locked else _CC.get(char_class, (235, 185, 60))
 
         # ── 좌측: 아바타 프리뷰 박스 ──────────────────────────────────
@@ -566,7 +573,8 @@ class HUD:
             pygame.draw.arc(screen, (210, 210, 225), (lx - 10, ly - 17, 20, 28),
                             3.14, 6.28, 3)
             pygame.draw.rect(screen, (55, 55, 75), (lx - 3, ly + 7, 6, 9))
-            req = self._fit_text(self.font_sm, t('class_locked_req'), prev_w - 18,
+            req_key = 'class_axeman_locked_req' if char_class == 'axeman' else 'class_locked_req'
+            req = self._fit_text(self.font_sm, t(req_key), prev_w - 18,
                                  (255, 210, 120))
             screen.blit(req, (prev_x + prev_w // 2 - req.get_width() // 2, ly + 40))
 
@@ -1087,9 +1095,11 @@ class HUD:
         # (오의 SP 바 제거 — 스태미나 SP 체제로 통합)
 
         # ── 궁극기 ──────────────────────────────────────────────────
-        from core.skills import ULTIMATE_SKILL_DEFS
+        from core.skills import ULTIMATE_SKILL_DEFS, ultimate_def_for
         sec_header('sec_ultimate', (255, 120, 50))
-        for uid, udef in ULTIMATE_SKILL_DEFS.items():
+        _cc = getattr(player, 'char_class', 'warrior') if player else 'warrior'
+        for uid, _base in ULTIMATE_SKILL_DEFS.items():
+            udef = ultimate_def_for(uid, _cc)
             unlocked_ult = player and player.level >= udef['level_req']
             ready_ult    = skill_mgr.ready(uid) if (skill_mgr and unlocked_ult) else False
             rem_ult      = skill_mgr.remaining_sec(uid) if (skill_mgr and unlocked_ult) else 0.0

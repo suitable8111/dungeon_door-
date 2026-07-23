@@ -614,6 +614,127 @@ ALL_SKILL_DEFS = {
         ],
         'sp_cost': [6, 12],
     },
+    # ── 도끼맨 전용 스킬 ──────────────────────────────────────────────
+    'axe_throw': {
+        'name': '도끼 투척', 'name_en': 'Axe Throw', 'name_ja': '斧投げ',
+        'name_zh': '投斧', 'name_ru': 'Бросок топора',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 5000,
+        'color': (235, 150, 70),
+        'category': 'attack',
+        'desc': '직선으로 도끼를 던져 경로의 적을 강타. 도끼는 바닥에 낙하 — 밟아 회수하면 즉시 재투척',
+        'desc_en': 'Hurl your axe in a line, striking enemies. It lands on the ground — walk over it to recall and throw again instantly',
+        'desc_ja': '直線に斧を投げ経路の敵を強打。斧は落下 — 踏んで回収すれば即再投擲',
+        'desc_zh': '直线投出斧头重击路径上的敌人。斧落地后踩踏回收即可立刻再投',
+        'desc_ru': 'Метает топор по линии, поражая врагов. Топор падает — подберите его для мгновенного повторного броска',
+        'usage': '바라보는 방향 N칸으로 도끼 투척 · 회수 시 쿨 초기화',
+        'usage_en': 'Throw N tiles in facing direction · recall resets cooldown',
+        'usage_ja': '向いた方向へNマス投擲 · 回収でCDリセット',
+        'usage_zh': '朝面向方向投掷N格 · 回收重置冷却',
+        'usage_ru': 'Бросок на N клеток · подбор сбрасывает КД',
+        'upgrades': [
+            {'range': 4, 'mul': 2.0, 'cd_ms': 5000,
+             'level_desc': '4칸 · 200% 피해 · 쿨 5.0초',
+             'level_desc_en': '4 tiles · 200% DMG · 5.0s CD',
+             'level_desc_ja': '4マス · 200% · CD5.0秒',
+             'level_desc_zh': '4格 · 200%伤害 · 冷却5.0秒',
+             'level_desc_ru': '4 кл. · 200% · КД 5,0с'},
+            {'range': 5, 'mul': 2.4, 'cd_ms': 4500,
+             'level_desc': '5칸 · 240% 피해 · 쿨 4.5초',
+             'level_desc_en': '5 tiles · 240% DMG · 4.5s CD',
+             'level_desc_ja': '5マス · 240% · CD4.5秒',
+             'level_desc_zh': '5格 · 240%伤害 · 冷却4.5秒',
+             'level_desc_ru': '5 кл. · 240% · КД 4,5с'},
+            {'range': 6, 'mul': 2.8, 'cd_ms': 4000,
+             'level_desc': '6칸 · 280% 피해 · 쿨 4.0초',
+             'level_desc_en': '6 tiles · 280% DMG · 4.0s CD',
+             'level_desc_ja': '6マス · 280% · CD4.0秒',
+             'level_desc_zh': '6格 · 280%伤害 · 冷却4.0秒',
+             'level_desc_ru': '6 кл. · 280% · КД 4,0с'},
+        ],
+        'sp_cost': [6, 12],
+    },
+    'berserk': {
+        'name': '광폭화', 'name_en': 'Berserk', 'name_ja': '狂化',
+        'name_zh': '狂暴', 'name_ru': 'Берсерк',
+        'slot_default': None,
+        'level_req': 1,
+        'cooldown_ms': 12000,
+        'color': (230, 80, 60),
+        'category': 'attack',
+        'desc': '일시적으로 공격속도가 크게 오르고 가한 피해를 흡혈 — 느린 공속을 보완',
+        'desc_en': 'Temporarily surge attack speed and lifesteal your damage — offsets the slow swing',
+        'desc_ja': '一時的に攻撃速度が上がり、与ダメを吸血 — 遅い攻撃を補う',
+        'desc_zh': '暂时大幅提升攻速并吸血所造成伤害 — 弥补缓慢攻速',
+        'desc_ru': 'Временно резко ускоряет атаки и даёт вампиризм — компенсирует медлительность',
+        'usage': 'N초간 공속↑ + 흡혈 + 공격력↑',
+        'usage_en': 'N s of ATK speed↑ + lifesteal + ATK↑',
+        'usage_ja': 'N秒間 攻速↑ + 吸血 + 攻撃↑',
+        'usage_zh': 'N秒攻速↑ + 吸血 + 攻击↑',
+        'usage_ru': 'N с: скор.атк↑ + вампиризм + АТК↑',
+        'upgrades': [
+            {'aspd_pct': 0.5, 'lifesteal_pct': 0.20, 'atk_pct': 0.15, 'dur_ms': 5000, 'cd_ms': 12000,
+             'level_desc': '공속+50% · 흡혈20% · 공격+15% · 5초',
+             'level_desc_en': 'AS+50% · LS20% · ATK+15% · 5s',
+             'level_desc_ja': '攻速+50% · 吸血20% · 攻撃+15% · 5秒',
+             'level_desc_zh': '攻速+50% · 吸血20% · 攻击+15% · 5秒',
+             'level_desc_ru': 'СА+50% · ВП20% · АТК+15% · 5с'},
+            {'aspd_pct': 0.7, 'lifesteal_pct': 0.28, 'atk_pct': 0.20, 'dur_ms': 6000, 'cd_ms': 11000,
+             'level_desc': '공속+70% · 흡혈28% · 공격+20% · 6초',
+             'level_desc_en': 'AS+70% · LS28% · ATK+20% · 6s',
+             'level_desc_ja': '攻速+70% · 吸血28% · 攻撃+20% · 6秒',
+             'level_desc_zh': '攻速+70% · 吸血28% · 攻击+20% · 6秒',
+             'level_desc_ru': 'СА+70% · ВП28% · АТК+20% · 6с'},
+            {'aspd_pct': 0.9, 'lifesteal_pct': 0.35, 'atk_pct': 0.25, 'dur_ms': 7000, 'cd_ms': 10000,
+             'level_desc': '공속+90% · 흡혈35% · 공격+25% · 7초',
+             'level_desc_en': 'AS+90% · LS35% · ATK+25% · 7s',
+             'level_desc_ja': '攻速+90% · 吸血35% · 攻撃+25% · 7秒',
+             'level_desc_zh': '攻速+90% · 吸血35% · 攻击+25% · 7秒',
+             'level_desc_ru': 'СА+90% · ВП35% · АТК+25% · 7с'},
+        ],
+        'sp_cost': [6, 12],
+    },
+    'leap_smash': {
+        'name': '도약 강타', 'name_en': 'Leap Smash', 'name_ja': '跳躍強打',
+        'name_zh': '跃击', 'name_ru': 'Прыжок-удар',
+        'slot_default': None,
+        'level_req': 5,
+        'cooldown_ms': 6000,
+        'color': (240, 170, 90),
+        'category': 'mobility',
+        'desc': '바라보는 방향으로 도약해 착지 지점 주변을 강타 — 진입 + 광역',
+        'desc_en': 'Leap in your facing direction and smash the landing area — engage + AoE',
+        'desc_ja': '向いた方向へ跳躍し着地点周囲を強打 — 突入+範囲',
+        'desc_zh': '朝面向方向跃进并砸击落点周围 — 突进+范围',
+        'desc_ru': 'Прыжок вперёд с ударом по месту приземления — сближение + область',
+        'usage': 'N칸 도약 · 착지 반경 R 광역 강타',
+        'usage_en': 'Leap N tiles · smash radius R on landing',
+        'usage_ja': 'Nマス跳躍 · 着地半径R範囲強打',
+        'usage_zh': '跃进N格 · 落地半径R范围强击',
+        'usage_ru': 'Прыжок N · удар по радиусу R',
+        'upgrades': [
+            {'tiles': 3, 'radius': 1, 'mul': 1.8, 'cd_ms': 6000,
+             'level_desc': '3칸 도약 · 반경1 · 180%',
+             'level_desc_en': '3-tile leap · R1 · 180%',
+             'level_desc_ja': '3マス · 半径1 · 180%',
+             'level_desc_zh': '跃3格 · 半径1 · 180%',
+             'level_desc_ru': 'Прыжок 3 · R1 · 180%'},
+            {'tiles': 4, 'radius': 1, 'mul': 2.2, 'cd_ms': 5500,
+             'level_desc': '4칸 도약 · 반경1 · 220%',
+             'level_desc_en': '4-tile leap · R1 · 220%',
+             'level_desc_ja': '4マス · 半径1 · 220%',
+             'level_desc_zh': '跃4格 · 半径1 · 220%',
+             'level_desc_ru': 'Прыжок 4 · R1 · 220%'},
+            {'tiles': 5, 'radius': 2, 'mul': 2.6, 'cd_ms': 5000,
+             'level_desc': '5칸 도약 · 반경2 · 260%',
+             'level_desc_en': '5-tile leap · R2 · 260%',
+             'level_desc_ja': '5マス · 半径2 · 260%',
+             'level_desc_zh': '跃5格 · 半径2 · 260%',
+             'level_desc_ru': 'Прыжок 5 · R2 · 260%'},
+        ],
+        'sp_cost': [6, 12],
+    },
 }
 ALL_SKILL_DEFS = localize_defs(ALL_SKILL_DEFS)
 
@@ -641,11 +762,22 @@ DEFAULT_EQUIPPED_MAGE: dict[str, str] = {
 }
 
 
+# 도끼맨 기본 장착 — 도끼 투척 + 회전 + 광폭화(버프) + 도약 강타 (근접 강타 정체성)
+DEFAULT_EQUIPPED_AXEMAN: dict[str, str] = {
+    'W': 'axe_throw',    # 도끼 투척(회수·재투척)
+    'A': 'steel_whirl',  # 광폭 회전(재활용)
+    'S': 'berserk',      # 광폭화 — 공속↑ + 흡혈
+    'D': 'leap_smash',   # 도약 강타 — 진입 + 광역
+}
+
+
 def default_equipped_for(char_class: str) -> dict:
     if char_class == 'archer':
         return dict(DEFAULT_EQUIPPED_ARCHER)
     if char_class == 'mage':
         return dict(DEFAULT_EQUIPPED_MAGE)
+    if char_class == 'axeman':
+        return dict(DEFAULT_EQUIPPED_AXEMAN)
     return dict(DEFAULT_EQUIPPED)
 
 # 하위 호환 — 기존 SKILL_DEFS 리스트 (W/A/S/D 슬롯 기본 스킬)
@@ -794,6 +926,39 @@ ULTIMATE_SKILL_DEFS = {
     },
 }
 ULTIMATE_SKILL_DEFS = localize_defs(ULTIMATE_SKILL_DEFS)
+
+# 클래스별 R 궁극기 표시 오버라이드 (효과는 game._use_ultimate가 분기)
+_R_ULT_OVERRIDE = localize_defs({
+    'mage': {
+        'name': '인페르노', 'name_en': 'Inferno', 'name_ja': 'インフェルノ',
+        'name_zh': '炼狱', 'name_ru': 'Инферно',
+        'color': (255, 110, 35),
+        'desc': '화면 전역에 화염 장판 + 전 적 점화 + 정령 소환',
+        'desc_en': 'Blanket the screen in flame zones, ignite all enemies, summon spirits',
+        'desc_ja': '画面全域に炎の地帯 + 全敵点火 + 精霊召喚',
+        'desc_zh': '全屏火焰地带 + 点燃全敌 + 召唤精灵',
+        'desc_ru': 'Зоны огня по всему экрану + поджог всех врагов + призывы',
+    },
+    'axeman': {
+        'name': '라그나로크', 'name_en': 'Ragnarok', 'name_ja': 'ラグナロク',
+        'name_zh': '诸神黄昏', 'name_ru': 'Рагнарёк',
+        'color': (255, 90, 50),
+        'desc': '수 초간 완전 무적 + 이동·공격 강화, 휘두르기가 중거리 광역으로 확장',
+        'desc_en': 'A few seconds of full invincibility + boosted speed; swings become mid-range AoE',
+        'desc_ja': '数秒間の完全無敵 + 移動·攻撃強化、振りが中距離範囲に',
+        'desc_zh': '数秒完全无敌 + 移动攻击强化，挥击扩展为中距离范围',
+        'desc_ru': 'Несколько секунд неуязвимости + ускорение; удары бьют по средней области',
+    },
+})
+
+
+def ultimate_def_for(uid: str, char_class: str = 'warrior') -> dict:
+    """클래스별 R 궁극기 표시 정의 (이름/설명/색만 오버라이드, 나머지는 기본).
+    병합 후 localize_defs로 다시 감싸 현재 언어 이름 해석을 유지한다."""
+    base = ULTIMATE_SKILL_DEFS.get(uid)
+    if uid == 'R' and char_class in _R_ULT_OVERRIDE and base:
+        return localize_defs({**base, **_R_ULT_OVERRIDE[char_class]})
+    return base
 
 
 ENCHANT_TYPES = ('power', 'haste', 'efficiency', 'arcane')

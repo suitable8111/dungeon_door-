@@ -579,5 +579,27 @@
     "name_ja": "金庫の鍵",
     "name_zh": "金库钥匙",
     "name_ru": "Ключ от хранилища"
+  },
+  "battle_axe": {
+    "name": "전투 도끼",
+    "color": [200, 170, 140],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 7,
+    "name_en": "Battle Axe",
+    "name_ja": "戦斧",
+    "name_zh": "战斧",
+    "name_ru": "Боевой топор"
+  },
+  "great_axe": {
+    "name": "양손 대도끼",
+    "color": [225, 205, 180],
+    "type": "weapon",
+    "effect": "attack_up",
+    "value": 13,
+    "name_en": "Great Axe",
+    "name_ja": "大斧",
+    "name_zh": "巨斧",
+    "name_ru": "Секира"
   }
 }

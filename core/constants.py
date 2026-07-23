@@ -58,7 +58,7 @@ GOLD_COLOR  = (235, 185,  60)
 SHOP_COLOR  = ( 60, 210, 120)
 
 # ---- 플레이어 클래스 ----
-CLASSES = ('warrior', 'archer', 'mage')
+CLASSES = ('warrior', 'archer', 'mage', 'axeman')
 BOSS_COLOR  = (200,  80, 220)
 SKILL_READY = (100, 180, 255)
 SKILL_CD    = ( 60,  60,  90)
