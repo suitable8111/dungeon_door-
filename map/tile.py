@@ -18,6 +18,9 @@ class TileType(Enum):
     BUTTON = auto()             # 압력판 — 보상 + 이동벽 개방
     SHIFT_WALL = auto()         # 실시간으로 열리고 닫히는 벽(팝업 기둥)
     CRACKED_WALL = auto()       # 균열 벽 — 폭탄/강타로 부수면 통로가 됨
+    COLLAPSED = auto()          # 붕괴로 무너진 구덩이 — 통행 불가
+    ALTAR = auto()              # 붕괴 제단 — 보물을 챙기면 던전이 무너진다(탈출전)
+    WATER = auto()              # 깊은 물 — 통행 불가(시야는 통과), 호수/늪
 
 
 # 밟을 때 효과가 발동하는 트랩
@@ -83,6 +86,21 @@ class Tile:
     def cracked_wall(cls):
         """균열 벽 — 벽처럼 막지만 폭탄/강타로 부수면 통로가 된다."""
         return cls(TileType.CRACKED_WALL, blocked=True, block_sight=True)
+
+    @classmethod
+    def collapsed(cls):
+        """붕괴 구덩이 — 통행 불가(시야는 통과)."""
+        return cls(TileType.COLLAPSED, blocked=True, block_sight=False)
+
+    @classmethod
+    def altar(cls):
+        """붕괴 제단 — 밟으면 보물 획득 + 던전 붕괴 시작(탈출전)."""
+        return cls(TileType.ALTAR, blocked=False, block_sight=False)
+
+    @classmethod
+    def water(cls):
+        """깊은 물 — 통행 불가, 시야는 통과(호수/늪 지형)."""
+        return cls(TileType.WATER, blocked=True, block_sight=False)
 
 
 # 컨베이어 타일 → 미는 방향(dx)

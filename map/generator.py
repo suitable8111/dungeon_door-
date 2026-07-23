@@ -101,6 +101,11 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
         dungeon.has_shop = True
         dungeon.shop_items = _make_shop_items(floor_level, item_data)
 
+    # 바이옴 지형 변주 — 늪/호수/요새/숲 (테마별, 연결성 보장)
+    if not is_boss_floor:
+        from map.biomes import apply_biome
+        apply_biome(dungeon, rooms, floor_level, dungeon.theme_index)
+
     # 흐르는 바닥(컨베이어) — 기계/전기 테마 층
     if theme_fx(floor_level).get('conveyor') and len(rooms) >= 3:
         _place_conveyors(dungeon, rooms)
@@ -108,6 +113,11 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
     # 동적 위험: 트랩 + 압력판(모든 층) + 움직이는 벽(shift 테마)
     if not is_boss_floor:
         _place_hazards(dungeon, rooms, floor_level)
+
+    # 붕괴 제단: 보물을 챙기면 던전이 무너지는 탈출전 (비-보스, 5층 이상)
+    # — 비밀방(봉인된 금고)이 rooms에 추가되기 전에 배치해 도달 가능 보장
+    if not is_boss_floor and floor_level >= 5:
+        _place_collapse_altar(dungeon, rooms, floor_level)
 
     # 균열 벽: 숨겨진 보물방 + 비밀 지름길 (폭탄/강타로 개방)
     if not is_boss_floor:
@@ -286,6 +296,29 @@ def _try_secret_room(dungeon, rooms, floor_level, item_data):
     return False
 
 
+def _place_collapse_altar(dungeon, rooms, floor_level):
+    """출구에서 먼 방 중앙에 붕괴 제단 1개 배치 (확률형).
+
+    제단을 밟으면 던전이 무너지기 시작하고, 계단으로 탈출하면
+    큰 보상을 받는다. 위험/보상 세트피스라 등장 확률을 낮게 유지.
+    """
+    if len(rooms) < 4 or random.random() >= 0.20:
+        return
+    exit_pos = getattr(dungeon, 'stairs_pos', None)
+    # 시작방·문(출구)방을 제외한 후보 중 출구에서 가장 먼 방
+    cands = rooms[1:]
+    if exit_pos:
+        ex, ey = exit_pos
+        cands = sorted(cands,
+                       key=lambda r: -((r.center[0] - ex) ** 2 + (r.center[1] - ey) ** 2))
+    for room in cands:
+        cx, cy = room.center
+        if dungeon.tiles[cy][cx].tile_type == TileType.FLOOR:
+            dungeon.tiles[cy][cx] = Tile.altar()
+            dungeon.altar_pos = (cx, cy)
+            return
+
+
 def _place_shortcut_cracks(dungeon, rooms, floor_level):
     """두 통로/방을 가르는 1칸 벽을 균열 벽으로 — 폭탄으로 뚫는 지름길."""
     n_target = random.randint(1, 2)
@@ -392,6 +425,9 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
         for _ in range(count):
             ex = random.randint(room.x + 1, room.x + room.w - 2)
             ey = random.randint(room.y + 1, room.y + room.h - 2)
+            # 바이옴 지형(물/나무/기둥) 위엔 스폰 금지
+            if not dungeon.is_walkable(ex, ey):
+                continue
             if (ex, ey) not in used:
                 used.add((ex, ey))
                 key = random.choice(enemy_pool)

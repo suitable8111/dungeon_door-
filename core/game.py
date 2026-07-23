@@ -230,6 +230,11 @@ class Game:
         self._dot_zones: list = []     # [{'x','y','r','dps','ms','col','tick'}]
         self._summons:   list = []     # entities.summon.Summon 목록
         self._bombs:     list = []     # 투척 폭탄 [{'x','y','fuse','r'}]
+        # 붕괴 추격 세트피스
+        self._collapse_active = False
+        self._collapse_t      = 0.0    # 붕괴 진행 타이머(ms)
+        self._crumble: dict   = {}     # {(x,y): 무너지는 시각(ms)}
+        self._collapse_reward = None   # 제단으로 예약된 탈출 보상(탈출 성공 시 지급)
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -582,6 +587,7 @@ class Game:
                     self._update_dots(world_dt)      # 점화 DoT + 화염 장판
                     self._update_summons(world_dt)   # 소환수
                     self._update_bombs(world_dt)     # 투척 폭탄
+                    self._update_collapse(world_dt)  # 붕괴 추격
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
             self._update_bgm()
@@ -677,6 +683,10 @@ class Game:
         self._summons = []
         self._bombs = []
         self._secret_found = False      # 이 층 비밀방 발견 연출 1회 플래그
+        self._collapse_active = False   # 층 이동 시 붕괴 상태 해제
+        self._collapse_t = 0.0
+        self._crumble = {}
+        self._collapse_reward = None    # 탈출 못하면 제단 보상은 소멸
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
                 for xx, tl in enumerate(row):
@@ -715,7 +725,7 @@ class Game:
                 self._move_anim_offset[0] - d * TILE_SIZE))
             p.x, p.y = nx, ny
             self.camera.center_on(p.x, p.y)
-            if not self._is_test_mode:
+            if not self._is_test_mode and not self._collapse_active:
                 self.dungeon.update_visibility(p.x, p.y)
             item = self.dungeon.get_item_at(nx, ny)
             if item:
@@ -835,6 +845,8 @@ class Game:
             self.audio.play('hit')
         elif tt == TileType.BUTTON:
             self._press_button(x, y)
+        elif tt == TileType.ALTAR:
+            self._trigger_altar(x, y)
 
     def _press_button(self, x, y):
         """압력판 — 보상(골드+전투 함성 버프) + 이동벽 전부 개방. 1회성."""
@@ -989,6 +1001,186 @@ class Game:
         if n and not self._is_test_mode and not self._in_town:
             self.dungeon.update_visibility(self.player.x, self.player.y)
         return n
+
+    # ─────────────── 붕괴 추격 세트피스 ─────────────────────────────────
+    _COLLAPSE_K    = 300      # 거리 1칸당 무너지는 간격(ms) — 작을수록 빠름
+    _COLLAPSE_WARN = 700      # 무너지기 직전 경고(균열/흔들림) 구간(ms)
+    _COLLAPSE_FALL_PCT = 0.18  # 추락 시 최대 HP 비례 피해
+
+    def _start_collapse(self):
+        """출구(계단)에서 먼 곳부터 무너지는 붕괴 파도 시작 — 계단으로 탈출하라."""
+        exit_pos = getattr(self.dungeon, 'stairs_pos', None)
+        if not exit_pos or self._collapse_active:
+            return
+        # 출구에서 BFS 거리
+        from collections import deque
+        dist = {exit_pos: 0}
+        q = deque([exit_pos])
+        while q:
+            x, y = q.popleft()
+            for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                nx, ny = x + ox, y + oy
+                if (nx, ny) not in dist and self.dungeon.is_walkable(nx, ny):
+                    dist[(nx, ny)] = dist[(x, y)] + 1
+                    q.append((nx, ny))
+        dmax = max(dist.values()) if dist else 1
+        # 깊은 층일수록 파도가 빨라진다(더 조여옴) — 하한 150ms/칸
+        k = max(150, self._COLLAPSE_K - self.floor * 2)
+        # 먼 타일(dmax)일수록 t≈0에 무너지고, 출구는 마지막에
+        self._crumble = {pos: k * (dmax - d) for pos, d in dist.items()}
+        self._collapse_active = True
+        self._collapse_t = 0.0
+        # 붕괴 중엔 전체 공개 — 시야 제한/어두움 없이 탈출에만 집중(플레이 편의)
+        self.dungeon.reveal_all()
+        self.animator.add(BannerAnim(t('collapse_start'), (255, 90, 60), size=30))
+        self._start_shake(7, 700)
+        self.audio.play('boss_appear')
+
+    def _update_collapse(self, dt):
+        if not self._collapse_active:
+            return
+        self._collapse_t += dt
+        t_now = self._collapse_t
+        px, py = self.player.x, self.player.y
+        for (x, y), ct in self._crumble.items():
+            if t_now < ct:
+                continue
+            tile = self.dungeon.tiles[y][x]
+            if tile.tile_type == TileType.COLLAPSED:
+                continue
+            # 문/계단은 무너지지 않음 (탈출구 보존)
+            if tile.tile_type in (TileType.DOOR, TileType.STAIRS_DOWN):
+                continue
+            tile.blocked = True
+            self.dungeon.tiles[y][x] = Tile.collapsed()
+            if self.dungeon.tiles[y][x].explored:
+                pass
+            self.dungeon.tiles[y][x].explored = tile.explored
+            self.dungeon.tiles[y][x].visible = tile.visible
+            # 위에 있던 적은 낙하(제거)
+            e = self.dungeon.get_enemy_at(x, y)
+            if e and not e.is_boss:
+                self.animator.particles.emit_death(x, y, (90, 80, 70))
+                if e in self.dungeon.enemies:
+                    self.dungeon.enemies.remove(e)
+            # 가끔 낙석 파티클
+            if random.random() < 0.25 and self.dungeon.tiles[y][x].visible:
+                self.animator.particles.emit_death(x, y, (110, 100, 88))
+        # 플레이어가 무너진 칸 위면 추락
+        if self.dungeon.in_bounds(px, py) and \
+                self.dungeon.tiles[py][px].tile_type == TileType.COLLAPSED:
+            self._collapse_player_fall()
+
+    # 제단 도박: 탈출전용 무기 후보(직업별, 앞쪽일수록 상위)
+    _ALTAR_WEAPON = {
+        'warrior': ['great_sword', 'broad_sword'],
+        'archer':  ['broad_sword', 'sword'],
+        'mage':    ['arcane_staff', 'apprentice_staff'],
+    }
+
+    def _trigger_altar(self, x, y):
+        """붕괴 제단 = 랜덤 상자(도박). 밟으면 운에 따라:
+          · 대박(약 45%) → 즉시 엄청난 보상(골드 폭탄 또는 레어 무기)
+          · 붕괴(약 55%) → 던전이 무너짐. 계단으로 탈출해야 보상 획득."""
+        if self._collapse_active:
+            return
+        self.dungeon.tiles[y][x] = Tile.floor()          # 상자 소모(재발동 방지)
+        if random.random() < 0.45:
+            self._altar_jackpot(x, y)
+        else:
+            mult = getattr(self, '_gold_mult', 1.0)
+            self._collapse_reward = {
+                'gold':   int(500 * mult) + self.floor * 15,
+                'stones': 2,
+                'gear':   True,
+            }
+            self.animator.add(BannerAnim(t('altar_trigger'), (255, 150, 60), size=28))
+            self.messages.append((t('altar_trigger'), 'warn'))
+            self.animator.particles.emit_death(x, y, (150, 60, 40))
+            self._white_flash_ms = 120
+            self.audio.play('boss_appear')
+            self._start_collapse()
+
+    def _altar_jackpot(self, x, y):
+        """제단 대박 — 즉시 골드 폭탄 또는 레어 무기 지급(붕괴 없음)."""
+        mult = getattr(self, '_gold_mult', 1.0)
+        if random.random() < 0.5:
+            gold = int(800 * mult) + self.floor * 25
+            self.player.gold += gold
+            self._gold_flash_ms = 280
+            self.animator.add(BannerAnim(t('altar_jackpot_gold', gold),
+                                         (255, 225, 90), size=30))
+            self.messages.append((t('altar_jackpot_gold', gold), 'good'))
+        else:
+            name = self._grant_rare_weapon()
+            self.animator.add(BannerAnim(t('altar_jackpot_gear', name),
+                                         (140, 230, 255), size=28))
+            self.messages.append((t('altar_jackpot_gear', name), 'good'))
+        self.animator.particles.emit_levelup(x, y)
+        self._white_flash_ms = 140
+        self._start_punch_zoom(0.07, 160)
+        self.audio.play('levelup_big')
+
+    def _grant_rare_weapon(self):
+        """직업 맞춤 상위 무기를 깊이 비례 강화 상태로 지급. 무기명 반환."""
+        from entities.item import Item
+        p = self.player
+        cls = getattr(p, 'char_class', 'warrior')
+        pool = [k for k in self._ALTAR_WEAPON.get(cls, self._ALTAR_WEAPON['warrior'])
+                if k in self._item_data]
+        key = pool[0] if pool else 'sword'
+        d = dict(self._item_data[key]); d['key'] = key
+        d['enhance_level'] = min(20, 4 + self.floor // 40)   # 레어답게 강화 보정
+        it = Item(0, 0, d)
+        if len(p.inventory) < p.max_inventory:
+            p.inventory.append(it)
+        else:
+            p.enhance_stones += 3
+        return it.name
+
+    def _resolve_collapse_escape(self):
+        """붕괴 중 계단 도달 — 탈출 성공 보상 + 상태 해제.
+        제단으로 예약된 보상이 있으면 크게, 없으면 기본 탈출 보상."""
+        self._collapse_active = False
+        self._crumble = {}
+        banked = self._collapse_reward
+        self._collapse_reward = None
+        if banked:
+            reward = banked['gold']
+            self.player.gold += reward
+            self.player.enhance_stones += banked.get('stones', 1)
+            if banked.get('gear'):
+                self._grant_class_gear(self.floor)
+            self.animator.add(BannerAnim(t('altar_escape', reward), (255, 225, 110), size=30))
+        else:
+            reward = int(200 * getattr(self, '_gold_mult', 1.0)) + self.floor * 5
+            self.player.gold += reward
+            self.player.enhance_stones += 1
+            self.animator.add(BannerAnim(t('collapse_escape', reward), (255, 220, 90), size=28))
+        self._gold_flash_ms = 220
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self._start_punch_zoom(0.06, 150)
+        self.audio.play('levelup_big')
+
+    def _collapse_player_fall(self):
+        p = self.player
+        p.take_damage(max(8, int(p.max_hp * self._COLLAPSE_FALL_PCT)))
+        self._hurt_flash_ms = 200
+        self._start_shake(8, 320)
+        self.audio.play('player_hit')
+        self.animator.add(CalloutAnim(p.x, p.y, t('collapse_fall'), (255, 120, 90)))
+        # 아직 안 무너진 인접 칸으로 밀어내기 (출구 쪽 우선)
+        best = None
+        for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            nx, ny = p.x + ox, p.y + oy
+            if (self.dungeon.is_walkable(nx, ny)
+                    and self.dungeon.tiles[ny][nx].tile_type != TileType.COLLAPSED):
+                d = self._crumble.get((nx, ny), 1e9)
+                if best is None or d > best[0]:   # 가장 늦게 무너질(=출구에 가까운) 칸
+                    best = (d, nx, ny)
+        if best:
+            p.x, p.y = best[1], best[2]
+            self.camera.center_on(p.x, p.y)
 
     def _apply_distortion(self, surf):
         """사인파 수평 왜곡 — 화면 전체가 흐물흐물 일렁이는 착시.
@@ -1158,7 +1350,7 @@ class Game:
         self.state = 'playing'
         self.messages.append(('[TEST] 테스트 모드 — 격리 기록(*_test.json)', 'info'))
         self.messages.append((f'[TEST] B{self.floor}F  최대 스탯 적용', 'good'))
-        self.messages.append(('[TEST] J 정복일지 · [ 테마+1 · ] 999정산 · \\ 리셋', 'info'))
+        self.messages.append(('[TEST] J 정복일지 · [ 테마+1 · ] 999정산 · \\ 리셋 · C 붕괴', 'info'))
 
     def start_town_test(self, floor: int = 1, char_class='warrior'):
         """python3 test_main.py town [층] — 던전 세션 생성 후 곧장 마을 진입."""
@@ -1468,6 +1660,10 @@ class Game:
                     save_records(self._records)
                     self._gold_mult = 1.0; self._title_badge = False
                     self.messages.append(('[TEST] 기록 초기화됨', 'info'))
+                elif self._is_test_mode and event.key == pygame.K_c \
+                        and self.state == 'playing' and not self._in_town:
+                    self._start_collapse()             # [TEST] 붕괴 추격 발동
+                    self.messages.append(('[TEST] 붕괴 시작 (C)', 'bad'))
                 elif event.key == pygame.K_b and self.state in ('playing', 'storage', 'inn'):
                     self._open_pet_status()          # 펫 상태창 (B)
                 elif self.state == 'pet':
@@ -2044,7 +2240,7 @@ class Game:
         elif action['type'] == 'combo_skill': acted = self._use_combo_skill(action['combo'])
         elif action['type'] == 'ultimate':    acted = self._use_ultimate(action['key'])
         if acted:
-            if not self._is_test_mode and not self._in_town:
+            if not self._in_town and not self._is_test_mode and not self._collapse_active:
                 self.dungeon.update_visibility(self.player.x, self.player.y)
             self.camera.center_on(self.player.x, self.player.y)
 
@@ -2075,6 +2271,8 @@ class Game:
         # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
         if target_tile.tile_type == TileType.DOOR:
             self.audio.play('stairs')
+            if self._collapse_active:
+                self._resolve_collapse_escape()
             if self.floor >= MAX_FLOOR:
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
                 if not self._records.get('game_cleared', False):
@@ -4981,6 +5179,8 @@ class Game:
             return
 
         self._render_dungeon()
+        if self._collapse_active:
+            self._draw_collapse_exit_arrow()
         self.hud.render(self.screen, self.player, self.messages, self.floor,
                         self.dungeon, self.skills,
                         unlocked_combos=self._unlocked_combos,
@@ -5099,6 +5299,10 @@ class Game:
 
         # 마법사 화염 장판 (바닥 위, 적 아래)
         self._draw_dot_zones(cx, cy)
+
+        # 붕괴 경고 (곧 무너질 타일 균열/붉은 점멸)
+        if self._collapse_active:
+            self._draw_collapse_warn(cx, cy)
 
         # 보스 스킬 위험 구역 (예고 중 붉게 점멸)
         for enemy in self.dungeon.enemies:
@@ -5262,6 +5466,18 @@ class Game:
                 pygame.draw.line(s,th['wall_bot'],(x,y+ts-1),(x+ts-1,y+ts-1))
         elif tt == TileType.CRACKED_WALL:
             self._draw_cracked_wall(s, x, y, lit, th)
+        elif tt == TileType.COLLAPSED:
+            # 무너진 구덩이 — 검은 심연 + 톱니 가장자리
+            pygame.draw.rect(s, (6, 5, 9), (x, y, ts, ts))
+            edge = (40, 34, 30) if lit else (22, 19, 17)
+            pygame.draw.lines(s, edge, True,
+                              [(x + 2, y + 5), (x + 7, y + 2), (x + ts - 6, y + 4),
+                               (x + ts - 2, y + 9), (x + ts - 4, y + ts - 4),
+                               (x + 6, y + ts - 2), (x + 3, y + ts - 7)], 2)
+        elif tt == TileType.ALTAR:
+            self._draw_altar(s, x, y, lit, th)
+        elif tt == TileType.WATER:
+            self._draw_water(s, x, y, lit, th)
         elif tt == TileType.DOOR:
             self._draw_door(s, x, y, lit, th)
         elif tt == TileType.BURNING_DOOR:
@@ -5355,6 +5571,121 @@ class Game:
         pygame.draw.lines(s, crack, False, pts, 2)
         pygame.draw.line(s, crack, (cx0 + 3, y + 10), (x + ts - 4, y + 8), 1)
         pygame.draw.line(s, crack, (cx0 - 3, y + 17), (x + 4, y + 20), 1)
+
+    def _draw_altar(self, s, x, y, lit, th):
+        """붕괴 제단 — 바닥 위 맥동하는 보물 제단(밟으면 붕괴)."""
+        ts = TILE_SIZE
+        # 바닥 베이스
+        base = th['floor_lit'] if lit else th['floor_dim']
+        pygame.draw.rect(s, base, (x, y, ts, ts))
+        cx, cy = x + ts // 2, y + ts // 2
+        if not lit:
+            # 미탐색/어두움 — 제단 실루엣만
+            pygame.draw.rect(s, (60, 50, 40), (cx - 6, cy - 4, 12, 10))
+            return
+        pulse = 0.5 + 0.5 * math.sin(pygame.time.get_ticks() / 260.0)
+        # 바닥 광휘 (BLEND_ADD)
+        gr = int(10 + 8 * pulse)
+        glow = pygame.Surface((gr * 2, gr * 2), pygame.SRCALPHA)
+        pygame.draw.circle(glow, (255, 180, 70, int(70 + 60 * pulse)), (gr, gr), gr)
+        s.blit(glow, (cx - gr, cy - gr), special_flags=pygame.BLEND_ADD)
+        # 제단 받침
+        pygame.draw.rect(s, (70, 58, 44), (cx - 7, cy + 1, 14, 7))
+        pygame.draw.rect(s, (110, 92, 66), (cx - 7, cy + 1, 14, 2))
+        # 보물(맥동하는 보석)
+        gem = (255, int(180 + 60 * pulse), 60)
+        pygame.draw.polygon(s, gem, [(cx, cy - 8), (cx + 5, cy - 2),
+                                     (cx, cy + 3), (cx - 5, cy - 2)])
+        pygame.draw.polygon(s, (255, 245, 200), [(cx, cy - 8), (cx + 2, cy - 4),
+                                                  (cx - 2, cy - 4)])
+
+    def _draw_water(self, s, x, y, lit, th):
+        """깊은 물 — 테마색 기반 잔물결(통행 불가)."""
+        ts = TILE_SIZE
+        # 테마 바닥색을 어둡고 푸르게 편향
+        fl = th['floor_dim']
+        base = (max(0, fl[0] - 6), min(255, fl[1] + 10), min(255, fl[2] + 40))
+        if not lit:
+            base = (base[0] // 2, base[1] // 2, base[2] // 2)
+        pygame.draw.rect(s, base, (x, y, ts, ts))
+        if lit:
+            hi = (min(255, base[0] + 30), min(255, base[1] + 40), min(255, base[2] + 55))
+            ph = pygame.time.get_ticks() / 400.0 + (x * 0.11 + y * 0.07)
+            wy = y + ts // 2 + int(2 * math.sin(ph))
+            pygame.draw.line(s, hi, (x + 3, wy), (x + ts - 3, wy), 1)
+            wy2 = y + ts // 3 + int(2 * math.sin(ph + 1.7))
+            pygame.draw.line(s, hi, (x + 5, wy2), (x + ts - 6, wy2), 1)
+
+    def _draw_collapse_exit_arrow(self):
+        """붕괴 중 출구 방향 안내 — 게임 화면 가장자리에 계단을 가리키는 화살표."""
+        exit_pos = getattr(self.dungeon, 'stairs_pos', None)
+        if not exit_pos:
+            return
+        s = self.screen
+        # 뷰포트(게임 영역) 중심 · 출구 화면 좌표
+        vx0, vy0, vw, vh = GAME_X, GAME_Y, GAME_W, GAME_H
+        ccx, ccy = vx0 + vw // 2, vy0 + vh // 2
+        ex = vx0 + (exit_pos[0] - self.camera.x) * TILE_SIZE + TILE_SIZE // 2
+        ey = vy0 + (exit_pos[1] - self.camera.y) * TILE_SIZE + TILE_SIZE // 2
+        on_screen = (vx0 + 8 <= ex <= vx0 + vw - 8 and vy0 + 8 <= ey <= vy0 + vh - 8)
+        col = (255, 235, 90) if (pygame.time.get_ticks() // 250) % 2 == 0 else (255, 150, 40)
+        if on_screen:
+            # 출구가 화면 안 — 계단 위에 반짝이는 하강 화살표
+            pygame.draw.polygon(s, col, [(ex, ey - 14), (ex - 7, ey - 24), (ex + 7, ey - 24)])
+            lbl = self.hud.font_sm.render(t('collapse_exit'), True, col)
+            s.blit(lbl, (ex - lbl.get_width() // 2, ey - 40))
+            return
+        # 화면 밖 — 방향 벡터로 가장자리에 화살표 클램프
+        dx, dy = ex - ccx, ey - ccy
+        import math as _m
+        dist = _m.hypot(dx, dy) or 1
+        dx, dy = dx / dist, dy / dist
+        margin = 26
+        # 뷰포트 사각형과의 교점(간단 스케일)
+        sx = min((vx0 + vw - margin - ccx) / dx if dx > 0 else 1e9,
+                 (vx0 + margin - ccx) / dx if dx < 0 else 1e9)
+        sy = min((vy0 + vh - margin - ccy) / dy if dy > 0 else 1e9,
+                 (vy0 + margin - ccy) / dy if dy < 0 else 1e9)
+        tscale = min(sx, sy)
+        ax, ay = int(ccx + dx * tscale), int(ccy + dy * tscale)
+        ang = _m.atan2(dy, dx)
+        tip = (ax + int(_m.cos(ang) * 14), ay + int(_m.sin(ang) * 14))
+        l = (ax + int(_m.cos(ang + 2.4) * 13), ay + int(_m.sin(ang + 2.4) * 13))
+        r = (ax + int(_m.cos(ang - 2.4) * 13), ay + int(_m.sin(ang - 2.4) * 13))
+        pygame.draw.circle(s, (20, 16, 24), (ax, ay), 17)
+        pygame.draw.polygon(s, col, [tip, l, r])
+        lbl = self.hud.font_sm.render(t('collapse_exit'), True, col)
+        lx = min(max(ax - lbl.get_width() // 2, vx0 + 2), vx0 + vw - lbl.get_width() - 2)
+        ly = min(max(ay - 30, vy0 + 2), vy0 + vh - 14)
+        s.blit(lbl, (lx, ly))
+
+    def _draw_collapse_warn(self, cx, cy):
+        """붕괴 임박 타일 — 붉은 균열 + 흔들림으로 예고."""
+        ts = TILE_SIZE
+        s = self._game_surf
+        t_now = self._collapse_t
+        warn = self._COLLAPSE_WARN
+        tnow_ticks = pygame.time.get_ticks()
+        for (x, y), ct in self._crumble.items():
+            left = ct - t_now
+            if left <= 0 or left > warn:
+                continue
+            tile = self.dungeon.tiles[y][x]
+            if not tile.visible or tile.blocked:
+                continue
+            urg = 1.0 - left / warn                    # 0→1 임박도
+            sx, sy = (x - cx) * ts, (y - cy) * ts
+            jitter = int(urg * 2)
+            jx = random.randint(-jitter, jitter) if jitter else 0
+            ov = pygame.Surface((ts, ts), pygame.SRCALPHA)
+            a = int(40 + 90 * urg)
+            if (tnow_ticks // max(80, int(220 * (1 - urg)))) % 2 == 0:
+                ov.fill((180, 50, 30, a))
+            # 균열 선
+            cc = (210, 90, 60)
+            pygame.draw.line(ov, cc, (ts // 2, 2), (ts // 2 - 4, ts - 2), 1)
+            pygame.draw.line(ov, cc, (4, ts // 2), (ts - 3, ts // 2 + 3), 1)
+            s.blit(ov, (sx + jx, sy))
 
     def _draw_bomb(self, b, cx, cy):
         ts = TILE_SIZE

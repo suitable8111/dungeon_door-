@@ -1125,13 +1125,17 @@ class HUD:
         scale = 2
         pygame.draw.rect(screen, (8, 8, 18), (ox, oy, dungeon.width*scale, dungeon.height*scale))
 
+        collapsing = False
         for my in range(dungeon.height):
             for mx in range(dungeon.width):
                 tile = dungeon.tiles[my][mx]
                 if not tile.explored:
                     continue
                 tt = tile.tile_type
-                if not tile.visible:
+                if tt == TileType.COLLAPSED:
+                    collapsing = True
+                    col = (14, 8, 6)                 # 무너진 구덩이 — 미니맵에도 검게
+                elif not tile.visible:
                     if tt == TileType.DOOR:         col = (80, 40, 120)
                     elif tt == TileType.BURNING_DOOR: col = (120, 40, 10)
                     elif tt == TileType.WALL: col = (30, 30, 42)
@@ -1144,6 +1148,15 @@ class HUD:
                     elif tt == TileType.BURNING_DOOR: col = (255, 80, 20)
                     else:                             col = (75,75,100)
                 pygame.draw.rect(screen, col, (ox+mx*scale, oy+my*scale, scale, scale))
+
+        # 붕괴 중이면 출구(문/계단)를 미니맵에 크게 점멸 표시
+        if collapsing:
+            exit_pos = getattr(dungeon, 'stairs_pos', None)
+            if exit_pos:
+                blink = (255, 235, 90) if (pygame.time.get_ticks() // 250) % 2 == 0 else (255, 140, 40)
+                ex = ox + exit_pos[0] * scale
+                ey = oy + exit_pos[1] * scale
+                pygame.draw.rect(screen, blink, (ex - 2, ey - 2, scale + 4, scale + 4), 1)
 
         for enemy in dungeon.enemies:
             if not (enemy.is_alive() and dungeon.tiles[enemy.y][enemy.x].visible):
