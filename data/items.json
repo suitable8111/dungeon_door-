@@ -549,5 +549,20 @@
     "name_ja": "秘術の杖",
     "name_zh": "奥术法杖",
     "name_ru": "Тайный посох"
+  },
+  "bomb": {
+    "name": "폭탄",
+    "color": [
+      60,
+      60,
+      66
+    ],
+    "type": "consumable",
+    "effect": "bomb",
+    "value": 0,
+    "name_en": "Bomb",
+    "name_ja": "爆弾",
+    "name_zh": "炸弹",
+    "name_ru": "Бомба"
   }
 }

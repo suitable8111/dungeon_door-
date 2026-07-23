@@ -17,6 +17,7 @@ class TileType(Enum):
     CURSE_TRAP = auto()         # 밟으면 공격력 저하
     BUTTON = auto()             # 압력판 — 보상 + 이동벽 개방
     SHIFT_WALL = auto()         # 실시간으로 열리고 닫히는 벽(팝업 기둥)
+    CRACKED_WALL = auto()       # 균열 벽 — 폭탄/강타로 부수면 통로가 됨
 
 
 # 밟을 때 효과가 발동하는 트랩
@@ -77,6 +78,11 @@ class Tile:
     def shift_wall(cls, phase: int = 0):
         """실시간 팝업 기둥 — 시작은 열림(통행 가능), 주기적으로 닫힘."""
         return cls(TileType.SHIFT_WALL, blocked=False, block_sight=False, phase=phase)
+
+    @classmethod
+    def cracked_wall(cls):
+        """균열 벽 — 벽처럼 막지만 폭탄/강타로 부수면 통로가 된다."""
+        return cls(TileType.CRACKED_WALL, blocked=True, block_sight=True)
 
 
 # 컨베이어 타일 → 미는 방향(dx)

@@ -109,6 +109,10 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
     if not is_boss_floor:
         _place_hazards(dungeon, rooms, floor_level)
 
+    # 균열 벽: 숨겨진 보물방 + 비밀 지름길 (폭탄/강타로 개방)
+    if not is_boss_floor:
+        _place_secret_areas(dungeon, rooms, floor_level, item_data)
+
     _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor)
 
     return dungeon, rooms[0].center
@@ -221,6 +225,87 @@ def _place_barrier_room(dungeon, rooms, protected, is_floor):
             if is_floor(cx, yy) and (cx, yy) not in protected:
                 dungeon.tiles[yy][cx] = Tile.shift_wall(ph)
                 protected.add((cx, yy))
+
+
+def _place_secret_areas(dungeon, rooms, floor_level, item_data):
+    """균열 벽으로 봉인된 숨겨진 보물방 + 비밀 지름길 생성."""
+    if len(rooms) >= 3 and random.random() < 0.72:
+        _try_secret_room(dungeon, rooms, floor_level, item_data)
+    _place_shortcut_cracks(dungeon, rooms, floor_level)
+
+
+def _try_secret_room(dungeon, rooms, floor_level, item_data):
+    """기존 방 옆 빈 벽 공간에 고립된 3×3 금고를 파고, 입구 벽 1칸을 균열 벽으로."""
+    from entities.item import Item
+    sw = sh = 3
+
+    def all_wall(x0, y0, x1, y1):
+        for yy in range(y0, y1):
+            for xx in range(x0, x1):
+                if not dungeon.in_bounds(xx, yy):
+                    return False
+                if dungeon.tiles[yy][xx].tile_type != TileType.WALL:
+                    return False
+        return True
+
+    for base in random.sample(rooms, len(rooms)):
+        for dx, dy in random.sample([(1, 0), (-1, 0), (0, 1), (0, -1)], 4):
+            if dx > 0:   sx, sy = base.x + base.w + 1, base.y
+            elif dx < 0: sx, sy = base.x - 1 - sw,     base.y
+            elif dy > 0: sx, sy = base.x, base.y + base.h + 1
+            else:        sx, sy = base.x, base.y - 1 - sh
+            # 금고 영역 + 1칸 테두리가 전부 빈 벽이어야 (고립 보장)
+            if not all_wall(sx - 1, sy - 1, sx + sw + 1, sy + sh + 1):
+                continue
+            s = Room(sx, sy, sw, sh)
+            _carve_room(dungeon, s)
+            rooms.append(s)
+            # 균열 벽 입구 — base 바닥과 금고 바닥을 잇는 벽 1칸
+            if dx != 0:
+                gx = base.x + base.w if dx > 0 else base.x - 1
+                gy = sy + 1
+            else:
+                gx = sx + 1
+                gy = base.y + base.h if dy > 0 else base.y - 1
+            if dungeon.in_bounds(gx, gy):
+                dungeon.tiles[gy][gx] = Tile.cracked_wall()
+            # 보물 — 좋은 아이템 2~3 + 폭탄
+            keys = [k for k in drop_pool(floor_level)
+                    if k in item_data and k != 'health_potion']
+            spots = [(x, y) for y in range(s.y, s.y + s.h)
+                     for x in range(s.x, s.x + s.w)]
+            random.shuffle(spots)
+            loot = random.sample(keys, min(len(keys), random.randint(2, 3)))
+            if 'bomb' in item_data:
+                loot.append('bomb')
+            for (ix, iy), key in zip(spots, loot):
+                d = dict(item_data[key]); d['key'] = key
+                dungeon.items.append(Item(ix, iy, d))
+            dungeon.secret_room = s.center
+            return True
+    return False
+
+
+def _place_shortcut_cracks(dungeon, rooms, floor_level):
+    """두 통로/방을 가르는 1칸 벽을 균열 벽으로 — 폭탄으로 뚫는 지름길."""
+    n_target = random.randint(1, 2)
+    placed = 0
+    tries = 0
+    W, H = dungeon.width, dungeon.height
+    while placed < n_target and tries < 400:
+        tries += 1
+        x = random.randint(2, W - 3)
+        y = random.randint(2, H - 3)
+        t = dungeon.tiles[y][x]
+        if t.tile_type != TileType.WALL:
+            continue
+        # 반대편이 모두 바닥인 얇은 벽 (수평 또는 수직)
+        def fl(xx, yy):
+            return (dungeon.in_bounds(xx, yy)
+                    and dungeon.tiles[yy][xx].tile_type == TileType.FLOOR)
+        if (fl(x - 1, y) and fl(x + 1, y)) or (fl(x, y - 1) and fl(x, y + 1)):
+            dungeon.tiles[y][x] = Tile.cracked_wall()
+            placed += 1
 
 
 def _carve_room(dungeon, room):
@@ -369,20 +454,21 @@ def _make_shop_items(floor_level, item_data):
         'whirlwind_potion':    int(60  * mul),
         'return_scroll':       int(30  * mul),
         'repair_kit':          int(45  * mul),
+        'bomb':                int(35  * mul),
     }
     if floor_level <= 3:
-        keys = ['health_potion', 'dagger', 'leather_armor', 'leather_helm', 'wooden_shield', 'return_scroll', 'repair_kit']
+        keys = ['health_potion', 'dagger', 'leather_armor', 'bomb', 'leather_helm', 'wooden_shield', 'return_scroll', 'repair_kit']
     elif floor_level <= 8:
-        keys = ['large_health_potion', 'sword', 'chain_mail', 'iron_helm',
+        keys = ['large_health_potion', 'sword', 'bomb', 'chain_mail', 'iron_helm',
                 'iron_shield', 'silver_ring', 'teleport_scroll', 'return_scroll', 'repair_kit']
     elif floor_level <= 20:
-        keys = ['large_health_potion', 'sword', 'plate_armor', 'iron_helm',
+        keys = ['large_health_potion', 'sword', 'bomb', 'plate_armor', 'iron_helm',
                 'iron_shield', 'war_pendant', 'amulet', 'whirlwind_potion', 'return_scroll', 'repair_kit']
     elif floor_level <= 50:
-        keys = ['large_health_potion', 'broad_sword', 'plate_armor', 'knight_helm',
+        keys = ['large_health_potion', 'broad_sword', 'bomb', 'plate_armor', 'knight_helm',
                 'tower_shield', 'war_pendant', 'magic_stone', 'whirlwind_potion', 'return_scroll', 'repair_kit']
     else:
-        keys = ['large_health_potion', 'great_sword', 'mythril_armor', 'knight_helm',
+        keys = ['large_health_potion', 'great_sword', 'bomb', 'mythril_armor', 'knight_helm',
                 'tower_shield', 'magic_stone', 'amulet', 'teleport_scroll', 'whirlwind_potion', 'return_scroll', 'repair_kit']
 
     result = []
@@ -401,30 +487,30 @@ def drop_pool(floor_level):
     if floor_level <= 4:
         return (['health_potion'] * 3 + ['dagger'] + ['leather_armor'] +
                 ['leather_helm'] + ['wooden_shield'] + ['silver_ring'] +
-                ['leather_boots'] + stones)
+                ['leather_boots'] + stones + ['bomb'])
     elif floor_level <= 10:
         return (['health_potion'] * 2 + ['large_health_potion'] + ['dagger'] +
                 ['sword'] + ['chain_mail'] + ['leather_helm'] + ['iron_helm'] +
                 ['wooden_shield'] + ['silver_ring'] + ['teleport_scroll'] +
-                ['leather_boots'] + ['iron_boots'] + stones * 2)
+                ['leather_boots'] + ['iron_boots'] + stones * 2 + ['bomb'])
     elif floor_level <= 25:
         return (['large_health_potion'] * 2 + ['sword'] * 2 + ['chain_mail'] +
                 ['plate_armor'] + ['iron_helm'] + ['iron_shield'] +
                 ['silver_ring'] + ['war_pendant'] + ['teleport_scroll'] +
                 ['skillbook_wind'] + ['skillbook_fireball'] +
-                ['iron_boots'] + stones * 2)
+                ['iron_boots'] + stones * 2 + ['bomb'])
     elif floor_level <= 50:
         return (['large_health_potion'] * 2 + ['broad_sword'] + ['plate_armor'] +
                 ['knight_helm'] + ['iron_shield'] + ['tower_shield'] +
                 ['war_pendant'] + ['magic_stone'] + ['amulet'] +
                 ['skillbook_fireball'] + ['skillbook_frost'] + ['skillbook_thunder'] +
-                ['iron_boots'] + ['swift_boots'] + stones * 3)
+                ['iron_boots'] + ['swift_boots'] + stones * 3 + ['bomb'])
     else:
         return (['large_health_potion'] * 2 + ['great_sword'] + ['mythril_armor'] +
                 ['knight_helm'] + ['tower_shield'] + ['magic_stone'] * 2 +
                 ['war_pendant'] + ['amulet'] + ['whirlwind_potion'] +
                 ['skillbook_frost'] + ['skillbook_thunder'] +
-                ['swift_boots'] + ['shadow_boots'] + stones * 3)
+                ['swift_boots'] + ['shadow_boots'] + stones * 3 + ['bomb'])
 
 
 # 테마별 몬스터 풀 (theme_index 0-19)

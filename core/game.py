@@ -229,6 +229,7 @@ class Game:
         # 마법사 DoT 장판 / 소환수 (런타임 전용, 층 이동 시 소멸)
         self._dot_zones: list = []     # [{'x','y','r','dps','ms','col','tick'}]
         self._summons:   list = []     # entities.summon.Summon 목록
+        self._bombs:     list = []     # 투척 폭탄 [{'x','y','fuse','r'}]
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -580,6 +581,7 @@ class Game:
                 if not self._in_town:
                     self._update_dots(world_dt)      # 점화 DoT + 화염 장판
                     self._update_summons(world_dt)   # 소환수
+                    self._update_bombs(world_dt)     # 투척 폭탄
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
             self._update_bgm()
@@ -671,8 +673,10 @@ class Game:
         self._spikes = []
         self._shift_t = 0.0
         self._shift_open_ms = 0.0
-        self._dot_zones = []            # 층 이동 시 장판/소환수 소멸
+        self._dot_zones = []            # 층 이동 시 장판/소환수/폭탄 소멸
         self._summons = []
+        self._bombs = []
+        self._secret_found = False      # 이 층 비밀방 발견 연출 1회 플래그
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
                 for xx, tl in enumerate(row):
@@ -805,9 +809,17 @@ class Game:
 
     # ─────────────── 트랩 / 압력판 발동 ──────────────────────────────
     def _on_enter_tile(self, x, y):
-        """플레이어가 한 칸에 진입할 때 트랩·압력판 효과 발동."""
+        """플레이어가 한 칸에 진입할 때 트랩·압력판·비밀방 발견 처리."""
         if not self.dungeon.in_bounds(x, y):
             return
+        # 숨겨진 보물방 최초 진입 연출 (1회)
+        sr = getattr(self.dungeon, 'secret_room', None)
+        if sr and (x, y) == sr and not getattr(self, '_secret_found', False):
+            self._secret_found = True
+            self.messages.append((t('secret_found'), 'good'))
+            self.animator.add(BannerAnim(t('secret_found'), (235, 200, 90), size=24))
+            self.animator.particles.emit_levelup(x, y)
+            self.audio.play('levelup')
         tt = self.dungeon.tiles[y][x].tile_type
         # 가시는 주기형(_update_spikes에서 처리) — 여기선 방 트랩만
         if tt == TileType.WEB_TRAP:
@@ -901,6 +913,82 @@ class Game:
         for s in self._summons:
             s.update(dt, self)
         self._summons = [s for s in self._summons if s.alive]
+
+    # ─────────────── 폭탄: 균열 벽 파괴 + 광역 피해 ─────────────────────
+    _BOMB_THROW = 3        # 던지는 최대 거리(칸)
+    _BOMB_FUSE  = 620      # 도화선(ms)
+    _BOMB_RADIUS = 2       # 폭발 반경(체비셰프)
+
+    def _throw_bomb(self):
+        """바라보는 방향으로 폭탄을 던진다 — 벽 앞 마지막 칸에 착지, 도화선 후 폭발."""
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        bx, by = self.player.x, self.player.y
+        for i in range(1, self._BOMB_THROW + 1):
+            nx, ny = self.player.x + dx * i, self.player.y + dy * i
+            if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].blocked:
+                break                          # 벽/균열벽 앞에서 멈춤(바로 옆에서 터뜨리기 좋게)
+            bx, by = nx, ny
+        self._bombs.append({'x': bx, 'y': by, 'fuse': float(self._BOMB_FUSE),
+                            'r': self._BOMB_RADIUS})
+        self.animator.add(MagicBoltAnim(self.player.x, self.player.y, bx, by,
+                                        self._facing, (200, 90, 40)))
+        self.audio.play('use_item')
+
+    def _update_bombs(self, dt):
+        for b in self._bombs:
+            b['fuse'] -= dt
+        exploded = [b for b in self._bombs if b['fuse'] <= 0]
+        self._bombs = [b for b in self._bombs if b['fuse'] > 0]
+        for b in exploded:
+            self._explode_bomb(b['x'], b['y'], b['r'])
+
+    def _explode_bomb(self, x, y, r):
+        """폭발 — 반경 내 균열 벽 파괴 + 적/플레이어 피해 + 강한 연출."""
+        broke = self._break_cracked_walls_near(x, y, r)
+        # 광역 피해 (깊이 비례 고정 피해)
+        dmg = 30 + self.floor * 3
+        for e in list(self.dungeon.enemies):
+            if e.is_alive() and max(abs(e.x - x), abs(e.y - y)) <= r:
+                self._hurt_enemy(e, dmg, (255, 150, 50))
+        # 자해: 폭심 근처면 플레이어도 피해(리스크)
+        if max(abs(self.player.x - x), abs(self.player.y - y)) <= r:
+            self.player.take_damage(max(6, int(self.player.max_hp * 0.12)))
+            self._hurt_flash_ms = 160
+        # 연출: 섬광 + 흔들림 + 히트스톱 + 파이어볼 파티클 링
+        self.animator.particles.emit_fireball_hit(x, y)
+        for ox, oy in ((r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, -r)):
+            if self.dungeon.in_bounds(x + ox, y + oy):
+                self.animator.particles.emit_fireball_hit(x + ox, y + oy)
+        self._white_flash_ms = 60
+        self._hitstop_ms = max(self._hitstop_ms, 90)
+        self._start_shake(9, 460)
+        self._start_punch_zoom(0.06, 150)
+        self.audio.play('levelup_big')
+        if broke:
+            self.messages.append((t('bomb_wall_break', broke), 'good'))
+        else:
+            self.messages.append((t('bomb_boom'), 'warn'))
+
+    def _break_cracked_walls_near(self, x, y, r) -> int:
+        """반경 내 균열 벽을 바닥으로 — 파괴 개수 반환 (폭탄·강타 공용)."""
+        n = 0
+        for oy in range(-r, r + 1):
+            for ox in range(-r, r + 1):
+                wx, wy = x + ox, y + oy
+                if not self.dungeon.in_bounds(wx, wy):
+                    continue
+                tl = self.dungeon.tiles[wy][wx]
+                if tl.tile_type == TileType.CRACKED_WALL:
+                    nt = Tile.floor()
+                    nt.explored = True
+                    nt.visible = tl.visible          # 부서지기 전 밝기 유지
+                    self.dungeon.tiles[wy][wx] = nt
+                    self.animator.particles.emit_death(wx, wy, (120, 110, 96))
+                    n += 1
+        # 새로 열린 공간을 즉시 밝힌다 — 단, 테스트/마을은 전체 공개(reveal_all)라 건너뜀
+        if n and not self._is_test_mode and not self._in_town:
+            self.dungeon.update_visibility(self.player.x, self.player.y)
+        return n
 
     def _apply_distortion(self, surf):
         """사인파 수평 왜곡 — 화면 전체가 흐물흐물 일렁이는 착시.
@@ -1061,6 +1149,11 @@ class Game:
         p.inventory.append(_Item(0, 0, _sword_data))
         _armor_data = dict(self._item_data['leather_armor']); _armor_data['key'] = 'leather_armor'
         p.inventory.append(_Item(0, 0, _armor_data))
+        # 테스트 편의: 폭탄 5개 (균열 벽 파괴 실험용)
+        if 'bomb' in self._item_data:
+            for _ in range(5):
+                _bd = dict(self._item_data['bomb']); _bd['key'] = 'bomb'
+                p.inventory.append(_Item(0, 0, _bd))
         self.dungeon.reveal_all()
         self.state = 'playing'
         self.messages.append(('[TEST] 테스트 모드 — 격리 기록(*_test.json)', 'info'))
@@ -2245,6 +2338,9 @@ class Game:
         self._hitstop_ms = max(self._hitstop_ms, 90)
         self._start_shake(4, 180)
         self.audio.play('finisher')
+        # 강타 시너지: 인접 균열 벽 파괴 (전사 근접 채굴감)
+        if self._break_cracked_walls_near(enemy.x, enemy.y, 1):
+            self.messages.append((t('bomb_wall_break', 1), 'good'))
 
     # ── 커맨드: 런지 스러스트 (전방키 + Space) ────────────────────────
     def _cmd_lunge(self):
@@ -2612,6 +2708,11 @@ class Game:
         elif item.effect == 'whirlwind':
             self.player.inventory.pop(slot)
             self._skill_whirl(no_cooldown=True)
+        elif item.effect == 'bomb':
+            if self._in_town:
+                return False               # 마을에선 사용 불가
+            self.player.inventory.pop(slot)
+            self._throw_bomb()
         else:
             self.player.inventory.pop(slot)
             self.messages.append((item.use(self.player), 'good'))
@@ -4580,6 +4681,8 @@ class Game:
         px, py = self.player.x, self.player.y
         for facing in ('right', 'left', 'up', 'down'):
             self.animator.add(SlashAnim(px, py, px, py, (255, 120, 60)))
+        # 던전 브레이커 — 시야 내 균열 벽도 전부 붕괴 (이름값)
+        self._break_cracked_walls_near(px, py, 12)
         self._start_shake(8, 500)
         self.skills.trigger('R')
         self.audio.play('skill_whirl')
@@ -4608,8 +4711,9 @@ class Game:
                                  (255, 120, 40))
                 self._apply_burn(e, dps=dps, ms=6000, col=(255, 110, 35))
                 hits += 1
-        # 정령 지원군
+        # 정령 지원군 + 시야 내 균열 벽 붕괴
         self._spawn_summon(min(3, max(0, 4 - len(self._summons))), 10000, 0.9)
+        self._break_cracked_walls_near(self.player.x, self.player.y, 12)
         self._start_shake(8, 520)
         self._start_punch_zoom(0.06, 160)
         self.skills.trigger('R')
@@ -5047,6 +5151,10 @@ class Game:
         for s in self._summons:
             s.draw(self._game_surf, cx, cy)
 
+        # 투척 폭탄 (도화선 깜빡임 — 임박할수록 빠르게)
+        for b in self._bombs:
+            self._draw_bomb(b, cx, cy)
+
         # 강화술 상승 파티클 (플레이어 위)
         if self._fortify_effect and self._fortify_effect.alive:
             self._fortify_effect.draw_above(self._game_surf, px, py)
@@ -5152,6 +5260,8 @@ class Game:
                 pygame.draw.line(s,th['wall_top'],(x,y),(x+ts-1,y))
                 pygame.draw.line(s,th['wall_top'],(x,y),(x,y+ts-1))
                 pygame.draw.line(s,th['wall_bot'],(x,y+ts-1),(x+ts-1,y+ts-1))
+        elif tt == TileType.CRACKED_WALL:
+            self._draw_cracked_wall(s, x, y, lit, th)
         elif tt == TileType.DOOR:
             self._draw_door(s, x, y, lit, th)
         elif tt == TileType.BURNING_DOOR:
@@ -5227,6 +5337,45 @@ class Game:
                                                 min(255, a + 90)),
                                            (fx - sx, fy - sy), 2)
                     self._game_surf.blit(ov, (sx, sy))
+
+    def _draw_cracked_wall(self, s, x, y, lit, th):
+        """균열 벽 — 벽 위에 노란 금(균열) 표시로 '부술 수 있음'을 암시."""
+        ts = TILE_SIZE
+        col = th['wall_lit'] if lit else th['wall_dim']
+        pygame.draw.rect(s, col, (x, y, ts, ts))
+        if lit:
+            pygame.draw.line(s, th['wall_top'], (x, y), (x + ts - 1, y))
+            pygame.draw.line(s, th['wall_top'], (x, y), (x, y + ts - 1))
+            pygame.draw.line(s, th['wall_bot'], (x, y + ts - 1), (x + ts - 1, y + ts - 1))
+        # 균열 (지그재그 금) — 밝을 때 또렷, 어두울 땐 은은
+        crack = (210, 180, 90) if lit else (110, 96, 60)
+        cx0 = x + ts // 2
+        pts = [(cx0 - 5, y + 3), (cx0 + 3, y + 10), (cx0 - 3, y + 17),
+               (cx0 + 4, y + 24), (cx0 - 2, y + ts - 3)]
+        pygame.draw.lines(s, crack, False, pts, 2)
+        pygame.draw.line(s, crack, (cx0 + 3, y + 10), (x + ts - 4, y + 8), 1)
+        pygame.draw.line(s, crack, (cx0 - 3, y + 17), (x + 4, y + 20), 1)
+
+    def _draw_bomb(self, b, cx, cy):
+        ts = TILE_SIZE
+        sx = (b['x'] - cx) * ts + ts // 2
+        sy = (b['y'] - cy) * ts + ts // 2
+        s = self._game_surf
+        # 몸통
+        pygame.draw.circle(s, (36, 36, 42), (sx, sy + 2), 8)
+        pygame.draw.circle(s, (70, 70, 80), (sx - 2, sy), 3)          # 하이라이트
+        # 심지 + 불꽃 (임박할수록 빨리 깜빡)
+        pygame.draw.line(s, (150, 120, 70), (sx + 5, sy - 6), (sx + 8, sy - 11), 2)
+        blink = max(60, int(b['fuse'] / 3))
+        if (pygame.time.get_ticks() // blink) % 2 == 0:
+            pygame.draw.circle(s, (255, 210, 90), (sx + 8, sy - 12), 3)
+            pygame.draw.circle(s, (255, 120, 40), (sx + 8, sy - 12), 2)
+        # 폭발 임박 경고 링
+        if b['fuse'] < 260:
+            r = b['r'] * ts
+            ring = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            pygame.draw.circle(ring, (255, 80, 40, 70), (r, r), r, 3)
+            s.blit(ring, (sx - r, sy - r))
 
     def _draw_trap(self, s, x, y, lit, tt, tile=None):
         """트랩·압력판 — 바닥 위 위험 표식. 가시는 주기 상태(솟음/경고/숨음) 반영."""
