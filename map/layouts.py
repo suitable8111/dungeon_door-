@@ -34,8 +34,31 @@ def build_layout(dungeon, floor_level):
         rooms = _layout_rooms(dungeon, floor_level)
         name = 'rooms'
     _ensure_connected(dungeon, rooms)
+    # 루프 연결: 트리형(rooms/cavern)에 추가 통로로 순환을 만들어 퇴로·카이팅 확보
+    if name in ('rooms', 'cavern'):
+        _add_loops(dungeon, rooms, max(1, len(rooms) // 4))
+    elif name == 'hall':
+        _add_loops(dungeon, rooms, 1)
     dungeon.layout = name
     return rooms, name
+
+
+def _add_loops(dungeon, rooms, n):
+    """서로 가까운 두 방을 추가로 이어 순환(loop)을 만든다.
+    맵을 가로지르는 긴 통로는 피하려고 거리 상한을 둔다."""
+    _, _, _connect_rooms, _, _ = _shared()
+    if len(rooms) < 3:
+        return
+    max_d2 = (dungeon.width * 0.42) ** 2
+    made = 0
+    for _ in range(n * 4):
+        if made >= n:
+            break
+        a, b = random.sample(rooms, 2)
+        d2 = (a.center[0] - b.center[0]) ** 2 + (a.center[1] - b.center[1]) ** 2
+        if 0 < d2 <= max_d2:
+            _connect_rooms(dungeon, a.center, b.center)
+            made += 1
 
 
 def _pick_layout(floor_level, theme_idx):

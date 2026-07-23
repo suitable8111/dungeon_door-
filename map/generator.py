@@ -91,6 +91,12 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
         from map.biomes import apply_biome
         apply_biome(dungeon, rooms, floor_level, dungeon.theme_index)
 
+    # 프리팹 세트피스 — 손으로 짠 특수방(원형 투기장/기둥홀/해자 보물방) 1개
+    # (바이옴·문·상점 배치 후라 stairs_pos 존재 + 해자 다리가 물에 덮이지 않음)
+    if not is_boss_floor and floor_level >= 4:
+        from map.prefabs import place_prefab
+        place_prefab(dungeon, rooms, floor_level, item_data)
+
     # 흐르는 바닥(컨베이어) — 기계/전기 테마 층
     if theme_fx(floor_level).get('conveyor') and len(rooms) >= 3:
         _place_conveyors(dungeon, rooms)
