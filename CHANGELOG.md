@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.5.0 — The Ever-Changing Depths
+
+No two floors alike anymore — the dungeon now reshapes its very skeleton, hides gambles and vaults, and can collapse under your feet.
+
+### A dungeon that's never the same twice
+- **Alternate layout archetypes**: every floor is built from one of four skeletons — scattered **rooms**, organic **caverns**, a central **arena** with satellite rooms, or a grand **hall** gallery. Themes lean toward fitting shapes (nature → caves, fortresses → halls, tombs → arenas).
+- **Loop connections**: extra corridors weave cycles into the map, so there's always a way to circle around, kite, and escape — no more dead-end trees.
+- **Biome terrain**: swamps and sunken cities grow **water lakes**, forests scatter **trees and ponds**, and castles raise **pillared halls** — all guaranteed traversable.
+- **Prefab set-pieces**: hand-built special rooms drop in occasionally — a rounded **arena**, a **pillar cross-hall** of cover, or a **moat treasure room** (island loot across a water moat with a bridge).
+
+### Risk, reward, and ruin
+- **Mystery Box (collapse altar)**: touch it and gamble — **jackpot** (a gold windfall or a rare weapon) or **collapse**, where the floor caves in from the far edges and you sprint for the stairs. Escape to claim gold, stones, and gear; an exit arrow and a fully revealed map keep you oriented.
+- **Keys & locked vaults**: find a **Vault Key** on the floor to open a sealed treasure room packed with premium gear. Optional, and never in your way to the exit.
+- **Bombs & cracked walls**: throw bombs to blast open **cracked walls**, revealing hidden treasure rooms and secret shortcuts — and your finishers and ultimates shatter them too.
+
+### Quality of life
+- **Small name labels** (localized) on interactive objects — Mystery Boxes, locked vaults, shops, and nearby items — so you always know what you're looking at.
+
 ## v2.4.0 — The Mage & the Living Dungeon
 
 A whole new class, dungeons that fight back, and a reason to descend forever.
