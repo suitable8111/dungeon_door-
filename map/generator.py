@@ -57,25 +57,10 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
     floor_level = min(floor_level, MAX_FLOOR)
     dungeon = Dungeon(width, height)
     dungeon.theme_index = theme_index(floor_level)
-    rooms = []
 
-    attempts = 200
-    min_sz, max_sz = 5, 12
-
-    for _ in range(attempts):
-        if len(rooms) >= 12 + floor_level:
-            break
-        w = random.randint(min_sz, max_sz)
-        h = random.randint(min_sz, max_sz)
-        x = random.randint(1, width - w - 2)
-        y = random.randint(1, height - h - 2)
-        r = Room(x, y, w, h)
-        if any(r.intersects(existing) for existing in rooms):
-            continue
-        _carve_room(dungeon, r)
-        if rooms:
-            _connect_rooms(dungeon, rooms[-1].center, r.center)
-        rooms.append(r)
+    # 대체 레이아웃 아키타입(rooms/cavern/arena/hall) 중 하나로 골격 생성
+    from map.layouts import build_layout
+    rooms, _layout_name = build_layout(dungeon, floor_level)
 
     dungeon.rooms = rooms
 
