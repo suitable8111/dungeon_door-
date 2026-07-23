@@ -21,6 +21,7 @@ class TileType(Enum):
     COLLAPSED = auto()          # 붕괴로 무너진 구덩이 — 통행 불가
     ALTAR = auto()              # 붕괴 제단 — 보물을 챙기면 던전이 무너진다(탈출전)
     WATER = auto()              # 깊은 물 — 통행 불가(시야는 통과), 호수/늪
+    LOCKED_DOOR = auto()        # 잠긴 금고문 — 열쇠가 있어야 열린다
 
 
 # 밟을 때 효과가 발동하는 트랩
@@ -101,6 +102,11 @@ class Tile:
     def water(cls):
         """깊은 물 — 통행 불가, 시야는 통과(호수/늪 지형)."""
         return cls(TileType.WATER, blocked=True, block_sight=False)
+
+    @classmethod
+    def locked_door(cls):
+        """잠긴 금고문 — 열쇠 소지 시 개방(벽처럼 막고 시야도 차단)."""
+        return cls(TileType.LOCKED_DOOR, blocked=True, block_sight=True)
 
 
 # 컨베이어 타일 → 미는 방향(dx)

@@ -564,5 +564,20 @@
     "name_ja": "爆弾",
     "name_zh": "炸弹",
     "name_ru": "Бомба"
+  },
+  "vault_key": {
+    "name": "금고 열쇠",
+    "color": [
+      240,
+      205,
+      70
+    ],
+    "type": "consumable",
+    "effect": "vault_key",
+    "value": 0,
+    "name_en": "Vault Key",
+    "name_ja": "金庫の鍵",
+    "name_zh": "金库钥匙",
+    "name_ru": "Ключ от хранилища"
   }
 }

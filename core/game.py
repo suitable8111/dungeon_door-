@@ -235,6 +235,7 @@ class Game:
         self._collapse_t      = 0.0    # 붕괴 진행 타이머(ms)
         self._crumble: dict   = {}     # {(x,y): 무너지는 시각(ms)}
         self._collapse_reward = None   # 제단으로 예약된 탈출 보상(탈출 성공 시 지급)
+        self._keys = 0                 # 현재 층에서 주운 금고 열쇠 수
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -687,6 +688,7 @@ class Game:
         self._collapse_t = 0.0
         self._crumble = {}
         self._collapse_reward = None    # 탈출 못하면 제단 보상은 소멸
+        self._keys = 0                  # 열쇠는 층 단위(다음 층에서 초기화)
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
                 for xx, tl in enumerate(row):
@@ -1077,6 +1079,24 @@ class Game:
         'archer':  ['broad_sword', 'sword'],
         'mage':    ['arcane_staff', 'apprentice_staff'],
     }
+
+    def _try_open_vault(self, x, y):
+        """잠긴 금고문 개방 시도 — 열쇠 소지 시 열고 턴 소모, 없으면 막힘."""
+        if self._keys > 0:
+            self._keys -= 1
+            self.dungeon.tiles[y][x] = Tile.floor()
+            if not self._is_test_mode and not self._in_town:
+                self.dungeon.update_visibility(self.player.x, self.player.y)
+            self.animator.add(BannerAnim(t('vault_open'), (245, 215, 90), size=26))
+            self.messages.append((t('vault_open'), 'good'))
+            self.animator.particles.emit_levelup(x, y)
+            self._start_punch_zoom(0.05, 140)
+            self.audio.play('levelup')
+            return True                 # 문 여는 데 한 턴 사용 (다음 이동으로 진입)
+        self.messages.append((t('vault_locked'), 'warn'))
+        self.animator.add(CalloutAnim(x, y, t('vault_locked_short'), (230, 120, 90)))
+        self.audio.play('hit')
+        return False
 
     def _trigger_altar(self, x, y):
         """붕괴 제단 = 랜덤 상자(도박). 밟으면 운에 따라:
@@ -2300,6 +2320,10 @@ class Game:
                 self._start_fade(self._load_floor)
             return True
 
+        # 잠긴 금고문 — 열쇠가 있으면 개방(턴 소모), 없으면 막힘
+        if target_tile.tile_type == TileType.LOCKED_DOOR:
+            return self._try_open_vault(nx, ny)
+
         if not self.dungeon.is_walkable(nx, ny):
             return False
 
@@ -2850,6 +2874,15 @@ class Game:
         self.dungeon.enemies.remove(prop)
 
     def _pickup(self, item):
+        if item.effect == 'vault_key':
+            self._keys += 1
+            self.dungeon.remove_item(item)
+            self.messages.append((t('key_pickup'), 'good'))
+            self.animator.add(CalloutAnim(self.player.x, self.player.y,
+                                          t('key_get'), (245, 210, 80)))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self.audio.play('pickup')
+            return
         if item.effect == 'enhance_stone':
             self.player.enhance_stones += 1
             self.dungeon.remove_item(item)
@@ -5181,6 +5214,8 @@ class Game:
         self._render_dungeon()
         if self._collapse_active:
             self._draw_collapse_exit_arrow()
+        if self._keys > 0 and not self._in_town:
+            self._draw_key_badge()
         self.hud.render(self.screen, self.player, self.messages, self.floor,
                         self.dungeon, self.skills,
                         unlocked_combos=self._unlocked_combos,
@@ -5478,6 +5513,8 @@ class Game:
             self._draw_altar(s, x, y, lit, th)
         elif tt == TileType.WATER:
             self._draw_water(s, x, y, lit, th)
+        elif tt == TileType.LOCKED_DOOR:
+            self._draw_locked_door(s, x, y, lit, th)
         elif tt == TileType.DOOR:
             self._draw_door(s, x, y, lit, th)
         elif tt == TileType.BURNING_DOOR:
@@ -5598,6 +5635,40 @@ class Game:
                                      (cx, cy + 3), (cx - 5, cy - 2)])
         pygame.draw.polygon(s, (255, 245, 200), [(cx, cy - 8), (cx + 2, cy - 4),
                                                   (cx - 2, cy - 4)])
+
+    def _draw_key_badge(self):
+        """열쇠 소지 중 — 게임 화면 좌상단에 금색 열쇠 뱃지."""
+        s = self.screen
+        bx, by = GAME_X + 8, GAME_Y + 8
+        w, h = 60, 22
+        bg = pygame.Surface((w, h), pygame.SRCALPHA)
+        bg.fill((30, 24, 8, 190))
+        s.blit(bg, (bx, by))
+        pygame.draw.rect(s, (240, 205, 70), (bx, by, w, h), 1)
+        # 열쇠 아이콘
+        kx, ky = bx + 12, by + h // 2
+        pygame.draw.circle(s, (240, 205, 70), (kx, ky), 4, 2)
+        pygame.draw.line(s, (240, 205, 70), (kx + 4, ky), (kx + 13, ky), 2)
+        pygame.draw.line(s, (240, 205, 70), (kx + 11, ky), (kx + 11, ky + 4), 2)
+        lbl = self.hud.font_sm.render('x%d' % self._keys, True, (245, 225, 140))
+        s.blit(lbl, (bx + 32, by + 4))
+
+    def _draw_locked_door(self, s, x, y, lit, th):
+        """잠긴 금고문 — 철문 + 금색 자물쇠(열쇠 필요 암시)."""
+        ts = TILE_SIZE
+        body = (78, 66, 40) if lit else (40, 34, 22)
+        pygame.draw.rect(s, body, (x, y, ts, ts))
+        if lit:
+            pygame.draw.rect(s, (120, 100, 60), (x, y, ts, ts), 1)
+            # 가로 보강대
+            pygame.draw.line(s, (52, 44, 28), (x + 2, y + ts // 3), (x + ts - 3, y + ts // 3), 2)
+            pygame.draw.line(s, (52, 44, 28), (x + 2, y + 2 * ts // 3), (x + ts - 3, y + 2 * ts // 3), 2)
+        # 자물쇠(금색)
+        cx, cy = x + ts // 2, y + ts // 2
+        lc = (240, 205, 70) if lit else (150, 128, 55)
+        pygame.draw.arc(s, lc, (cx - 4, cy - 7, 8, 8), 3.14, 6.28, 2)   # 고리
+        pygame.draw.rect(s, lc, (cx - 5, cy - 2, 10, 8))               # 몸통
+        pygame.draw.circle(s, (60, 48, 20), (cx, cy + 1), 1)           # 열쇠구멍
 
     def _draw_water(self, s, x, y, lit, th):
         """깊은 물 — 테마색 기반 잔물결(통행 불가)."""

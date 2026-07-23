@@ -119,6 +119,10 @@ def generate_dungeon(width, height, floor_level, enemy_data, item_data):
     if not is_boss_floor and floor_level >= 5:
         _place_collapse_altar(dungeon, rooms, floor_level)
 
+    # 잠긴 금고 + 열쇠: 열쇠를 찾아 봉인 보물방을 여는 탐험 목표 (비-보스, 3층 이상)
+    if not is_boss_floor and floor_level >= 3:
+        _place_locked_vault(dungeon, rooms, floor_level, item_data)
+
     # 균열 벽: 숨겨진 보물방 + 비밀 지름길 (폭탄/강타로 개방)
     if not is_boss_floor:
         _place_secret_areas(dungeon, rooms, floor_level, item_data)
@@ -316,6 +320,84 @@ def _place_collapse_altar(dungeon, rooms, floor_level):
         if dungeon.tiles[cy][cx].tile_type == TileType.FLOOR:
             dungeon.tiles[cy][cx] = Tile.altar()
             dungeon.altar_pos = (cx, cy)
+            return
+
+
+def _place_locked_vault(dungeon, rooms, floor_level, item_data):
+    """봉인된 보물 금고 + 열쇠 배치.
+
+    · 기존 방 옆 빈 벽에 고립 금고(3×3)를 파고 입구 1칸을 '잠긴 문'으로 봉인.
+    · 금고 안에는 프리미엄 전리품 + 강화석.
+    · 열쇠는 금고와 다른(도달 가능한) 방 바닥에 놓는다.
+    금고는 선택형(메인 경로를 막지 않음) — 소프트락 없음.
+    """
+    from entities.item import Item
+    if len(rooms) < 4 or random.random() >= 0.34:
+        return
+    sw = sh = 3
+
+    def all_wall(x0, y0, x1, y1):
+        for yy in range(y0, y1):
+            for xx in range(x0, x1):
+                if not dungeon.in_bounds(xx, yy):
+                    return False
+                if dungeon.tiles[yy][xx].tile_type != TileType.WALL:
+                    return False
+        return True
+
+    base = None
+    for cand in random.sample(rooms, len(rooms)):
+        for dx, dy in random.sample([(1, 0), (-1, 0), (0, 1), (0, -1)], 4):
+            if dx > 0:   sx, sy = cand.x + cand.w + 1, cand.y
+            elif dx < 0: sx, sy = cand.x - 1 - sw,     cand.y
+            elif dy > 0: sx, sy = cand.x, cand.y + cand.h + 1
+            else:        sx, sy = cand.x, cand.y - 1 - sh
+            if not all_wall(sx - 1, sy - 1, sx + sw + 1, sy + sh + 1):
+                continue
+            vault = Room(sx, sy, sw, sh)
+            _carve_room(dungeon, vault)
+            rooms.append(vault)
+            # 잠긴 문 입구 — base 바닥과 금고 바닥을 잇는 벽 1칸
+            if dx != 0:
+                gx = cand.x + cand.w if dx > 0 else cand.x - 1
+                gy = sy + 1
+            else:
+                gx = sx + 1
+                gy = cand.y + cand.h if dy > 0 else cand.y - 1
+            if dungeon.in_bounds(gx, gy):
+                dungeon.tiles[gy][gx] = Tile.locked_door()
+            # 프리미엄 전리품 (좋은 장비 3~4 + 강화석)
+            keys = [k for k in drop_pool(floor_level)
+                    if k in item_data and k not in ('health_potion', 'enhance_stone')]
+            spots = [(x, y) for y in range(vault.y, vault.y + vault.h)
+                     for x in range(vault.x, vault.x + vault.w)]
+            random.shuffle(spots)
+            loot = random.sample(keys, min(len(keys), random.randint(3, 4))) if keys else []
+            loot += ['enhance_stone']
+            for (ix, iy), key in zip(spots, loot):
+                d = dict(item_data[key]); d['key'] = key
+                if d.get('type') in ('weapon', 'armor'):
+                    d['enhance_level'] = min(15, floor_level // 45)
+                dungeon.items.append(Item(ix, iy, d))
+            dungeon.vault_pos = vault.center
+            base = cand
+            break
+        if base:
+            break
+    if base is None or 'vault_key' not in item_data:
+        return
+    # 열쇠 — 금고 base가 아닌 다른 방의 바닥칸에 배치
+    key_rooms = [r for r in rooms[1:] if r is not base and r.center != dungeon.vault_pos]
+    random.shuffle(key_rooms)
+    for kr in key_rooms:
+        floors = [(x, y) for y in range(kr.y, kr.y + kr.h) for x in range(kr.x, kr.x + kr.w)
+                  if dungeon.tiles[y][x].tile_type == TileType.FLOOR
+                  and not dungeon.get_item_at(x, y)]
+        if floors:
+            kx, ky = random.choice(floors)
+            d = dict(item_data['vault_key']); d['key'] = 'vault_key'
+            dungeon.items.append(Item(kx, ky, d))
+            dungeon.key_pos = (kx, ky)
             return
 
 
