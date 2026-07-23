@@ -335,6 +335,24 @@ def draw_avatar_tile(surf, x, y, facing='down', frame=0, phase=0,
             B(13, 10 - up, grip); B(13, 11 - up, grip)   # 손잡이
             B(13, 12 - up, pommel)            # 폼멜
 
+    # 직업 소품: 도끼맨 양손도끼 (오른손) — 공격 프레임에 내려침
+    if char_class == 'axeman':
+        haft, haft_hi = (128, 92, 54), (168, 126, 78)
+        blade, blade_hi = (200, 205, 216), (238, 240, 248)
+        if phase == 2:                        # 앞으로 내려친 도끼(오른쪽 아래로)
+            for gx in range(11, 15):
+                B(gx, 10, haft)
+            B(14, 9, blade); B(15, 9, blade); B(14, 10, blade); B(15, 10, blade)
+            B(14, 8, blade); B(15, 8, blade_hi); B(15, 11, blade)
+        else:                                 # 대기/준비 — 세워 든 도끼 + 넓은 날
+            up = 2 if phase == 1 else 0
+            for gy in range(4 - up, 13 - up):
+                B(13, gy, haft)
+            B(13, 12 - up, haft_hi)
+            B(12, 4 - up, blade); B(14, 4 - up, blade)
+            B(12, 5 - up, blade); B(14, 5 - up, blade)
+            B(12, 3 - up, blade); B(14, 3 - up, blade_hi); B(12, 6 - up, blade)
+
 
 _DIR_T = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
 

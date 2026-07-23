@@ -238,6 +238,7 @@ class Game:
         self._keys = 0                 # 현재 층에서 주운 금고 열쇠 수
         self._thrown_axe = None        # 도끼맨: 바닥에 던져진 도끼 {x,y} (밟아 회수)
         self._ragnarok_ms = 0          # 도끼맨: 라그나로크(무적 돌진) 잔여 ms
+        self._ragnarok_aura_t = 0.0    # 라그나로크 접촉 오라 데미지 틱 누적
 
         # 엔딩 크레딧 / 엔들리스(심연) 모드
         self._credits_scroll  = 0.0
@@ -588,6 +589,8 @@ class Game:
                 self._update_enemies(world_dt)
                 if self._ragnarok_ms > 0:
                     self._ragnarok_ms = max(0, self._ragnarok_ms - world_dt)
+                    if not self._in_town:
+                        self._update_ragnarok_aura(world_dt)
                 if not self._in_town:
                     self._update_dots(world_dt)      # 점화 DoT + 화염 장판
                     self._update_summons(world_dt)   # 소환수
@@ -1697,6 +1700,8 @@ class Game:
                     self.messages.append(('[TEST] 붕괴 시작 (C)', 'bad'))
                 elif event.key == pygame.K_b and self.state in ('playing', 'storage', 'inn'):
                     self._open_pet_status()          # 펫 상태창 (B)
+                elif event.key == pygame.K_v and self.state == 'playing' and not self._in_town:
+                    self._toggle_pet()               # 펫 소환/해제 (V)
                 elif self.state == 'pet':
                     self._handle_pet_key(event.key)
                 elif self.state == 'credits':        # 크레딧: 아무 키 → 스킵
@@ -2540,7 +2545,8 @@ class Game:
         cost = self._STAMINA_COST['finisher' if step == 2 else 'slash']
         if not self._spend_stamina(cost):
             return False
-        variant = self._CHAIN_VAR[step]
+        is_axe = self.player.char_class == 'axeman'
+        variant = ('axe1', 'axe2', 'axefin')[step] if is_axe else self._CHAIN_VAR[step]
         self._atk_variant = variant
         self._trigger_atk_anim()
 
@@ -2548,9 +2554,12 @@ class Game:
             enemy = self.dungeon.get_enemy_at(self.player.x + dx,
                                               self.player.y + dy)
         finisher = (step == 2)
+        if is_axe:
+            smear_col = (255, 130, 55) if finisher else (255, 175, 90)
+        else:
+            smear_col = (255, 190, 90) if finisher else (255, 240, 180)
         self.animator.add(SmearAnim(
-            self.player.x, self.player.y, self._facing, variant,
-            (255, 190, 90) if finisher else (255, 240, 180)))
+            self.player.x, self.player.y, self._facing, variant, smear_col))
         if enemy:
             self._player_attack(enemy, dmg_mul=self._CHAIN_MUL[step])
             if finisher:
@@ -3198,6 +3207,25 @@ class Game:
             self._pet_trail = []
             if p:
                 p.active_pet = None
+
+    def _toggle_pet(self):
+        """펫 소환/해제 토글 (V키). 미해금이면 안내만."""
+        p = self.player
+        if not (p and p.is_pet_unlocked):
+            self.messages.append((t('pet_locked'), 'info'))
+            self.audio.play('player_hit')
+            return
+        if self._pet is None:
+            self._attach_pet()
+            self.messages.append((t('pet_summoned', t(PET_META[p.pet_type]['name_key'])), 'good'))
+            self.animator.particles.emit_levelup(p.x, p.y)
+            self.audio.play('levelup')
+        else:
+            self._pet = None
+            self._pet_trail = []
+            p.active_pet = None
+            self.messages.append((t('pet_dismissed'), 'info'))
+            self.audio.play('menu_select')
 
     def _update_pet_trail(self):
         """플레이어가 새 타일로 이동할 때마다 경로에 기록.
@@ -4060,6 +4088,47 @@ class Game:
         self.messages.append((t('skill_leap', hits), 'warn'))
         return True
 
+    _RAGNAROK_AURA_TICK = 260   # 오라 접촉 데미지 간격(ms)
+
+    def _update_ragnarok_aura(self, dt):
+        """라그나로크 중 — 인접(반경1) 적에게 주기적 접촉 데미지(닿기만 해도)."""
+        self._ragnarok_aura_t += dt
+        if self._ragnarok_aura_t < self._RAGNAROK_AURA_TICK:
+            return
+        self._ragnarok_aura_t = 0.0
+        px, py = self.player.x, self.player.y
+        for ddx in (-1, 0, 1):
+            for ddy in (-1, 0, 1):
+                if ddx == 0 and ddy == 0:
+                    continue
+                enemy = self.dungeon.get_enemy_at(px + ddx, py + ddy)
+                if not enemy or not enemy.is_alive():
+                    continue
+                dmg = max(1, int(roll_damage(self.player.total_attack, enemy.defense, 0.6)))
+                enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                self._apply_lifesteal(dmg)
+                self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 130, 60)))
+                self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+
+    def _draw_ragnarok_aura(self, cx, cy):
+        """라그나로크 중 플레이어 주위 맥동하는 화염 오라."""
+        ts = TILE_SIZE
+        s = self._game_surf
+        px = (self.player.x - cx) * ts + ts // 2
+        py = (self.player.y - cy) * ts + ts // 2
+        tk = pygame.time.get_ticks()
+        for ring in range(3):
+            r = int(ts * (1.0 + ring * 0.55) + 4 * math.sin(tk / 130.0 + ring))
+            a = int(90 - ring * 26 + 30 * math.sin(tk / 90.0 + ring * 1.7))
+            if a <= 0:
+                continue
+            glow = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+            col = (255, 120 - ring * 20, 40, max(0, a))
+            pygame.draw.circle(glow, col, (r, r), r, 3)
+            s.blit(glow, (px - r, py - r), special_flags=pygame.BLEND_ADD)
+
     def _ragnarok_swing(self):
         """라그나로크 중 기본 휘두르기 — 중거리(반경 2) 광역 강타."""
         if not self._spend_stamina(self._STAMINA_COST['slash']):
@@ -4094,8 +4163,10 @@ class Game:
         p = self.player
         p.invincible_ms = max(p.invincible_ms, dur)
         self._ragnarok_ms = dur
+        self._ragnarok_aura_t = 0.0            # 접촉 오라 데미지 틱 누적
         p.aspd_buff_ms = max(p.aspd_buff_ms, dur); p.aspd_buff_pct = max(p.aspd_buff_pct, 0.8)
         p.lifesteal_ms = max(p.lifesteal_ms, dur); p.lifesteal_pct = max(p.lifesteal_pct, 0.3)
+        p.move_buff_ms = max(p.move_buff_ms, dur); p.move_buff_pct = max(p.move_buff_pct, 0.6)
         self.animator.add(BannerAnim(t('ult_ragnarok'), (255, 90, 50), size=30))
         self.animator.particles.emit_levelup(p.x, p.y)
         self._start_punch_zoom(0.08, 200)
@@ -5601,6 +5672,10 @@ class Game:
             ax, ay = self._thrown_axe['x'], self._thrown_axe['y']
             if self.dungeon.in_bounds(ax, ay) and self.dungeon.tiles[ay][ax].visible:
                 self._draw_thrown_axe(ax - cx, ay - cy)
+
+        # 라그나로크: 플레이어 주위 화염 오라
+        if self._ragnarok_ms > 0:
+            self._draw_ragnarok_aura(cx, cy)
 
         # 강화술 상승 파티클 (플레이어 위)
         if self._fortify_effect and self._fortify_effect.alive:

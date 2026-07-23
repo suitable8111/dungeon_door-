@@ -48,6 +48,8 @@ class Player(Entity):
         self.aspd_buff_pct = 0.0   # 공격속도 버프율
         self.lifesteal_ms  = 0     # 흡혈 잔여(ms)
         self.lifesteal_pct = 0.0   # 가한 피해의 흡혈 비율
+        self.move_buff_ms  = 0     # 이동속도 버프 잔여(ms) — 라그나로크
+        self.move_buff_pct = 0.0   # 이동속도 버프율
 
         # 디버프 (저주/슬로우/두려움/공격약화)
         self.cursed_ms  = 0   # 받는 피해 50% 증가
@@ -241,6 +243,10 @@ class Player(Entity):
             self.lifesteal_ms = max(0, self.lifesteal_ms - dt_ms)
             if self.lifesteal_ms == 0:
                 self.lifesteal_pct = 0.0
+        if self.move_buff_ms > 0:
+            self.move_buff_ms = max(0, self.move_buff_ms - dt_ms)
+            if self.move_buff_ms == 0:
+                self.move_buff_pct = 0.0
 
     @property
     def total_move_speed(self) -> float:
@@ -253,6 +259,8 @@ class Player(Entity):
             if item and not item.broken and item.item_type == 'boots'
         )
         spd = self.move_speed + bonus + enhance
+        if self.move_buff_ms > 0:
+            spd *= (1.0 + self.move_buff_pct)
         if self.slowed_ms > 0:
             spd *= 0.7
         return spd
