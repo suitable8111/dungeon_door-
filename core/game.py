@@ -5212,6 +5212,8 @@ class Game:
             return
 
         self._render_dungeon()
+        if self.state == 'playing':
+            self._draw_map_labels()
         if self._collapse_active:
             self._draw_collapse_exit_arrow()
         if self._keys > 0 and not self._in_town:
@@ -5635,6 +5637,58 @@ class Game:
                                      (cx, cy + 3), (cx - 5, cy - 2)])
         pygame.draw.polygon(s, (255, 245, 200), [(cx, cy - 8), (cx + 2, cy - 4),
                                                   (cx - 2, cy - 4)])
+
+    def _draw_map_labels(self):
+        """상호작용 오브젝트/아이템에 작은 이름표(현지화). 적은 제외.
+
+        · 랜덤 상자(제단)·잠긴 금고: 보이면 항상 표시(중요 랜드마크)
+        · 금고 열쇠: 항상 표시(찾아야 함)
+        · 그 외 아이템: 플레이어 근접(≤4칸) 시만 표시(화면 정리)
+        """
+        if self._in_town:
+            return
+        cx, cy = self.camera.x, self.camera.y
+        px, py = self.player.x, self.player.y
+        font = self.hud.font_sm
+        labels = []
+        for ty in range(VIEWPORT_TILES_Y + 1):
+            for tx in range(VIEWPORT_TILES_X + 1):
+                wx, wy = cx + tx, cy + ty
+                if not self.dungeon.in_bounds(wx, wy):
+                    continue
+                tl = self.dungeon.tiles[wy][wx]
+                if not tl.visible:
+                    continue
+                if tl.tile_type == TileType.ALTAR:
+                    labels.append((wx, wy, t('label_box'), (255, 205, 90)))
+                elif tl.tile_type == TileType.LOCKED_DOOR:
+                    labels.append((wx, wy, t('label_vault'), (245, 210, 90)))
+                elif tl.tile_type == TileType.SHOP and self.dungeon.has_shop:
+                    labels.append((wx, wy, t('label_shop'), (120, 230, 140)))
+        for it in self.dungeon.items:
+            if not self.dungeon.tiles[it.y][it.x].visible:
+                continue
+            if it.effect == 'vault_key':
+                labels.append((it.x, it.y, it.name, (245, 215, 80)))
+            elif max(abs(it.x - px), abs(it.y - py)) <= 4:
+                labels.append((it.x, it.y, it.name, (212, 216, 228)))
+        for wx, wy, text, col in labels:
+            self._label_at(font, text, wx, wy, col)
+
+    def _label_at(self, font, text, wx, wy, col):
+        """월드 타일 위에 작은 이름표를 화면에 그린다(가장자리 클램프)."""
+        sx = GAME_X + (wx - self.camera.x) * TILE_SIZE + TILE_SIZE // 2
+        sy = GAME_Y + (wy - self.camera.y) * TILE_SIZE
+        if not (GAME_X <= sx <= GAME_X + GAME_W and GAME_Y <= sy <= GAME_Y + GAME_H):
+            return
+        lbl = font.render(text, True, col)
+        w, h = lbl.get_size()
+        lx = max(GAME_X + 1, min(int(sx - w / 2), GAME_X + GAME_W - w - 1))
+        ly = max(GAME_Y + 1, int(sy - h - 3))
+        bg = pygame.Surface((w + 4, h + 2), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 165))
+        self.screen.blit(bg, (lx - 2, ly - 1))
+        self.screen.blit(lbl, (lx, ly))
 
     def _draw_key_badge(self):
         """열쇠 소지 중 — 게임 화면 좌상단에 금색 열쇠 뱃지."""
