@@ -49,10 +49,12 @@ class TownScene:
 
     def __init__(self):
         self._deco = {'tree': [], 'lamp': [], 'well': None, 'statue': None,
-                      'flower': [], 'barrel': [], 'stall': [], 'bench': []}
+                      'flower': [], 'barrel': [], 'stall': [], 'bench': [],
+                      'crop': [], 'fence': []}
         self._facility_pos = {}      # 시설 문 앞 좌표 (_build_map이 채움)
         self._quest_spots = []       # 퀘스트 시민 배치 지점
         self._citizen_spots = []     # 배회 엑스트라 시민 지점
+        self._animal_spots = []      # 농장 동물 배치 지점
         self.portal_pos = (64, 88)   # 남쪽 광장
         self.spawn_pos  = (64, 85)
         self.dungeon = self._build_map()
@@ -86,6 +88,14 @@ class TownScene:
                               'ambient': True, 'name_key': 'townsfolk',
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': _rand_wait(), 'radius': 7,
+                              'facing': _r.choice((-1, 1)), 'moving': False})
+        # 농장 동물 — 밭 안을 어슬렁 (비상호작용)
+        kinds = ['chicken', 'cow', 'sheep', 'pig']
+        for i, (x, y) in enumerate(self._animal_spots):
+            self.npcs.append({'id': 'animal', 'animal': kinds[i % len(kinds)],
+                              'x': x, 'y': y, 'ambient': True,
+                              'home': (x, y), 'fx': x * ts, 'fy': y * ts,
+                              'tx': x, 'ty': y, 'wait': _rand_wait(), 'radius': 4,
                               'facing': _r.choice((-1, 1)), 'moving': False})
         # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트)
         self.visible_givers = None
@@ -145,7 +155,13 @@ class TownScene:
                     floor(bx, by)
             cx = x + w // 2
             floor(cx, y + h - 1)            # 남문
+            # 실내 타일 집합(합집합의 진짜 내부 = 4방향 이웃이 모두 집 안) + 문
+            interior = {(bx, by) for (bx, by) in cells
+                        if all((bx + dx, by + dy) in cells
+                               for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))}
+            interior.add((cx, y + h - 1))
             self._houses.append({'rects': rects, 'door': (cx, y + h - 1),
+                                 'inside': interior,
                                  'seed': (x * 7 + y * 13) % 1000, 'kind': kind})
             return (cx, y + h)              # 남문 밖 타일
 
@@ -222,6 +238,19 @@ class TownScene:
         solid_deco('tree', [(50, 70), (52, 84), (70, 70), (72, 84), (48, 78),
                             (74, 78), (61, 68), (58, 86), (64, 86)])
         flat_deco('flower', [(56, 70), (66, 70), (56, 82), (66, 82), (61, 84)])
+
+        # ── 농장 (서부, 강 북쪽) — 헛간 + 밭(이랑) + 울타리 + 동물 ──────────
+        building(6, 40, 8, 7, kind='barn')                     # 헛간
+        crop_cells = [(cx_, cy_) for cy_ in range(42, 53, 2)
+                      for cx_ in range(16, 30)
+                      if inb(cx_, cy_) and not blocked(cx_, cy_)]
+        flat_deco('crop', crop_cells)                          # 이랑(통행 가능)
+        fence = ([(fx, 40) for fx in range(15, 31)] + [(fx, 53) for fx in range(15, 31)]
+                 + [(15, fy) for fy in range(41, 53)] + [(30, fy) for fy in range(41, 53)])
+        flat_deco('fence', [(fx, fy) for (fx, fy) in fence if not blocked(fx, fy)])
+        self._animal_spots = [(fx, fy) for (fx, fy) in
+                              ((18, 44), (24, 46), (20, 50), (27, 43), (17, 48), (22, 51))
+                              if not blocked(fx, fy)]
 
         # ── 도로변 가로등 + 대장간 통 + 외곽 나무 ──────────────────────
         flat_deco('lamp', [(28, 20), (44, 20), (82, 20), (98, 20),
@@ -329,6 +358,10 @@ class TownScene:
         self._draw_houses(surf, ox, oy, px, py, ticks)
 
         # 바닥 장식 (NPC 아래)
+        for cx_, cy_ in self._deco['crop']:
+            self._draw_crop(surf, cx_ * ts - ox, cy_ * ts - oy, ticks)
+        for fx_, fy_ in self._deco['fence']:
+            self._draw_fence(surf, fx_ * ts - ox, fy_ * ts - oy)
         for fx, fy in self._deco['flower']:
             self._draw_flower(surf, fx * ts - ox, fy * ts - oy, ticks)
         for lx, ly in self._deco['lamp']:
@@ -373,6 +406,10 @@ class TownScene:
             sx = int(npc['fx'] - ox)
             sy = int(npc['fy'] - oy)
             walk = int(math.sin(ticks * 0.02)) if npc.get('moving') else 0
+            if npc.get('animal'):                        # 농장 동물 — 이름표 없음
+                self._draw_animal(surf, sx, sy + walk, npc['animal'],
+                                  npc.get('facing', 1), ticks)
+                continue
             if npc.get('facing', 1) < 0:                 # 좌향 → 좌우 반전
                 tmp = pygame.Surface((ts, ts), pygame.SRCALPHA)
                 _draw_one(tmp, 0, walk, npc['id'])
@@ -454,13 +491,71 @@ class TownScene:
         if (tk // 400) % 3 == 0:
             pygame.draw.circle(s, (255, 250, 220), (cx + 16, y + 3), 2)
 
+    # ── 농장: 작물 / 울타리 / 동물 ────────────────────────────────────
+    @staticmethod
+    def _draw_crop(s, x, y, tk):
+        ts = TILE_SIZE
+        pygame.draw.rect(s, (74, 52, 34), (x + 2, y + ts - 13, ts - 4, 11))   # 흙 이랑
+        pygame.draw.line(s, (56, 38, 24), (x + 2, y + ts - 8), (x + ts - 2, y + ts - 8), 1)
+        sway = int(math.sin(tk * 0.003 + x) * 1)
+        for i, ax in enumerate((7, 16, 24)):
+            gx = x + ax + sway
+            pygame.draw.line(s, (60, 130, 55), (gx, y + ts - 4), (gx, y + ts - 13), 2)
+            pygame.draw.circle(s, (86, 170, 76), (gx, y + ts - 14), 3)
+            if (x + i) % 3 == 0:
+                pygame.draw.circle(s, (230, 90, 70), (gx, y + ts - 14), 2)     # 토마토
+            elif (x + i) % 3 == 1:
+                pygame.draw.circle(s, (240, 200, 70), (gx, y + ts - 15), 2)    # 옥수수/호박
+
+    @staticmethod
+    def _draw_fence(s, x, y):
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        pygame.draw.rect(s, (120, 88, 54), (cx - 2, y + 8, 4, ts - 12))       # 기둥
+        pygame.draw.rect(s, (150, 114, 70), (x + 2, y + 12, ts - 4, 3))       # 가로대
+        pygame.draw.rect(s, (150, 114, 70), (x + 2, y + 20, ts - 4, 3))
+
+    @staticmethod
+    def _draw_animal(s, x, y, kind, facing, tk):
+        ts = TILE_SIZE
+        bob = int(math.sin(tk * 0.006 + x) * 1)
+        cx, cy = x + ts // 2, y + ts // 2 + bob
+        if kind == 'chicken':
+            pygame.draw.ellipse(s, (246, 246, 246), (cx - 5, cy, 10, 9))
+            pygame.draw.circle(s, (246, 246, 246), (cx + 5, cy - 2), 4)
+            pygame.draw.polygon(s, (240, 170, 40), [(cx + 9, cy - 3), (cx + 13, cy - 2), (cx + 9, cy)])
+            pygame.draw.rect(s, (220, 60, 50), (cx + 4, cy - 7, 3, 3))
+            pygame.draw.line(s, (230, 160, 40), (cx - 2, cy + 9), (cx - 2, cy + 13), 1)
+            pygame.draw.line(s, (230, 160, 40), (cx + 2, cy + 9), (cx + 2, cy + 13), 1)
+        elif kind == 'cow':
+            pygame.draw.ellipse(s, (246, 246, 246), (cx - 9, cy - 3, 20, 13))
+            pygame.draw.rect(s, (58, 48, 44), (cx - 5, cy, 5, 5))
+            pygame.draw.rect(s, (58, 48, 44), (cx + 3, cy + 3, 5, 4))
+            pygame.draw.circle(s, (246, 246, 246), (cx + 11, cy - 2), 4)
+            pygame.draw.circle(s, (245, 190, 190), (cx + 13, cy), 2)
+            for lx in (cx - 6, cx - 1, cx + 5, cx + 9):
+                pygame.draw.line(s, (120, 110, 100), (lx, cy + 9), (lx, cy + 14), 2)
+        elif kind == 'sheep':
+            pygame.draw.circle(s, (242, 238, 230), (cx, cy + 2), 8)
+            pygame.draw.circle(s, (242, 238, 230), (cx - 5, cy), 5)
+            pygame.draw.circle(s, (242, 238, 230), (cx + 5, cy), 5)
+            pygame.draw.circle(s, (70, 62, 60), (cx + 7, cy - 1), 3)
+            for lx in (cx - 4, cx + 4):
+                pygame.draw.line(s, (70, 62, 60), (lx, cy + 9), (lx, cy + 14), 2)
+        else:  # pig
+            pygame.draw.ellipse(s, (240, 160, 170), (cx - 8, cy - 2, 18, 12))
+            pygame.draw.circle(s, (240, 160, 170), (cx + 9, cy + 2), 4)
+            pygame.draw.circle(s, (220, 120, 135), (cx + 12, cy + 3), 2)
+            pygame.draw.line(s, (230, 140, 150), (cx - 8, cy + 4), (cx - 11, cy + 2), 2)
+            for lx in (cx - 5, cx, cx + 6):
+                pygame.draw.line(s, (210, 130, 140), (lx, cy + 8), (lx, cy + 13), 2)
+
     # ── 집: 지붕 / 실내 / 문 ──────────────────────────────────────────
     def _draw_houses(self, surf, ox, oy, px, py, ticks):
         ts = TILE_SIZE
         for hs in self._houses:
             rects = hs['rects']
-            inside = any(rx < px < rx + rw - 1 and ry < py < ry + rh - 1
-                         for (rx, ry, rw, rh) in rects)
+            inside = (px, py) in hs['inside']    # 실제 실내 타일 판정(L자 이음새 포함)
             if inside:
                 for (rx, ry, rw, rh) in rects:      # 실내 바닥(각 날개)
                     self._draw_interior_floor(surf, rx * ts - ox, ry * ts - oy,
@@ -597,17 +692,36 @@ class TownScene:
             anvil(ix + 4, cy - 4); forge(x2 - 20, iy + 3)
             barrel(ix + 4, y2 - 16); barrel(x2 - 14, y2 - 16)
         elif kind == 'merchant':
-            counter(ix + 4, y2 - 12, min(iw - 8, 30))
-            shelf(ix + 4, iy + 3, min(ih - 8, 16)); shelf(x2 - 16, iy + 3, min(ih - 8, 16))
-            crate(cx - 6, cy - 2)
+            # 마트처럼 진열대 여러 개 + 농산물 바구니 + 계산대
+            counter(ix + 4, y2 - 12, min(iw - 8, 34))
+            for shx in range(ix + 4, x2 - 12, 13):
+                shelf(shx, iy + 3, min(ih - 12, 18))
+            for bi, bx in enumerate(range(ix + 6, x2 - 12, 14)):
+                pygame.draw.rect(surf, (150, 110, 66), (bx, cy - 1, 11, 7))    # 바구니
+                for k in range(3):
+                    col = ((230, 80, 60), (240, 200, 70), (90, 180, 90), (210, 130, 220))[(bi + k) % 4]
+                    pygame.draw.circle(surf, col, (bx + 2 + k * 3, cy + 1), 2)
         elif kind == 'inn':
             bed(ix + 4, iy + 3); bed(x2 - 26, iy + 3)
             table(cx - 7, y2 - 14); chair(cx - 13, y2 - 13); chair(cx + 9, y2 - 13)
             hearth(x2 - 22, cy - 6)
         elif kind == 'chest':
-            for (bx, by) in ((ix + 4, iy + 3), (ix + 18, iy + 3), (ix + 4, cy + 2)):
-                crate(bx, by)
-            barrel(x2 - 14, iy + 3); barrel(cx - 5, y2 - 16)
+            # 창고처럼 궤짝 격자 적재 + 통 + 자루
+            for row in range(2):
+                for col in range(5):
+                    bx, by = ix + 3 + col * 13, iy + 3 + row * 13
+                    if bx + 12 < x2 and by + 12 < y2:
+                        crate(bx, by)
+            barrel(x2 - 13, y2 - 16); barrel(x2 - 26, y2 - 16)
+            pygame.draw.ellipse(surf, (190, 174, 132), (ix + 4, y2 - 14, 12, 12))  # 자루
+        elif kind == 'barn':
+            # 헛간 — 건초더미 + 여물통
+            for (bx, by) in ((ix + 4, iy + 3), (ix + 4, cy + 3), (x2 - 17, iy + 3)):
+                pygame.draw.rect(surf, (214, 184, 92), (bx, by, 14, 11), border_radius=2)
+                for hy in range(by + 2, by + 10, 3):
+                    pygame.draw.line(surf, (182, 152, 68), (bx, hy), (bx + 14, hy), 1)
+            pygame.draw.rect(surf, (110, 80, 48), (cx - 8, y2 - 12, 20, 6))       # 여물통
+            pygame.draw.rect(surf, (150, 112, 70), (cx - 8, y2 - 12, 20, 2))
         else:
             theme = ('bedroom', 'kitchen', 'living', 'study')[hs['seed'] % 4]
             rug(min(iw - 10, 26), min(ih - 10, 16),
