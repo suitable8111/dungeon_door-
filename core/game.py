@@ -4680,12 +4680,16 @@ class Game:
         cancel_ok = self._can_drive_cancel()
         if cancel_ok:
             self._do_drive_cancel()
+        axe = self.player.char_class == 'axeman'
         if combo_id == 'WS': return self._skill_fortify()
         if combo_id == 'AD':
-            return (self._skill_auto_volley() if self.player.char_class == 'archer'
-                    else self._skill_thunder())
-        if combo_id == 'WA': return self._skill_frost()
-        if combo_id == 'WD': return self._skill_wind()
+            if self.player.char_class == 'archer': return self._skill_auto_volley()
+            if axe: return self._skill_axe_storm()
+            return self._skill_thunder()
+        if combo_id == 'WA':
+            return self._skill_earthbreaker() if axe else self._skill_frost()
+        if combo_id == 'WD':
+            return self._skill_axe_charge() if axe else self._skill_wind()
         return False
 
     def _skill_fireball(self):
@@ -4854,6 +4858,101 @@ class Game:
         else:
             self.messages.append((t('skill_wind_m'), 'info'))
         self.audio.play('skill_dash')
+        self.skills.trigger('WD')
+        return True
+
+    # ── 도끼맨 강화 스킬 (물리 도끼 기술) ──────────────────────────────
+    def _skill_axe_storm(self):
+        """도끼 폭풍(도끼맨 AD) — 반경3을 2연타로 휩쓰는 회전 강타."""
+        px, py = self.player.x, self.player.y
+        hits = 0
+        for _pass in range(2):
+            for enemy in list(self.dungeon.enemies):
+                if not enemy.is_alive():
+                    continue
+                if max(abs(enemy.x - px), abs(enemy.y - py)) <= 3:
+                    dmg = roll_damage(self._skill_atk, enemy.defense, 1.5)
+                    enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                    self._apply_lifesteal(dmg)
+                    self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 150, 70)))
+                    self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
+                    hits += 1
+                    if not enemy.is_alive():
+                        self._on_enemy_killed(enemy)
+        self.animator.add(WhirlAnim(px, py))
+        self.animator.add(ShockwaveAnim(px, py, color=(220, 190, 150), rmax=3.2, dur=440))
+        self.animator.particles.emit_whirl(px, py)
+        self.animator.particles.emit_death(px, py, (150, 135, 108))
+        self._start_shake(6, 260)
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_axe_storm', hits) if hits else t('skill_axe_storm_m'),
+                              'warn' if hits else 'info'))
+        self.skills.trigger('AD')
+        return True
+
+    def _skill_earthbreaker(self):
+        """대지 분쇄(도끼맨 WA) — 전방 직선을 내려찍어 균열 충격파 + 경직."""
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        px, py = self.player.x, self.player.y
+        hits = 0
+        for step in range(1, 6):
+            tx, ty = px + dx * step, py + dy * step
+            if not self.dungeon.in_bounds(tx, ty) or self.dungeon.tiles[ty][tx].blocked:
+                break
+            self.animator.add(ShockwaveAnim(tx, ty, color=(210, 185, 140), rmax=1.25, dur=300))
+            self.animator.particles.emit_death(tx, ty, (150, 135, 108))
+            for wx, wy in ((tx, ty), (tx + dy, ty + dx), (tx - dy, ty - dx)):  # 폭(직교 1칸)
+                enemy = self.dungeon.get_enemy_at(wx, wy)
+                if enemy and enemy.is_alive():
+                    dmg = roll_damage(self._skill_atk, enemy.defense, 2.2)
+                    enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                    enemy.staggered_ms = max(getattr(enemy, 'staggered_ms', 0), 800)
+                    self._apply_lifesteal(dmg)
+                    self.animator.add(HitFlashAnim(wx, wy, dmg, (255, 140, 60)))
+                    hits += 1
+                    if not enemy.is_alive():
+                        self._on_enemy_killed(enemy)
+        self._start_shake(7, 300)
+        self._white_flash_ms = 60
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_earthbreaker', hits) if hits else t('skill_earthbreaker_m'),
+                              'warn' if hits else 'info'))
+        self.skills.trigger('WA')
+        return True
+
+    def _skill_axe_charge(self):
+        """광란의 강습(도끼맨 WD) — 전방으로 돌진하며 경로의 적을 베어넘김."""
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        px, py = self.player.x, self.player.y
+        hits = 0
+        dest = (px, py)
+        for step in range(1, 7):
+            tx, ty = px + dx * step, py + dy * step
+            if not self.dungeon.in_bounds(tx, ty) or self.dungeon.tiles[ty][tx].blocked:
+                break
+            enemy = self.dungeon.get_enemy_at(tx, ty)
+            if enemy and enemy.is_alive():
+                dmg = roll_damage(self._skill_atk, enemy.defense, 2.0)
+                enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                enemy.staggered_ms = max(getattr(enemy, 'staggered_ms', 0), 500)
+                self._apply_lifesteal(dmg)
+                self.animator.add(SlashAnim(px, py, tx, ty, (255, 150, 70)))
+                self.animator.add(HitFlashAnim(tx, ty, dmg, (255, 120, 50)))
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+            else:
+                dest = (tx, ty)            # 관통은 하되 착지는 빈 칸까지
+        self.player.x, self.player.y = dest
+        self.camera.center_on(*dest)
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(*dest)
+        self.animator.particles.emit_dash_trail((px, py), dest)
+        self.animator.add(ShockwaveAnim(dest[0], dest[1], color=(210, 185, 140), rmax=1.6, dur=320))
+        self._start_shake(5, 220)
+        self.audio.play('skill_dash')
+        self.messages.append((t('skill_axe_charge', hits) if hits else t('skill_axe_charge_m'),
+                              'warn' if hits else 'info'))
         self.skills.trigger('WD')
         return True
 

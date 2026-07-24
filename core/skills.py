@@ -891,10 +891,54 @@ _ARCHER_COMBO_OVERRIDE = {
 }
 
 
+# 도끼맨 전용 강화 스킬 — 마법 콤보(뇌신검/서리/차원참)를 물리 도끼 기술로 대체.
+# unlock/쿨다운 슬롯(AD/WA/WD)은 공용, 표시/실행만 클래스로 분기.
+def _axe_combo(base_id, name, name_en, name_ja, name_zh, name_ru,
+               color, desc, desc_en, desc_ja, desc_zh, desc_ru):
+    b = COMBO_SKILL_DEFS[base_id]
+    return localize_defs({
+        'name': name, 'name_en': name_en, 'name_ja': name_ja,
+        'name_zh': name_zh, 'name_ru': name_ru,
+        'cooldown_ms': b['cooldown_ms'], 'color': color,
+        'level_req': b['level_req'], 'skill_level_req': b['skill_level_req'],
+        'book': b['book'],
+        'desc': desc, 'desc_en': desc_en, 'desc_ja': desc_ja,
+        'desc_zh': desc_zh, 'desc_ru': desc_ru,
+        'keys': b['keys'],
+    })
+
+
+_AXEMAN_COMBO_OVERRIDE = {
+    'AD': _axe_combo('AD', '도끼 폭풍', 'Axe Storm', '斧の嵐', '斧风暴', 'Топорный шторм',
+                     (255, 150, 70),
+                     '주변 반경3을 2연타로 휩쓰는 회전 강타',
+                     'Two spinning passes shred everything in radius 3',
+                     '半径3を2連撃で薙ぎ払う回転強打',
+                     '两段旋转横扫半径3内一切',
+                     'Два вихревых прохода по радиусу 3'),
+    'WA': _axe_combo('WA', '대지 분쇄', 'Earthbreaker', '大地砕き', '碎地击', 'Раскол земли',
+                     (210, 160, 90),
+                     '전방 직선을 내려찍어 균열 충격파 + 경직',
+                     'Slam a line ahead — shockwave fissure + stagger',
+                     '前方直線を叩き割り衝撃波+硬直',
+                     '砸击前方直线，冲击波+硬直',
+                     'Удар по линии — трещина и оглушение'),
+    'WD': _axe_combo('WD', '광란의 강습', "Berserker's Charge", '狂乱の突撃', '狂乱突袭', 'Натиск берсерка',
+                     (255, 130, 60),
+                     '전방으로 돌진하며 경로의 적을 베어넘김',
+                     'Charge forward, cleaving every enemy in the path',
+                     '前方へ突進し経路の敵を斬り倒す',
+                     '向前冲锋，劈开路径上所有敌人',
+                     'Рывок вперёд, рассекая всех на пути'),
+}
+
+
 def combo_def(combo_id: str, char_class: str = 'warrior'):
-    """클래스별 조합 스킬 정의 (궁수는 일부 스킬이 대체됨)."""
+    """클래스별 조합 스킬 정의 (궁수·도끼맨은 일부 스킬이 대체됨)."""
     if char_class == 'archer' and combo_id in _ARCHER_COMBO_OVERRIDE:
         return _ARCHER_COMBO_OVERRIDE[combo_id]
+    if char_class == 'axeman' and combo_id in _AXEMAN_COMBO_OVERRIDE:
+        return _AXEMAN_COMBO_OVERRIDE[combo_id]
     return COMBO_SKILL_DEFS.get(combo_id)
 
 ULTIMATE_SKILL_DEFS = {
