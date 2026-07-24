@@ -1002,6 +1002,8 @@ _T: dict[str, dict[str, str]] = {
     'townsfolk':      {'ko': '주민', 'en': 'Townsfolk', 'ja': '町の人', 'zh': '居民', 'ru': 'Горожанин'},
     'home_board':     {'ko': '내 집 (인테리어)', 'en': 'My Home (decor)', 'ja': 'マイホーム (内装)',
                        'zh': '我的家 (装饰)', 'ru': 'Мой дом (декор)'},
+    'home_chest':     {'ko': '내 집 보관함', 'en': 'Home Storage', 'ja': 'マイ収納',
+                       'zh': '家庭仓库', 'ru': 'Домашний склад'},
     'home_style_changed': {'ko': '🏠 인테리어 변경: {}', 'en': '🏠 Home decor: {}',
                            'ja': '🏠 内装変更: {}', 'zh': '🏠 装饰更换: {}', 'ru': '🏠 Декор дома: {}'},
     'hstyle_cozy':    {'ko': '아늑한', 'en': 'Cozy', 'ja': '居心地', 'zh': '温馨', 'ru': 'Уютный'},

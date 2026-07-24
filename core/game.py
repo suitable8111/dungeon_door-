@@ -3019,6 +3019,7 @@ class Game:
         if self._town is None:
             self._town = TownScene()
         self._town.home_style = int(self._records.get('home_style', 0))   # 내 집 인테리어
+        self._town.trophies = dict(self._records.get('theme_clears', {}))  # 보스 전리품 진열
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
         self._dungeon_session = {
             'dungeon': self.dungeon,
@@ -3479,6 +3480,12 @@ class Game:
             self.audio.play('shop_open')
         elif npc['id'] == 'home_board':
             self._cycle_home_style()
+        elif npc['id'] == 'home_chest':
+            # 내 집 보관함 — 창고 시스템 공유 (같은 스태시, 최대 100)
+            self._storage_cursor = 0
+            self._storage_pane = 0
+            self.state = 'storage'
+            self.audio.play('shop_open')
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -3771,7 +3778,8 @@ class Game:
             self.state = 'playing'
 
     # ── 창고 용량 확장 (U키) ──────────────────────────────────────────
-    _STORAGE_UPGRADES = {30: 500, 60: 2000}   # 현재 용량 → 확장 비용 (+30칸)
+    _STORAGE_UPGRADES = {30: 500, 60: 2000, 90: 4000}   # 현재 용량 → 확장 비용 (최대 100)
+    _STORAGE_MAX_CAP  = 100
 
     def _upgrade_storage(self):
         from core.save_load import save_storage
@@ -3784,7 +3792,7 @@ class Game:
             self.audio.play('no_gold')
             return
         self.player.gold -= cost
-        self._storage_cap += 30
+        self._storage_cap = min(self._STORAGE_MAX_CAP, self._storage_cap + 30)
         save_storage(self._storage, self._storage_cap)
         self.messages.append((t('storage_upgraded', self._storage_cap), 'good'))
         self.audio.play('levelup')

@@ -61,6 +61,7 @@ class TownScene:
 
         ts = TILE_SIZE
         self.home_style = 0          # 내 집 인테리어 스타일 (게임이 기록에서 주입)
+        self.trophies = {}           # 처치한 테마 보스 전리품 {theme_idx: count} (게임 주입)
         self.npcs = []
         # 시설 NPC — 문 앞 상주 (건물별 좌표는 _build_map에서)
         for nid, nk in (('inn', 'npc_storage'), ('chest', 'npc_chest'),
@@ -76,6 +77,15 @@ class TownScene:
                           'home': (hx, hy), 'fx': hx * ts, 'fy': hy * ts,
                           'tx': hx, 'ty': hy, 'wait': 0.0, 'radius': 0,
                           'facing': 1, 'moving': False})
+        # 내 집 보관함 (E로 창고 열기, 최대 100)
+        for (chx, chy) in ((hx - 3, hy), (hx - 2, hy), (hx + 3, hy)):
+            if self.dungeon.is_walkable(chx, chy):
+                self.npcs.append({'id': 'home_chest', 'x': chx, 'y': chy,
+                                  'name_key': 'home_chest',
+                                  'home': (chx, chy), 'fx': chx * ts, 'fy': chy * ts,
+                                  'tx': chx, 'ty': chy, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
         # 퀘스트 시민 5명 — 배회
         qids = ['villager_boy', 'villager_farmer', 'villager_granny',
                 'villager_hunter', 'villager_scholar']
@@ -424,6 +434,8 @@ class TownScene:
                 continue
             if npc['id'] == 'home_board':                # 내 집 커스터마이즈 보드
                 self._draw_home_board(surf, sx, sy + walk, ticks)
+            elif npc['id'] == 'home_chest':              # 내 집 보관함
+                mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
                 tmp = pygame.Surface((ts, ts), pygame.SRCALPHA)
                 _draw_one(tmp, 0, walk, npc['id'])
@@ -577,6 +589,27 @@ class TownScene:
         pygame.draw.rect(surf, (150, 90, 80), (cx - 4, y + 15, 8, 4), 1)
         if (tk // 350) % 2 == 0:
             pygame.draw.circle(surf, (255, 235, 150), (cx + 7, y + 7), 1)
+
+    def _draw_trophies(self, surf, ix, iy, iw):
+        """내 집 실내 상단 선반에 보스 전리품(처치한 테마)을 진열."""
+        cleared = sorted(int(k) for k, v in self.trophies.items() if v)
+        if not cleared:
+            return
+        from map.theme import get_theme_by_index
+        sy = iy + 2
+        pygame.draw.rect(surf, (110, 80, 48), (ix + 2, sy + 6, iw - 4, 3))     # 선반
+        pygame.draw.rect(surf, (140, 104, 64), (ix + 2, sy + 6, iw - 4, 1))
+        n = len(cleared)
+        step = max(9, min(15, (iw - 8) // max(1, n)))
+        for i, th in enumerate(cleared):
+            tx = ix + 5 + i * step
+            if tx + 8 > ix + iw - 2:
+                break
+            col = get_theme_by_index(th).get('stairs_lit', (235, 205, 90))
+            pygame.draw.rect(surf, (206, 176, 70), (tx, sy + 4, 6, 2))         # 받침
+            pygame.draw.polygon(surf, (238, 208, 92),
+                                [(tx - 1, sy - 1), (tx + 7, sy - 1), (tx + 3, sy + 4)])  # 컵
+            pygame.draw.circle(surf, col, (tx + 3, sy), 2)                     # 테마 보석
 
     # ── 집: 지붕 / 실내 / 문 ──────────────────────────────────────────
     def _draw_houses(self, surf, ox, oy, px, py, ticks):
@@ -817,6 +850,7 @@ class TownScene:
                                  (x2 - 12, y2 - 16), (cx - 4, cy - 2)):
                     plant(bx, by)
                 table(cx - 6, y2 - 14)
+            self._draw_trophies(surf, ix, iy, iw)     # 보스 전리품 진열
         else:
             theme = ('bedroom', 'kitchen', 'living', 'study')[hs['seed'] % 4]
             rug(min(iw - 10, 26), min(ih - 10, 16),
