@@ -1826,7 +1826,8 @@ class HUD:
              [(it.name, it.enhance_level,
                _dur_tag(it.durability, it.max_durability)) for it in player.inventory]),
             (t('storage_stored', len(storage), capacity),
-             [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')})),
+             [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')}))
+               + (f'  ×{e.get("count", 1)}' if e.get('count', 1) > 1 else ''),
                e.get('enhance_level', 0),
                _dur_tag(e.get('durability', 10**9),
                         _Item.calc_max_durability(item_data.get(e.get('key', ''), {}))))

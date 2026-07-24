@@ -1335,6 +1335,9 @@ class Game:
         self._char_name       = 'TestHero'
         self._char_appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
         self.floor            = max(1, min(floor, MAX_FLOOR))
+        # 테스트 편의: 시작 층 아래 보스층을 클리어한 것으로 간주(전리품 표시 확인용)
+        self._records['max_boss_floor'] = max(int(self._records.get('max_boss_floor', 0)),
+                                              ((self.floor - 1) // 5) * 5)
         self._facing          = 'down'
         self._walk_frame      = 0
         self.messages         = []
@@ -3019,7 +3022,7 @@ class Game:
         if self._town is None:
             self._town = TownScene()
         self._town.home_style = int(self._records.get('home_style', 0))   # 내 집 인테리어
-        self._town.trophies = dict(self._records.get('theme_clears', {}))  # 보스 전리품 진열
+        self._town.trophies = int(self._records.get('max_boss_floor', 0)) // 5  # 보스 전리품(보스층 수)
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
         self._dungeon_session = {
             'dungeon': self.dungeon,
@@ -3082,6 +3085,12 @@ class Game:
         if cleared_floor % 5 == 0:
             self.messages.append((t('token_gain_sum', p.token_atk, p.token_def,
                                      int(p.token_aspd * 100)), 'info'))
+            # 보스층 클리어 → 내 집 전리품 진열 (최고 보스층 갱신)
+            if cleared_floor > int(self._records.get('max_boss_floor', 0)):
+                self._records['max_boss_floor'] = cleared_floor
+                if not self._is_test_mode:
+                    from core.save_load import save_records
+                    save_records(self._records)
         # 직업별 장비 보급 (10층마다)
         if cleared_floor % 10 == 0:
             self._grant_class_gear(cleared_floor)
@@ -3387,17 +3396,40 @@ class Game:
             # 세션 없음 (마을에서 시작한 경우) → 현재 층 새로 생성
             self._load_floor()
 
+    # 스택 가능(개수 누적) 아이템 타입 — 소모품·스킬북·강화석 등 동일 아이템
+    _STACK_TYPES = {'consumable', 'skillbook', 'enhance_stone'}
+
+    def _storage_add(self, key, enhance_level=0, durability=None) -> bool:
+        """창고에 아이템 1개 추가 — 스택 가능 아이템은 같은 칸에 개수로 누적.
+        반환: True(추가/누적) / False(칸 가득)."""
+        stackable = (self._item_data.get(key, {}).get('type') in self._STACK_TYPES
+                     and not enhance_level)
+        if stackable:
+            for e in self._storage:
+                if (e.get('key') == key and not e.get('enhance_level')
+                        and 'durability' not in e):
+                    e['count'] = e.get('count', 1) + 1
+                    return True
+            if len(self._storage) >= self._storage_cap:
+                return False
+            self._storage.append({'key': key, 'enhance_level': 0, 'count': 1})
+            return True
+        if len(self._storage) >= self._storage_cap:
+            return False
+        e = {'key': key, 'enhance_level': enhance_level}
+        if durability is not None:
+            e['durability'] = durability
+        self._storage.append(e)
+        return True
+
     def _deposit_all_to_storage(self) -> int:
         """소지품 전량을 영구 창고로 이전하고 저장. 이전 개수 반환."""
         from core.save_load import save_storage
         moved = 0
         for it in list(self.player.inventory):
-            if len(self._storage) >= self._storage_cap:
+            if not self._storage_add(it.key, it.enhance_level, it.durability):
                 self.messages.append((t('storage_cap_full'), 'warn'))
                 break
-            self._storage.append({'key': it.key,
-                                  'enhance_level': it.enhance_level,
-                                  'durability': it.durability})
             self.player.inventory.remove(it)
             moved += 1
         if moved:
@@ -3408,27 +3440,25 @@ class Game:
         """창고 UI: 선택 항목을 반대편으로 이동 (즉시 디스크 저장)."""
         from core.save_load import save_storage
         from entities.item import Item
-        if self._storage_pane == 0:                       # 소지품 → 창고
+        if self._storage_pane == 0:                       # 소지품 → 창고 (스택)
             inv = self.player.inventory
             if not inv:
                 return
-            if len(self._storage) >= self._storage_cap:
+            i = min(self._storage_cursor, len(inv) - 1)
+            it = inv[i]
+            if not self._storage_add(it.key, it.enhance_level, it.durability):
                 self.messages.append((t('storage_cap_full'), 'warn'))
                 return
-            i = min(self._storage_cursor, len(inv) - 1)
-            it = inv.pop(i)
-            self._storage.append({'key': it.key,
-                                  'enhance_level': it.enhance_level,
-                                  'durability': it.durability})
+            inv.pop(i)
             self.audio.play('pickup')
-        else:                                             # 창고 → 소지품
+        else:                                             # 창고 → 소지품 (스택에서 1개)
             if not self._storage:
                 return
             if len(self.player.inventory) >= self.player.max_inventory:
                 self.messages.append((t('inv_full'), 'warn'))
                 return
             i = min(self._storage_cursor, len(self._storage) - 1)
-            entry = self._storage.pop(i)
+            entry = self._storage[i]
             key = entry.get('key', '')
             if key in self._item_data:
                 d = dict(self._item_data[key])
@@ -3437,6 +3467,11 @@ class Game:
                 if 'durability' in entry:
                     d['durability'] = entry['durability']
                 self.player.inventory.append(Item(0, 0, d))
+            cnt = entry.get('count', 1)                    # 스택은 1개씩 인출
+            if cnt > 1:
+                entry['count'] = cnt - 1
+            else:
+                self._storage.pop(i)
             self.audio.play('pickup')
         save_storage(self._storage, self._storage_cap)    # 영구 반영
         self._storage_cursor = max(0, self._storage_cursor - 0)

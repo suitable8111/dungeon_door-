@@ -591,21 +591,22 @@ class TownScene:
             pygame.draw.circle(surf, (255, 235, 150), (cx + 7, y + 7), 1)
 
     def _draw_trophies(self, surf, ix, iy, iw):
-        """내 집 실내 상단 선반에 보스 전리품(처치한 테마)을 진열."""
-        cleared = sorted(int(k) for k, v in self.trophies.items() if v)
-        if not cleared:
+        """내 집 실내 상단 선반에 보스 전리품(처치한 보스층 수)을 진열."""
+        count = self.trophies if isinstance(self.trophies, int) else \
+            sum(1 for v in self.trophies.values() if v)
+        if count <= 0:
             return
-        from map.theme import get_theme_by_index
+        from map.theme import get_theme_by_index, theme_index
         sy = iy + 2
         pygame.draw.rect(surf, (110, 80, 48), (ix + 2, sy + 6, iw - 4, 3))     # 선반
         pygame.draw.rect(surf, (140, 104, 64), (ix + 2, sy + 6, iw - 4, 1))
-        n = len(cleared)
-        step = max(9, min(15, (iw - 8) // max(1, n)))
-        for i, th in enumerate(cleared):
+        cap = max(1, (iw - 8) // 9)                 # 선반에 들어갈 최대 개수
+        shown = min(count, cap)
+        step = max(9, min(15, (iw - 8) // max(1, shown)))
+        for i in range(shown):
             tx = ix + 5 + i * step
-            if tx + 8 > ix + iw - 2:
-                break
-            col = get_theme_by_index(th).get('stairs_lit', (235, 205, 90))
+            th = theme_index((i + 1) * 5)           # i번째 보스층(5,10,...)의 테마색
+            col = get_theme_by_index(th).get('stairs_lit', (238, 208, 92))
             pygame.draw.rect(surf, (206, 176, 70), (tx, sy + 4, 6, 2))         # 받침
             pygame.draw.polygon(surf, (238, 208, 92),
                                 [(tx - 1, sy - 1), (tx + 7, sy - 1), (tx + 3, sy + 4)])  # 컵
