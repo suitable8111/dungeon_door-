@@ -995,6 +995,7 @@ _T: dict[str, dict[str, str]] = {
     'npc_storage':    {'ko': '주막 주모', 'en': 'Innkeeper', 'ja': '宿屋の女将', 'zh': '酒馆老板娘', 'ru': 'Трактирщица'},
     'npc_smith':      {'ko': '대장장이', 'en': 'Blacksmith', 'ja': '鍛冶屋', 'zh': '铁匠', 'ru': 'Кузнец'},
     'town_portal_label': {'ko': '던전 포탈', 'en': 'Dungeon Portal', 'ja': 'ダンジョンポータル', 'zh': '地城传送门', 'ru': 'Портал в подземелье'},
+    'townsfolk':      {'ko': '주민', 'en': 'Townsfolk', 'ja': '町の人', 'zh': '居民', 'ru': 'Горожанин'},
     'interact_hint':  {'ko': '[E]', 'en': '[E]', 'ja': '[E]', 'zh': '[E]', 'ru': '[E]'},
     'portal_open':    {'ko': '✦ 마을 귀환 포탈이 열렸다! 밟으면 이동',
                        'en': '✦ A town portal opened! Step in to travel',
