@@ -237,6 +237,7 @@ class Game:
         self._collapse_reward = None   # 제단으로 예약된 탈출 보상(탈출 성공 시 지급)
         self._keys = 0                 # 현재 층에서 주운 금고 열쇠 수
         self._thrown_axe = None        # 도끼맨: 바닥에 던져진 도끼 {x,y} (밟아 회수)
+        self._axe_throw_cd_ms = 0      # 회수 안 하고 재투척 시 10초 쿨
         self._ragnarok_ms = 0          # 도끼맨: 라그나로크(무적 돌진) 잔여 ms
         self._ragnarok_aura_t = 0.0    # 라그나로크 접촉 오라 데미지 틱 누적
 
@@ -587,6 +588,8 @@ class Game:
                     if self._combo_ms == 0:
                         self._combo_count = 0
                 self._update_enemies(world_dt)
+                if self._axe_throw_cd_ms > 0:
+                    self._axe_throw_cd_ms = max(0, self._axe_throw_cd_ms - world_dt)
                 if self._ragnarok_ms > 0:
                     self._ragnarok_ms = max(0, self._ragnarok_ms - world_dt)
                     if not self._in_town:
@@ -697,6 +700,7 @@ class Game:
         self._collapse_reward = None    # 탈출 못하면 제단 보상은 소멸
         self._keys = 0                  # 열쇠는 층 단위(다음 층에서 초기화)
         self._thrown_axe = None         # 던져진 도끼는 층 이동 시 회수(소멸)
+        self._axe_throw_cd_ms = 0
         self._ragnarok_ms = 0
         if not self._in_town and self.dungeon:
             for yy, row in enumerate(self.dungeon.tiles):
@@ -833,9 +837,6 @@ class Game:
         """플레이어가 한 칸에 진입할 때 트랩·압력판·비밀방 발견 처리."""
         if not self.dungeon.in_bounds(x, y):
             return
-        # 도끼맨: 던져진 도끼 위에 올라서면 회수(재투척 가능)
-        if self._thrown_axe is not None and (x, y) == (self._thrown_axe['x'], self._thrown_axe['y']):
-            self._retrieve_axe()
         # 숨겨진 보물방 최초 진입 연출 (1회)
         sr = getattr(self.dungeon, 'secret_room', None)
         if sr and (x, y) == sr and not getattr(self, '_secret_found', False):
@@ -2351,6 +2352,9 @@ class Game:
         self._move_anim_offset[1] = max(-TILE_SIZE, min(TILE_SIZE, self._move_anim_offset[1] - dy * TILE_SIZE))
 
         self.player.x, self.player.y = nx, ny
+        # 도끼맨: 던져진 도끼 위에 올라서면 회수 (마을 포함 어디서나)
+        if self._thrown_axe is not None and (nx, ny) == (self._thrown_axe['x'], self._thrown_axe['y']):
+            self._retrieve_axe()
         item = self.dungeon.get_item_at(nx, ny)
         if item:
             self._pickup(item)
@@ -3990,11 +3994,15 @@ class Game:
         if p.lifesteal_ms > 0 and dmg > 0:
             p.hp = min(p.max_hp, p.hp + max(1, int(dmg * p.lifesteal_pct)))
 
+    _AXE_ABANDON_CD = 10000   # 회수 안 하고 재투척 시 쿨타임(ms)
+
     def _exec_axe_throw(self, slot):
-        """도끼 투척 — 직선 강타 후 바닥에 낙하. 이미 던진 도끼가 있으면 회수 필요."""
-        if self._thrown_axe is not None:
-            self.messages.append((t('axe_need_recall'), 'info'))
+        """도끼 투척 — 직선 강타 후 바닥에 낙하.
+        회수하면 즉시 재투척(+SP). 회수 안 하고 던지면 새 도끼를 쓰되 10초 쿨."""
+        if self._axe_throw_cd_ms > 0:
+            self.messages.append((t('axe_cd', self._axe_throw_cd_ms / 1000.0), 'info'))
             return False
+        abandoned = self._thrown_axe is not None   # 회수 안 한 도끼가 있으면 버리고 새로
         lvl = self._skill_levels.get('axe_throw', 1)
         stats = ALL_SKILL_DEFS['axe_throw']['upgrades'][lvl - 1]
         rng, mul = stats['range'], stats['mul']
@@ -4023,15 +4031,20 @@ class Game:
         self._gain_skill_xp('axe_throw', hits)
         self.skills.trigger(slot)
         self.audio.play('skill_whirl')
-        self.messages.append((t('axe_thrown', hits) if hits else t('axe_thrown_miss'),
-                              'warn' if hits else 'info'))
+        if abandoned:
+            self._axe_throw_cd_ms = self._AXE_ABANDON_CD   # 회수 안 함 → 10초 쿨
+            self.messages.append((t('axe_abandon_cd'), 'warn'))
+        else:
+            self.messages.append((t('axe_thrown', hits) if hits else t('axe_thrown_miss'),
+                                  'warn' if hits else 'info'))
         return True
 
     _AXE_RECALL_SP = 30   # 도끼 회수 시 SP 회복량(투척 비용보다 커서 순이득)
 
     def _retrieve_axe(self):
-        """던져진 도끼 회수 — SP 회복 + 다시 던질 수 있게 됨."""
+        """던져진 도끼 회수 — SP 회복 + 쿨 초기화 + 다시 던질 수 있게 됨."""
         self._thrown_axe = None
+        self._axe_throw_cd_ms = 0        # 회수하면 쿨 초기화(회수 보상)
         p = self.player
         p.stamina = min(p.stamina_max, p.stamina + self._AXE_RECALL_SP)
         self.animator.add(CalloutAnim(self.player.x, self.player.y,
