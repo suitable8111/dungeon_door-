@@ -5611,7 +5611,9 @@ class Game:
                         skill_levels=self._skill_levels,
                         skill_xp=self._skill_xp,
                         is_test_mode=self._is_test_mode,
-                        equipped_skills=self._equipped_skills)
+                        equipped_skills=self._equipped_skills,
+                        minimap_npcs=(self._town.visible_npcs()
+                                      if self._in_town and self._town else None))
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)

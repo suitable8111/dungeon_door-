@@ -145,7 +145,8 @@ class HUD:
                unlocked_combos=None, skill_books=None,
                skill_levels=None, skill_xp=None,
                is_test_mode=False,
-               equipped_skills=None):
+               equipped_skills=None, minimap_npcs=None):
+        self._mm_npcs = minimap_npcs        # 미니맵 NPC 표시(마을)
         self._top_bar(screen, player, floor_num, is_test_mode=is_test_mode)
         self._right_panel(screen, player, dungeon, skill_mgr,
                           unlocked_combos or set(), skill_books or set(),
@@ -1132,7 +1133,9 @@ class HUD:
             self._draw_minimap(screen, dungeon, player, rx+8, y)
 
     def _draw_minimap(self, screen, dungeon, player, ox, oy):
-        scale = 2
+        # 패널에 맞춰 스케일 자동 조정 (큰 마을은 축소) — 던전은 2 유지
+        _MM_MAX_W, _MM_MAX_H = 204, 92
+        scale = max(1, min(_MM_MAX_W // dungeon.width, _MM_MAX_H // dungeon.height))
         pygame.draw.rect(screen, (8, 8, 18), (ox, oy, dungeon.width*scale, dungeon.height*scale))
 
         collapsing = False
@@ -1156,6 +1159,7 @@ class HUD:
                     elif tt == TileType.SHOP:         col = SHOP_COLOR
                     elif tt == TileType.DOOR:         col = (160, 80, 255)
                     elif tt == TileType.BURNING_DOOR: col = (255, 80, 20)
+                    elif tt == TileType.WATER:        col = (44, 92, 150)
                     else:                             col = (75,75,100)
                 pygame.draw.rect(screen, col, (ox+mx*scale, oy+my*scale, scale, scale))
 
@@ -1183,7 +1187,15 @@ class HUD:
             else:
                 pygame.draw.rect(screen, (220, 60, 60), (ex, ey, scale, scale))
 
-        pygame.draw.rect(screen, WHITE, (ox+player.x*scale-1, oy+player.y*scale-1, scale+1, scale+1))
+        # NPC 마커 (마을) — 시설·퀘스트=금색, 배회 시민=하늘색
+        m = max(2, scale)
+        for npc in getattr(self, '_mm_npcs', None) or []:
+            nx = ox + npc['x'] * scale
+            ny = oy + npc['y'] * scale
+            ncol = (90, 210, 255) if npc.get('ambient') else (255, 220, 90)
+            pygame.draw.rect(screen, ncol, (nx, ny, m, m))
+
+        pygame.draw.rect(screen, WHITE, (ox+player.x*scale-1, oy+player.y*scale-1, scale+2, scale+2))
         pygame.draw.rect(screen, UI_BORDER, (ox, oy, dungeon.width*scale, dungeon.height*scale), 1)
 
     # ------------------------------------------------------------------ #
