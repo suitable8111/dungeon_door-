@@ -3018,6 +3018,7 @@ class Game:
         from core.camera import Camera
         if self._town is None:
             self._town = TownScene()
+        self._town.home_style = int(self._records.get('home_style', 0))   # 내 집 인테리어
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
         self._dungeon_session = {
             'dungeon': self.dungeon,
@@ -3476,8 +3477,26 @@ class Game:
             self._enhance_open = True
             self._enhance_cursor = 0
             self.audio.play('shop_open')
+        elif npc['id'] == 'home_board':
+            self._cycle_home_style()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
+
+    _HOME_STYLES = ('cozy', 'noble', 'rustic', 'study', 'garden')
+
+    def _cycle_home_style(self):
+        """내 집 인테리어 스타일을 다음으로 순환 + 영구 저장."""
+        from core.save_load import save_records
+        cur = int(self._records.get('home_style', 0))
+        nxt = (cur + 1) % len(self._HOME_STYLES)
+        self._records['home_style'] = nxt
+        save_records(self._records)
+        if self._town:
+            self._town.home_style = nxt
+        self.messages.append((t('home_style_changed',
+                                 t('hstyle_' + self._HOME_STYLES[nxt])), 'good'))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self.audio.play('menu_select')
 
     def _smith_cost(self, item) -> int:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""

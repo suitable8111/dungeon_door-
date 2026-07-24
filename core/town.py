@@ -60,6 +60,7 @@ class TownScene:
         self.dungeon = self._build_map()
 
         ts = TILE_SIZE
+        self.home_style = 0          # 내 집 인테리어 스타일 (게임이 기록에서 주입)
         self.npcs = []
         # 시설 NPC — 문 앞 상주 (건물별 좌표는 _build_map에서)
         for nid, nk in (('inn', 'npc_storage'), ('chest', 'npc_chest'),
@@ -69,6 +70,12 @@ class TownScene:
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': 0.0, 'radius': 0,
                               'facing': 1, 'moving': False})
+        # 내 집 인테리어 관리 보드 (E로 커스터마이즈)
+        hx, hy = self._facility_pos.get('home', (39, 50))
+        self.npcs.append({'id': 'home_board', 'x': hx, 'y': hy, 'name_key': 'home_board',
+                          'home': (hx, hy), 'fx': hx * ts, 'fy': hy * ts,
+                          'tx': hx, 'ty': hy, 'wait': 0.0, 'radius': 0,
+                          'facing': 1, 'moving': False})
         # 퀘스트 시민 5명 — 배회
         qids = ['villager_boy', 'villager_farmer', 'villager_granny',
                 'villager_hunter', 'villager_scholar']
@@ -138,9 +145,10 @@ class TownScene:
         def blocked(x, y):
             return not d.is_walkable(x, y)
 
-        def building(x, y, w, h, kind='house', wing=None):
+        def building(x, y, w, h, kind='house', wing=None, sign=None, home=False):
             """벽 건물(옵션 L자 wing) + 남문 + 지붕/실내용 정보 기록. 남문 앞 타일 반환.
-            wing=(wx,wy,ww,wh) 를 주면 두 사각형 합집합의 경계만 벽 → L자 집."""
+            wing=(wx,wy,ww,wh) 를 주면 두 사각형 합집합의 경계만 벽 → L자 집.
+            sign: 간판 아이콘, home=True: 플레이어 집."""
             rects = [(x, y, w, h)] + ([wing] if wing else [])
             cells = set()
             for (rx, ry, rw, rh) in rects:
@@ -161,7 +169,7 @@ class TownScene:
                                for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))}
             interior.add((cx, y + h - 1))
             self._houses.append({'rects': rects, 'door': (cx, y + h - 1),
-                                 'inside': interior,
+                                 'inside': interior, 'sign': sign, 'home': home,
                                  'seed': (x * 7 + y * 13) % 1000, 'kind': kind})
             return (cx, y + h)              # 남문 밖 타일
 
@@ -187,9 +195,9 @@ class TownScene:
 
         # ── 북부: 여관 / 시장(상인) / 대장간 (L자·용도별 실내) ─────────────
         self._facility_pos['inn']      = building(10, 10, 13, 9, kind='inn',
-                                                  wing=(20, 7, 6, 6))       # 여관 L자 NW
-        self._facility_pos['smith']    = building(104, 10, 14, 9, kind='smith')  # 대장간 NE
-        self._facility_pos['merchant'] = building(58, 8, 14, 9, kind='merchant')  # 시장 상점
+                                                  wing=(20, 7, 6, 6), sign='inn')  # 여관 L자 NW
+        self._facility_pos['smith']    = building(104, 10, 14, 9, kind='smith', sign='smith')  # 대장간 NE
+        self._facility_pos['merchant'] = building(58, 8, 14, 9, kind='merchant', sign='merchant')  # 시장 상점
         # 북부 민가들 (일부 L자)
         building(30, 8, 9, 7)
         building(42, 12, 8, 6)
@@ -226,9 +234,13 @@ class TownScene:
         building(98, 80, 11, 7, wing=(107, 80, 5, 5))   # L자
         building(86, 74, 9, 6)
         # 창고(부두) — 강 남쪽, chest NPC 앞
-        chest_door = building(28, 62, 9, 6, kind='chest')
+        chest_door = building(28, 62, 9, 6, kind='chest', sign='chest')
         self._facility_pos['chest'] = chest_door
         solid_deco('barrel', [(24, 62), (24, 64), (38, 62), (38, 64)])
+
+        # ── 내 집 (플레이어 소유, 커스터마이즈 가능) — 강 북쪽 중서부 ──────
+        self._facility_pos['home'] = building(34, 42, 10, 8, kind='home',
+                                              sign='home', home=True)
 
         # 공원(S-중앙) — 연못 + 나무 + 꽃
         for py in range(72, 80):
@@ -410,7 +422,9 @@ class TownScene:
                 self._draw_animal(surf, sx, sy + walk, npc['animal'],
                                   npc.get('facing', 1), ticks)
                 continue
-            if npc.get('facing', 1) < 0:                 # 좌향 → 좌우 반전
+            if npc['id'] == 'home_board':                # 내 집 커스터마이즈 보드
+                self._draw_home_board(surf, sx, sy + walk, ticks)
+            elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
                 tmp = pygame.Surface((ts, ts), pygame.SRCALPHA)
                 _draw_one(tmp, 0, walk, npc['id'])
                 surf.blit(pygame.transform.flip(tmp, True, False), (sx, sy))
@@ -550,6 +564,20 @@ class TownScene:
             for lx in (cx - 5, cx, cx + 6):
                 pygame.draw.line(s, (210, 130, 140), (lx, cy + 8), (lx, cy + 13), 2)
 
+    @staticmethod
+    def _draw_home_board(surf, x, y, tk):
+        """내 집 인테리어 관리 이젤."""
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        pygame.draw.line(surf, (110, 80, 48), (cx - 6, y + ts - 2), (cx, y + 12), 2)
+        pygame.draw.line(surf, (110, 80, 48), (cx + 6, y + ts - 2), (cx, y + 12), 2)
+        pygame.draw.rect(surf, (86, 60, 36), (cx - 9, y + 6, 18, 16))
+        pygame.draw.rect(surf, (224, 218, 202), (cx - 7, y + 8, 14, 12))
+        pygame.draw.polygon(surf, (150, 90, 80), [(cx - 5, y + 15), (cx, y + 10), (cx + 5, y + 15)])
+        pygame.draw.rect(surf, (150, 90, 80), (cx - 4, y + 15, 8, 4), 1)
+        if (tk // 350) % 2 == 0:
+            pygame.draw.circle(surf, (255, 235, 150), (cx + 7, y + 7), 1)
+
     # ── 집: 지붕 / 실내 / 문 ──────────────────────────────────────────
     def _draw_houses(self, surf, ox, oy, px, py, ticks):
         ts = TILE_SIZE
@@ -569,6 +597,37 @@ class TownScene:
                                     rw * ts, rh * ts, hs)
             dx, dy = hs['door']
             self._draw_house_door(surf, dx * ts - ox, dy * ts - oy, inside)
+            if hs.get('sign') and not inside:           # 상점/내집 간판
+                self._draw_sign(surf, dx * ts - ox, dy * ts - oy, hs['sign'], ticks)
+
+    def _draw_sign(self, surf, dx, dy, icon, ticks):
+        """문 옆에 걸린 나무 간판 + 아이콘 (여관/대장간/상점/창고/내집)."""
+        ts = TILE_SIZE
+        bx, by = dx + ts + 2, dy - 6           # 문 오른쪽 위
+        pygame.draw.rect(surf, (60, 42, 26), (bx + 11, by - 8, 3, 10))   # 걸대
+        board = pygame.Rect(bx, by, 26, 16)
+        pygame.draw.rect(surf, (120, 84, 48), board, border_radius=3)
+        pygame.draw.rect(surf, (78, 54, 32), board, 2, border_radius=3)
+        cx, cy = bx + 13, by + 8
+        if icon == 'inn':                       # 맥주잔
+            pygame.draw.rect(surf, (240, 210, 120), (cx - 4, cy - 4, 7, 9))
+            pygame.draw.rect(surf, (255, 245, 220), (cx - 4, cy - 5, 7, 2))
+            pygame.draw.line(surf, (200, 170, 90), (cx + 3, cy - 2), (cx + 6, cy + 1), 2)
+        elif icon == 'smith':                   # 망치
+            pygame.draw.rect(surf, (150, 150, 160), (cx - 2, cy - 5, 8, 4))
+            pygame.draw.rect(surf, (120, 84, 48), (cx + 1, cy - 5, 2, 10))
+        elif icon == 'merchant':                # 코인
+            pygame.draw.circle(surf, (240, 200, 70), (cx, cy), 5)
+            pygame.draw.circle(surf, (210, 165, 45), (cx, cy), 5, 1)
+        elif icon == 'chest':                   # 상자
+            pygame.draw.rect(surf, (170, 120, 66), (cx - 5, cy - 3, 11, 8))
+            pygame.draw.rect(surf, (120, 82, 44), (cx - 5, cy - 1, 11, 2))
+        elif icon == 'home':                    # 하트(내 집)
+            hb = 0.7 + 0.3 * math.sin(ticks * 0.004)
+            hc = (int(235 * hb), int(90 * hb), int(110 * hb))
+            pygame.draw.circle(surf, hc, (cx - 2, cy - 1), 3)
+            pygame.draw.circle(surf, hc, (cx + 2, cy - 1), 3)
+            pygame.draw.polygon(surf, hc, [(cx - 5, cy), (cx + 5, cy), (cx, cy + 5)])
 
     _ROOF_PALETTES = [((176, 72, 56), (140, 50, 38), (206, 100, 82)),   # 붉은 기와
                       ((84, 96, 140), (58, 68, 108), (118, 132, 176)),  # 청기와
@@ -591,13 +650,24 @@ class TownScene:
         pygame.draw.line(surf, roof_hi, (sx - ex, top + 8), (sx + pw + ex, top + 8), 2)
         for ry in range(top + 14, sy + roof_h, 7):
             pygame.draw.line(surf, roof_d, (sx - ex, ry), (sx + pw + ex, ry), 1)
-        # 벽 파사드 (앞면 한 줄) + 창문 2개
+        # 벽 파사드 (앞면 한 줄) + 큼직한 창문(문 양옆) + 박공 다락창
         pygame.draw.rect(surf, (126, 96, 64), (sx, sy + roof_h, pw, ts))
         pygame.draw.rect(surf, (152, 118, 82), (sx, sy + roof_h, pw, 3))
-        wy = sy + roof_h + ts // 2 - 4
-        for wx in (sx + pw // 4 - 4, sx + 3 * pw // 4 - 4):
-            pygame.draw.rect(surf, (196, 214, 235), (wx, wy, 8, 8))
-            pygame.draw.rect(surf, (90, 66, 42), (wx, wy, 8, 8), 1)
+        ww, wh = 16, 20                     # 시원한 큰 창
+        wy = sy + roof_h + (ts - wh) // 2
+        for wx in (sx + pw // 4 - ww // 2, sx + 3 * pw // 4 - ww // 2):
+            pygame.draw.rect(surf, (78, 54, 32), (wx - 2, wy - 2, ww + 4, wh + 4))  # 창틀
+            pygame.draw.rect(surf, (188, 210, 235), (wx, wy, ww, wh))               # 유리
+            pygame.draw.rect(surf, (150, 178, 210), (wx, wy + wh // 2, ww, wh // 2))  # 아래 그늘
+            pygame.draw.line(surf, (78, 54, 32), (wx + ww // 2, wy), (wx + ww // 2, wy + wh), 2)  # 세로 창살
+            pygame.draw.line(surf, (78, 54, 32), (wx, wy + wh // 2), (wx + ww, wy + wh // 2), 2)  # 가로 창살
+            pygame.draw.rect(surf, (240, 248, 255), (wx + 1, wy + 1, ww // 2 - 2, wh // 2 - 2))    # 하이라이트
+            for sh, sdx in (((92, 62, 40), -ww // 2 - 4), ((92, 62, 40), ww + 2)):  # 덧문
+                pygame.draw.rect(surf, sh, (wx + sdx, wy - 2, 4, wh + 4))
+        # 박공(다락)에 동그란 창
+        gy = top - 1
+        pygame.draw.circle(surf, (78, 54, 32), (cx, gy), 5)
+        pygame.draw.circle(surf, (188, 210, 235), (cx, gy), 3)
 
     @staticmethod
     def _draw_interior_floor(surf, sx, sy, pw, ph):
@@ -722,6 +792,31 @@ class TownScene:
                     pygame.draw.line(surf, (182, 152, 68), (bx, hy), (bx + 14, hy), 1)
             pygame.draw.rect(surf, (110, 80, 48), (cx - 8, y2 - 12, 20, 6))       # 여물통
             pygame.draw.rect(surf, (150, 112, 70), (cx - 8, y2 - 12, 20, 2))
+        elif kind == 'home':
+            # 내 집 — home_style로 인테리어 커스터마이즈 (5종)
+            st = ('cozy', 'noble', 'rustic', 'study', 'garden')[self.home_style % 5]
+            if st == 'cozy':
+                rug(min(iw - 10, 26), min(ih - 10, 16), (172, 92, 82))
+                bed(ix + 4, iy + 3); hearth(x2 - 22, iy + 3)
+                plant(ix + 4, y2 - 16); table(cx - 6, y2 - 14)
+            elif st == 'noble':
+                rug(min(iw - 8, 30), min(ih - 8, 18), (120, 60, 140))
+                bed(ix + 4, iy + 3); wardrobe(x2 - 14, iy + 3)
+                shelf(cx - 6, iy + 3, min(ih - 10, 16)); plant(x2 - 12, y2 - 16)
+            elif st == 'rustic':
+                rug(min(iw - 10, 24), min(ih - 10, 14), (120, 96, 62))
+                table(cx - 7, cy - 4); chair(cx - 13, cy - 4); chair(cx + 9, cy - 4)
+                barrel(ix + 4, iy + 3); hearth(x2 - 22, iy + 3)
+            elif st == 'study':
+                rug(min(iw - 10, 24), min(ih - 10, 14), (70, 100, 140))
+                shelf(ix + 4, iy + 3, min(ih - 8, 16)); shelf(ix + 18, iy + 3, min(ih - 8, 16))
+                table(x2 - 20, y2 - 14); plant(ix + 4, y2 - 16)
+            else:  # garden
+                rug(min(iw - 10, 24), min(ih - 10, 14), (80, 140, 90))
+                for (bx, by) in ((ix + 4, iy + 3), (x2 - 12, iy + 3), (ix + 4, y2 - 16),
+                                 (x2 - 12, y2 - 16), (cx - 4, cy - 2)):
+                    plant(bx, by)
+                table(cx - 6, y2 - 14)
         else:
             theme = ('bedroom', 'kitchen', 'living', 'study')[hs['seed'] % 4]
             rug(min(iw - 10, 26), min(ih - 10, 16),
