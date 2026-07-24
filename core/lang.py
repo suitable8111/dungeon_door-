@@ -304,6 +304,8 @@ _T: dict[str, dict[str, str]] = {
     'axe_need_recall': {'ko': '도끼가 없다 — 던진 도끼를 밟아 회수하라', 'en': 'No axe — walk over the thrown axe to recall',
                         'ja': '斧がない — 投げた斧を踏んで回収', 'zh': '没有斧头 — 踩踏回收投出的斧', 'ru': 'Нет топора — подберите брошенный'},
     'axe_recall':  {'ko': '도끼 회수!', 'en': 'Axe recalled!', 'ja': '斧回収!', 'zh': '回收斧头!', 'ru': 'Топор возвращён!'},
+    'axe_recall_sp': {'ko': '도끼 회수! +{0} SP', 'en': 'Axe recalled! +{0} SP',
+                      'ja': '斧回収! +{0} SP', 'zh': '回收斧头! +{0} SP', 'ru': 'Топор! +{0} SP'},
     'skill_berserk': {'ko': '⚔ 광폭화! 공속↑ 흡혈', 'en': '⚔ Berserk! ATK spd↑ lifesteal',
                       'ja': '⚔ 狂化! 攻速↑ 吸血', 'zh': '⚔ 狂暴! 攻速↑ 吸血', 'ru': '⚔ Берсерк! Скор↑ вампиризм'},
     'skill_leap':  {'ko': '💥 도약 강타! {0}타', 'en': '💥 Leap Smash! {0} hit(s)',

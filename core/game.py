@@ -11,7 +11,7 @@ from core.animator import (Animator, LungeAnim, SlashAnim, HitFlashAnim, BoltAni
                             AttackSwingAnim, DashTrailAnim, WhirlAnim, HealAnim,
                             DeathAnim, GoldPopAnim, BannerAnim,
                             SmearAnim, ThrustSmearAnim, AfterimageAnim, CalloutAnim,
-                            ArrowAnim, MagicBoltAnim)
+                            ArrowAnim, MagicBoltAnim, ShockwaveAnim)
 from core.audio import AudioManager
 from core.skills import (SkillManager, SKILL_DEFS, COMBO_SKILL_DEFS, SKILL_UPGRADES,
                          SKILL_MAX_LEVEL, SKILL_XP_REQ, ULTIMATE_SKILL_DEFS,
@@ -2560,6 +2560,17 @@ class Game:
             smear_col = (255, 190, 90) if finisher else (255, 240, 180)
         self.animator.add(SmearAnim(
             self.player.x, self.player.y, self._facing, variant, smear_col))
+        if is_axe:
+            # 도끼 스윙 주위 — 흙먼지 + 충격파(묵직한 무게감)
+            px, py = self.player.x, self.player.y
+            ix, iy = px + dx, py + dy
+            self.animator.particles.emit_death(ix, iy, (150, 135, 108))   # 흙먼지 퍼짐
+            self.animator.add(ShockwaveAnim(ix, iy, color=(210, 190, 150),
+                                            rmax=2.0 if finisher else 1.4,
+                                            dur=380 if finisher else 300))
+            if finisher:
+                self.animator.particles.emit_death(px, py, (150, 135, 108))
+                self._start_shake(4, 170)
         if enemy:
             self._player_attack(enemy, dmg_mul=self._CHAIN_MUL[step])
             if finisher:
@@ -4016,11 +4027,16 @@ class Game:
                               'warn' if hits else 'info'))
         return True
 
+    _AXE_RECALL_SP = 30   # 도끼 회수 시 SP 회복량(투척 비용보다 커서 순이득)
+
     def _retrieve_axe(self):
-        """던져진 도끼 회수 — 다시 던질 수 있게 됨."""
+        """던져진 도끼 회수 — SP 회복 + 다시 던질 수 있게 됨."""
         self._thrown_axe = None
+        p = self.player
+        p.stamina = min(p.stamina_max, p.stamina + self._AXE_RECALL_SP)
         self.animator.add(CalloutAnim(self.player.x, self.player.y,
-                                      t('axe_recall'), (245, 200, 110)))
+                                      t('axe_recall_sp', self._AXE_RECALL_SP),
+                                      (245, 200, 110)))
         self.animator.particles.emit_heal(self.player.x, self.player.y)
         self.audio.play('pickup')
 

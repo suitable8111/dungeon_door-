@@ -721,6 +721,33 @@ class WhirlAnim(_Anim):
                     pygame.draw.circle(surf, rc, (cx, cy), ring_r, max(1, int(2 * ring_fade + 1)))
 
 
+class ShockwaveAnim(_Anim):
+    """묵직한 충격파 — 한 겹 확장 링(먼지빛). 도끼 강타 임팩트용."""
+    def __init__(self, px, py, color=(205, 185, 145), rmax=1.5, dur=320):
+        super().__init__(dur)
+        self.px, self.py = px, py
+        self.color = color
+        self.rmax = rmax
+
+    def draw(self, surf, cam_x, cam_y, font):
+        t = self.t
+        if t <= 0 or t >= 1:
+            return
+        ts = TILE_SIZE
+        cx = (self.px - cam_x) * ts + ts // 2
+        cy = (self.py - cam_y) * ts + ts // 2
+        r = int(ts * self.rmax * _smooth(min(1.0, t * 1.3)))
+        fade = max(0.0, 1.0 - t * 1.2)
+        if r <= 1 or fade <= 0.02:
+            return
+        ov = pygame.Surface((r * 2 + 6, r * 2 + 6), pygame.SRCALPHA)
+        pygame.draw.circle(ov, (*self.color, int(190 * fade)),
+                           (r + 3, r + 3), r, max(1, int(3 * fade) + 1))
+        pygame.draw.circle(ov, (*self.color, int(80 * fade)),
+                           (r + 3, r + 3), max(1, r - 3), 1)
+        surf.blit(ov, (cx - r - 3, cy - r - 3))
+
+
 class HealAnim(_Anim):
     """힐 스킬 — 녹색 오라 링 + 상승 파티클 8개."""
     def __init__(self, px, py):
