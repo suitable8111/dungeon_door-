@@ -105,6 +105,7 @@ class TownScene:
         W, H = TOWN_W, TOWN_H
         d = Dungeon(W, H)
         deco = self._deco
+        self._houses = []
         for y in range(1, H - 1):
             for x in range(1, W - 1):
                 d.tiles[y][x] = Tile.floor()
@@ -128,7 +129,7 @@ class TownScene:
             return not d.is_walkable(x, y)
 
         def building(x, y, w, h, doors=('S',)):
-            """벽 사각형 건물 + 지정 변에 문. 남문 앞 타일 반환."""
+            """벽 사각형 건물 + 남쪽 문 + 지붕/실내용 정보 기록. 남문 앞 타일 반환."""
             for by in range(y, y + h):
                 for bx in range(x, x + w):
                     if bx in (x, x + w - 1) or by in (y, y + h - 1):
@@ -136,6 +137,9 @@ class TownScene:
                     else:
                         floor(bx, by)
             cx, cy = x + w // 2, y + h // 2
+            self._houses.append({'x': x, 'y': y, 'w': w, 'h': h,
+                                 'door': (cx, y + h - 1),
+                                 'seed': (x * 7 + y * 13) % 1000})
             for s in doors:
                 if s == 'S': floor(cx, y + h - 1)
                 elif s == 'N': floor(cx, y)
@@ -311,6 +315,9 @@ class TownScene:
         ticks = pygame.time.get_ticks()
         ox, oy = cam_x * ts, cam_y * ts
 
+        # 집: 지붕(실외) / 실내(플레이어 진입 시) + 문
+        self._draw_houses(surf, ox, oy, px, py, ticks)
+
         # 바닥 장식 (NPC 아래)
         for fx, fy in self._deco['flower']:
             self._draw_flower(surf, fx * ts - ox, fy * ts - oy, ticks)
@@ -436,6 +443,79 @@ class TownScene:
         # 은은한 반짝임
         if (tk // 400) % 3 == 0:
             pygame.draw.circle(s, (255, 250, 220), (cx + 16, y + 3), 2)
+
+    # ── 집: 지붕 / 실내 / 문 ──────────────────────────────────────────
+    def _draw_houses(self, surf, ox, oy, px, py, ticks):
+        ts = TILE_SIZE
+        for hs in self._houses:
+            x, y, w, h = hs['x'], hs['y'], hs['w'], hs['h']
+            inside = (x < px < x + w - 1) and (y < py < y + h - 1)
+            sx, sy = x * ts - ox, y * ts - oy
+            pw, ph = w * ts, h * ts
+            if inside:
+                self._draw_interior(surf, sx, sy, pw, ph, hs)
+            else:
+                self._draw_roof(surf, sx, sy, pw, ph, hs)
+            dx, dy = hs['door']
+            self._draw_house_door(surf, dx * ts - ox, dy * ts - oy, inside)
+
+    _ROOF_PALETTES = [((176, 72, 56), (140, 50, 38), (206, 100, 82)),   # 붉은 기와
+                      ((84, 96, 140), (58, 68, 108), (118, 132, 176)),  # 청기와
+                      ((120, 100, 66), (86, 70, 44), (156, 132, 92))]   # 갈색 초가
+
+    @classmethod
+    def _draw_roof(cls, surf, sx, sy, pw, ph, hs):
+        ts = TILE_SIZE
+        roof, roof_d, roof_hi = cls._ROOF_PALETTES[hs['seed'] % len(cls._ROOF_PALETTES)]
+        roof_h = ph - ts                   # 바닥 한 줄은 벽 파사드/문
+        ex = 5                              # 처마 돌출
+        top = sy - 6
+        cx = sx + pw // 2
+        # 지붕 본체
+        pygame.draw.rect(surf, roof, (sx - ex, top + 6, pw + 2 * ex, (sy + roof_h) - (top + 6)))
+        # 삼각 박공(gable) — 위로 솟은 삼각 지붕
+        pygame.draw.polygon(surf, roof_hi, [(cx, top - 8), (sx - ex, top + 8), (sx + pw + ex, top + 8)])
+        pygame.draw.polygon(surf, roof, [(cx, top - 4), (sx - ex + 5, top + 8), (sx + pw + ex - 5, top + 8)])
+        # 용마루 + 기와줄
+        pygame.draw.line(surf, roof_hi, (sx - ex, top + 8), (sx + pw + ex, top + 8), 2)
+        for ry in range(top + 14, sy + roof_h, 7):
+            pygame.draw.line(surf, roof_d, (sx - ex, ry), (sx + pw + ex, ry), 1)
+        # 벽 파사드 (앞면 한 줄) + 창문 2개
+        pygame.draw.rect(surf, (126, 96, 64), (sx, sy + roof_h, pw, ts))
+        pygame.draw.rect(surf, (152, 118, 82), (sx, sy + roof_h, pw, 3))
+        wy = sy + roof_h + ts // 2 - 4
+        for wx in (sx + pw // 4 - 4, sx + 3 * pw // 4 - 4):
+            pygame.draw.rect(surf, (196, 214, 235), (wx, wy, 8, 8))
+            pygame.draw.rect(surf, (90, 66, 42), (wx, wy, 8, 8), 1)
+
+    @staticmethod
+    def _draw_interior(surf, sx, sy, pw, ph, hs):
+        ts = TILE_SIZE
+        ix, iy = sx + ts, sy + ts
+        iw, ih = pw - 2 * ts, ph - 2 * ts
+        if iw <= 0 or ih <= 0:
+            return
+        pygame.draw.rect(surf, (104, 78, 52), (ix, iy, iw, ih))          # 나무 바닥
+        for fy in range(iy, iy + ih, 6):
+            pygame.draw.line(surf, (86, 62, 40), (ix, fy), (ix + iw, fy), 1)
+        pygame.draw.rect(surf, (150, 70, 66),                            # 러그
+                         (ix + iw // 2 - 10, iy + ih // 2 - 7, 20, 14), border_radius=3)
+        if iw >= 30:                                                     # 침대
+            pygame.draw.rect(surf, (150, 78, 74), (ix + 2, iy + 2, 16, 10))
+            pygame.draw.rect(surf, (235, 235, 245), (ix + 2, iy + 2, 5, 10))
+        if ih >= 24:                                                     # 탁자 + 촛불
+            pygame.draw.rect(surf, (120, 88, 52), (ix + iw - 14, iy + ih - 12, 12, 9))
+            pygame.draw.circle(surf, (255, 210, 90), (ix + iw - 8, iy + ih - 8), 2)
+
+    @staticmethod
+    def _draw_house_door(surf, dx, dy, inside):
+        ts = TILE_SIZE
+        pygame.draw.rect(surf, (74, 48, 28), (dx + 7, dy + 3, 18, ts - 4))       # 문틀
+        col = (58, 40, 24) if inside else (132, 88, 50)                          # 열림/닫힘
+        pygame.draw.rect(surf, col, (dx + 9, dy + 5, 14, ts - 6))                # 문짝
+        pygame.draw.line(surf, (86, 58, 34), (dx + 16, dy + 5), (dx + 16, dy + ts - 1), 1)
+        if not inside:
+            pygame.draw.circle(surf, (232, 200, 96), (dx + 20, dy + ts // 2), 2)  # 손잡이
 
     @staticmethod
     def _draw_lamp(s, x, y, tk):
