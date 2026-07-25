@@ -1791,7 +1791,7 @@ class HUD:
 
     # ------------------------------------------------------------------ #
     def render_storage(self, screen, player, storage, item_data, pane, cursor,
-                       capacity=30, upgrade_cost=None):
+                       capacity=30, upgrade_cost=None, carried_groups=None):
         """개인 창고(상자) — 좌: 소지품 / 우: 영구 창고 2패널."""
         from core.lang import localized_name
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -1820,11 +1820,15 @@ class HUD:
                 return ''
             return f' 〈{max(0, cur)}/{mx}〉' if cur > 0 else ' ' + t('broken_tag')
 
+        if carried_groups is None:
+            carried_groups = [{'item': it, 'count': 1} for it in player.inventory]
         col_w = pw // 2 - 24
         panes = [
             (t('storage_carried', len(player.inventory), player.max_inventory),
-             [(it.name, it.enhance_level,
-               _dur_tag(it.durability, it.max_durability)) for it in player.inventory]),
+             [(g['item'].name + (f'  ×{g["count"]}' if g['count'] > 1 else ''),
+               g['item'].enhance_level,
+               _dur_tag(g['item'].durability, g['item'].max_durability))
+              for g in carried_groups]),
             (t('storage_stored', len(storage), capacity),
              [(localized_name(item_data.get(e.get('key', ''), {'name': e.get('key', '?')}))
                + (f'  ×{e.get("count", 1)}' if e.get('count', 1) > 1 else ''),

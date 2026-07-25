@@ -3422,6 +3422,24 @@ class Game:
         self._storage.append(e)
         return True
 
+    def _inv_group_view(self):
+        """소지품을 스택 가능 아이템끼리 묶은 뷰 (창고 UI 표시/이동 공용).
+        각 원소: {'item': 대표 Item, 'count': 개수, 'indices': [인벤 인덱스…]}."""
+        groups = []
+        sig_to_idx = {}
+        for idx, it in enumerate(self.player.inventory):
+            stackable = (self._item_data.get(it.key, {}).get('type') in self._STACK_TYPES
+                         and not it.enhance_level)
+            if stackable and it.key in sig_to_idx:
+                g = groups[sig_to_idx[it.key]]
+                g['count'] += 1
+                g['indices'].append(idx)
+            else:
+                if stackable:
+                    sig_to_idx[it.key] = len(groups)
+                groups.append({'item': it, 'count': 1, 'indices': [idx]})
+        return groups
+
     def _deposit_all_to_storage(self) -> int:
         """소지품 전량을 영구 창고로 이전하고 저장. 이전 개수 반환."""
         from core.save_load import save_storage
@@ -3440,16 +3458,17 @@ class Game:
         """창고 UI: 선택 항목을 반대편으로 이동 (즉시 디스크 저장)."""
         from core.save_load import save_storage
         from entities.item import Item
-        if self._storage_pane == 0:                       # 소지품 → 창고 (스택)
-            inv = self.player.inventory
-            if not inv:
+        if self._storage_pane == 0:                       # 소지품 → 창고 (묶음에서 1개)
+            groups = self._inv_group_view()
+            if not groups:
                 return
-            i = min(self._storage_cursor, len(inv) - 1)
-            it = inv[i]
+            gi = min(self._storage_cursor, len(groups) - 1)
+            g = groups[gi]
+            it = g['item']
             if not self._storage_add(it.key, it.enhance_level, it.durability):
                 self.messages.append((t('storage_cap_full'), 'warn'))
                 return
-            inv.pop(i)
+            self.player.inventory.pop(g['indices'][0])     # 묶음에서 한 개 이동
             self.audio.play('pickup')
         else:                                             # 창고 → 소지품 (스택에서 1개)
             if not self._storage:
@@ -3478,15 +3497,17 @@ class Game:
 
     def _handle_storage_action(self, action):
         ty = action['type']
-        cur_list = self.player.inventory if self._storage_pane == 0 else self._storage
+        # 소지품 패널은 묶음(그룹) 기준으로 커서 이동
+        cur_len = (len(self._inv_group_view()) if self._storage_pane == 0
+                   else len(self._storage))
         if ty == 'move':
             if action.get('dx'):
                 self._storage_pane ^= 1
                 self._storage_cursor = 0
             elif action.get('dy'):
-                if cur_list:
+                if cur_len:
                     self._storage_cursor = ((self._storage_cursor + action['dy'])
-                                            % len(cur_list))
+                                            % cur_len)
         elif ty in ('confirm', 'attack'):                 # Enter/Space 이동
             self._storage_transfer()
 
@@ -5707,7 +5728,8 @@ class Game:
                                     self._item_data, self._storage_pane,
                                     self._storage_cursor,
                                     capacity=self._storage_cap,
-                                    upgrade_cost=self._STORAGE_UPGRADES.get(self._storage_cap))
+                                    upgrade_cost=self._STORAGE_UPGRADES.get(self._storage_cap),
+                                    carried_groups=self._inv_group_view())
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'dialog' and self._dialog:
