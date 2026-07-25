@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.6.0 — The Axeman & a Living Town
+
+A brand-new class, and a town that finally feels like a real place to call home.
+
+### New Class: Axeman 🪓
+- **Axeman** — a fourth class wielding a two-handed axe: massive damage but a slow, weighty swing. Unlock him by reaching **Level 30** and clearing **floor 40**.
+  - **W · Axe Throw**: hurl your axe in a line; it sticks in the ground. Walk over it to **recall it (+SP) and throw again instantly** — or throw a fresh one and eat a 10s cooldown.
+  - **S · Berserk**: surge your attack speed + lifesteal to offset the slow swing.
+  - **D · Leap Smash**: leap in and smash the landing zone.
+  - **R · Ragnarok**: a few seconds of **full invincibility** — boosted move speed, a burning aura that damages everything you touch, and mid-range sweeping swings.
+  - Physical enhanced skills replacing the mage combos: **Axe Storm**, **Earthbreaker**, **Berserker's Charge**.
+  - Heavy dedicated axe-swing animation with dust and shockwaves.
+- **Pet summon key (V)** — summon or dismiss your pet on demand.
+
+### A Living Town 🏘️
+- **Massively expanded town** (roughly 4× bigger) with districts, streets, a **river crossed by bridges**, a central fountain and hero **statue**, and crowds of wandering townsfolk.
+- **Farm** with crop fields and animals — chickens, cows, sheep, and pigs roaming about.
+- **Varied houses**: triangular roofs, doors, and big windows — some L-shaped, each with a unique interior. Walk through the door and the roof lifts to reveal the room inside.
+- **Themed interiors**: the inn, smithy (forge & anvil), the market stocked like a grocery, and the warehouse loaded with crates — each looks the part. **Shop signs** mark every store.
+
+### Your Home 🏡
+- **My Home** — your own house by the farm. Interact with the planning board to **redecorate** (5 interior styles: cozy, noble, rustic, study, garden), saved permanently.
+- **Home storage** — stash up to **100 items** right from home.
+- **Boss trophies** — clear boss floors and watch a shelf of trophies fill your home, one gem-topped cup per boss floor conquered.
+
+### Quality of life
+- **Storage stacking** — identical items now stack with a count (×N) on both the carried and stored sides.
+- **Minimap** auto-scales for the big town and shows NPC markers.
+
 ## v2.5.0 — The Ever-Changing Depths
 
 No two floors alike anymore — the dungeon now reshapes its very skeleton, hides gambles and vaults, and can collapse under your feet.
