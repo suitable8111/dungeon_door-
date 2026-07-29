@@ -3026,9 +3026,10 @@ class Game:
         # 농장: 재방문할 때마다 심은 작물이 한 단계 성장
         from core.town import FARM_GROW_MAX as _FGM
         farm = self._farm_state()
-        for plot in farm:
-            if plot.get('crop') and plot.get('stage', 0) < _FGM:
+        for plot in farm:                       # 물 준 작물만 한 단계 성장(물 소모)
+            if plot.get('crop') and plot.get('stage', 0) < _FGM and plot.get('watered'):
                 plot['stage'] = plot.get('stage', 0) + 1
+                plot['watered'] = False
         self._records['farm'] = farm
         self._town.farm = farm
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
@@ -3581,7 +3582,7 @@ class Game:
         crop = plot.get('crop')
         if not crop:                                       # 심기
             cid, _col, _val = random.choice(CROPS)
-            plot['crop'] = cid; plot['stage'] = 0
+            plot['crop'] = cid; plot['stage'] = 0; plot['watered'] = False
             self.messages.append((t('farm_planted', t('crop_' + cid)), 'good'))
             self.animator.particles.emit_heal(self.player.x, self.player.y)
             self.audio.play('use_item')
@@ -3593,8 +3594,13 @@ class Game:
             self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
             self.animator.particles.emit_levelup(self.player.x, self.player.y)
             self.audio.play('buy')
-            plot['crop'] = None; plot['stage'] = 0
-        else:                                              # 성장 중
+            plot['crop'] = None; plot['stage'] = 0; plot['watered'] = False
+        elif not plot.get('watered'):                      # 물주기
+            plot['watered'] = True
+            self.messages.append((t('farm_watered', t('crop_' + crop)), 'good'))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self.audio.play('use_item')
+        else:                                              # 이미 물 줌 (성장 대기)
             self.messages.append((t('farm_growing', FARM_GROW_MAX - plot.get('stage', 0)), 'info'))
             self.audio.play('menu_select')
             return

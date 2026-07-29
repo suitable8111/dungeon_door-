@@ -470,6 +470,8 @@ class TownScene:
         txt = font.render(t('town_portal_label'), True, (170, 140, 255))
         surf.blit(txt, (sx + ts // 2 - txt.get_width() // 2, sy - 14))
 
+        self._draw_farm_prompt(surf, ox, oy, px, py, font)   # 밭칸 [E] 안내
+
     @staticmethod
     def draw_portal(surf, pos, cam_x, cam_y, color=(160, 90, 255)):
         """소용돌이 포탈 — 던전 귀환 포탈과 공용."""
@@ -529,15 +531,44 @@ class TownScene:
         if (tk // 400) % 3 == 0:
             pygame.draw.circle(s, (255, 250, 220), (cx + 16, y + 3), 2)
 
+    def _farm_action_key(self, idx):
+        """밭칸 상태에 맞는 안내 문구 키 (심기/물주기/수확/성장중)."""
+        st = self.farm[idx] if idx < len(self.farm) else {}
+        if not st.get('crop'):
+            return 'farm_hint_plant'
+        if st.get('stage', 0) >= FARM_GROW_MAX:
+            return 'farm_hint_harvest'
+        return 'farm_hint_grown' if st.get('watered') else 'farm_hint_water'
+
+    def _draw_farm_prompt(self, surf, ox, oy, px, py, font):
+        """플레이어가 선 밭칸 위에 [E] 액션 안내 표시."""
+        idx = self.farm_plot_at(px, py)
+        if idx is None:
+            return
+        fx, fy = FARM_PLOTS[idx]
+        sx = fx * TILE_SIZE - ox + TILE_SIZE // 2
+        sy = fy * TILE_SIZE - oy
+        txt = font.render(t(self._farm_action_key(idx)), True, (255, 235, 140))
+        bg = pygame.Surface((txt.get_width() + 8, txt.get_height() + 3), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 175))
+        surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
+        surf.blit(txt, (sx - txt.get_width() // 2, sy - 17))
+
     # ── 농장: 인터랙티브 밭 / 울타리 / 동물 ──────────────────────────
     def _draw_farm_plots(self, surf, ox, oy, ticks):
         ts = TILE_SIZE
         for i, (fx, fy) in enumerate(FARM_PLOTS):
             x, y = fx * ts - ox, fy * ts - oy
             st = self.farm[i] if i < len(self.farm) else {'crop': None, 'stage': 0}
-            pygame.draw.rect(surf, (86, 60, 38), (x + 3, y + 10, ts - 6, ts - 13))   # 흙칸
-            pygame.draw.rect(surf, (66, 44, 28), (x + 3, y + 10, ts - 6, 2))
+            watered = st.get('watered')
+            soil = (58, 42, 28) if watered else (92, 66, 42)         # 젖은 흙은 어둡게
+            pygame.draw.rect(surf, soil, (x + 3, y + 10, ts - 6, ts - 13))   # 흙칸
+            pygame.draw.rect(surf, (max(0, soil[0] - 16), max(0, soil[1] - 14),
+                                    max(0, soil[2] - 10)), (x + 3, y + 10, ts - 6, 2))
             pygame.draw.line(surf, (72, 48, 30), (x + 3, y + ts - 8), (x + ts - 3, y + ts - 8), 1)
+            if watered:                                             # 물방울
+                for dx in (8, 17, 25):
+                    pygame.draw.circle(surf, (96, 156, 204), (x + dx, y + ts - 5), 1)
             crop = st.get('crop')
             if not crop:
                 continue
