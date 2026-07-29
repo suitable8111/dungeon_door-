@@ -3023,6 +3023,14 @@ class Game:
             self._town = TownScene()
         self._town.home_style = int(self._records.get('home_style', 0))   # 내 집 인테리어
         self._town.trophies = int(self._records.get('max_boss_floor', 0)) // 5  # 보스 전리품(보스층 수)
+        # 농장: 재방문할 때마다 심은 작물이 한 단계 성장
+        from core.town import FARM_GROW_MAX as _FGM
+        farm = self._farm_state()
+        for plot in farm:
+            if plot.get('crop') and plot.get('stage', 0) < _FGM:
+                plot['stage'] = plot.get('stage', 0) + 1
+        self._records['farm'] = farm
+        self._town.farm = farm
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
         self._dungeon_session = {
             'dungeon': self.dungeon,
@@ -3514,7 +3522,14 @@ class Game:
     def _town_interact(self):
         """마을에서 E: 인접 NPC 상호작용."""
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
-        if not npc:
+        _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board', 'home_chest')
+        interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
+        if not interactive:
+            # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사(심기/수확)
+            if self._town:
+                idx = self._town.farm_plot_at(self.player.x, self.player.y)
+                if idx is not None:
+                    self._farm_interact(idx)
             return
         if npc['id'] == 'chest':
             self._storage_cursor = 0
@@ -3544,6 +3559,48 @@ class Game:
             self.audio.play('shop_open')
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
+
+    def _farm_state(self):
+        """records의 밭 상태 리스트를 정규화해 반환 (길이/형식 보정)."""
+        from core.town import FARM_PLOTS
+        farm = self._records.get('farm')
+        if not isinstance(farm, list) or len(farm) != len(FARM_PLOTS):
+            farm = [{'crop': None, 'stage': 0} for _ in FARM_PLOTS]
+        for i in range(len(farm)):
+            if not isinstance(farm[i], dict):
+                farm[i] = {'crop': None, 'stage': 0}
+        return farm
+
+    def _farm_interact(self, idx):
+        """밭칸 상호작용 — 비었으면 심기, 다 자랐으면 수확, 아니면 성장 중."""
+        from core.town import CROPS, FARM_GROW_MAX
+        from core.save_load import save_records
+        import random
+        farm = self._town.farm
+        plot = farm[idx]
+        crop = plot.get('crop')
+        if not crop:                                       # 심기
+            cid, _col, _val = random.choice(CROPS)
+            plot['crop'] = cid; plot['stage'] = 0
+            self.messages.append((t('farm_planted', t('crop_' + cid)), 'good'))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self.audio.play('use_item')
+        elif plot.get('stage', 0) >= FARM_GROW_MAX:        # 수확
+            val = next((v for (cid, c, v) in CROPS if cid == crop), 30)
+            gold = int(val * getattr(self, '_gold_mult', 1.0))
+            self.player.gold += gold
+            self._gold_flash_ms = 220
+            self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self.audio.play('buy')
+            plot['crop'] = None; plot['stage'] = 0
+        else:                                              # 성장 중
+            self.messages.append((t('farm_growing', FARM_GROW_MAX - plot.get('stage', 0)), 'info'))
+            self.audio.play('menu_select')
+            return
+        self._records['farm'] = farm
+        if not self._is_test_mode:
+            save_records(self._records)
 
     _HOME_STYLES = ('cozy', 'noble', 'rustic', 'study', 'garden')
 

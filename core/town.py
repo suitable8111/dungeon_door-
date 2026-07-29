@@ -26,6 +26,13 @@ TOWN_W, TOWN_H = 130, 94      # GTA풍 대형 마을 — 구역·도로·강·�
 
 _CKEY = (255, 0, 255)         # NPC 좌우 반전용 컬러키
 
+# ── 농장(인터랙티브) ─────────────────────────────────────────────────────
+FARM_PLOTS = [(x, y) for y in (43, 46, 49) for x in (17, 20, 23, 26)]  # 12개 밭칸
+FARM_GROW_MAX = 2             # 심고 마을 N번 재방문하면 수확 가능
+# (id, 표시색, 수확 골드) — 심을 때 무작위 선택
+CROPS = [('wheat', (224, 198, 96), 30), ('tomato', (226, 84, 66), 45),
+         ('pumpkin', (234, 152, 52), 60), ('carrot', (232, 142, 72), 40)]
+
 
 def _rand_wait() -> float:
     import random
@@ -62,6 +69,7 @@ class TownScene:
         ts = TILE_SIZE
         self.home_style = 0          # 내 집 인테리어 스타일 (게임이 기록에서 주입)
         self.trophies = {}           # 처치한 테마 보스 전리품 {theme_idx: count} (게임 주입)
+        self.farm = [{'crop': None, 'stage': 0} for _ in FARM_PLOTS]  # 밭 상태(게임 주입)
         self.npcs = []
         # 시설 NPC — 문 앞 상주 (건물별 좌표는 _build_map에서)
         for nid, nk in (('inn', 'npc_storage'), ('chest', 'npc_chest'),
@@ -261,12 +269,8 @@ class TownScene:
                             (74, 78), (61, 68), (58, 86), (64, 86)])
         flat_deco('flower', [(56, 70), (66, 70), (56, 82), (66, 82), (61, 84)])
 
-        # ── 농장 (서부, 강 북쪽) — 헛간 + 밭(이랑) + 울타리 + 동물 ──────────
+        # ── 농장 (서부, 강 북쪽) — 헛간 + 인터랙티브 밭 + 울타리 + 동물 ──────
         building(6, 40, 8, 7, kind='barn')                     # 헛간
-        crop_cells = [(cx_, cy_) for cy_ in range(42, 53, 2)
-                      for cx_ in range(16, 30)
-                      if inb(cx_, cy_) and not blocked(cx_, cy_)]
-        flat_deco('crop', crop_cells)                          # 이랑(통행 가능)
         fence = ([(fx, 40) for fx in range(15, 31)] + [(fx, 53) for fx in range(15, 31)]
                  + [(15, fy) for fy in range(41, 53)] + [(30, fy) for fy in range(41, 53)])
         flat_deco('fence', [(fx, fy) for (fx, fy) in fence if not blocked(fx, fy)])
@@ -370,6 +374,13 @@ class TownScene:
                 return npc
         return None
 
+    def farm_plot_at(self, px: int, py: int):
+        """플레이어가 서 있는 밭칸 인덱스 (없으면 None)."""
+        for i, (fx, fy) in enumerate(FARM_PLOTS):
+            if (px, py) == (fx, fy):
+                return i
+        return None
+
     # ── 렌더링 ────────────────────────────────────────────────────────
     def draw(self, surf, cam_x: int, cam_y: int, px: int, py: int, font):
         ts = TILE_SIZE
@@ -384,6 +395,7 @@ class TownScene:
             self._draw_crop(surf, cx_ * ts - ox, cy_ * ts - oy, ticks)
         for fx_, fy_ in self._deco['fence']:
             self._draw_fence(surf, fx_ * ts - ox, fy_ * ts - oy)
+        self._draw_farm_plots(surf, ox, oy, ticks)      # 인터랙티브 밭
         for fx, fy in self._deco['flower']:
             self._draw_flower(surf, fx * ts - ox, fy * ts - oy, ticks)
         for lx, ly in self._deco['lamp']:
@@ -517,7 +529,32 @@ class TownScene:
         if (tk // 400) % 3 == 0:
             pygame.draw.circle(s, (255, 250, 220), (cx + 16, y + 3), 2)
 
-    # ── 농장: 작물 / 울타리 / 동물 ────────────────────────────────────
+    # ── 농장: 인터랙티브 밭 / 울타리 / 동물 ──────────────────────────
+    def _draw_farm_plots(self, surf, ox, oy, ticks):
+        ts = TILE_SIZE
+        for i, (fx, fy) in enumerate(FARM_PLOTS):
+            x, y = fx * ts - ox, fy * ts - oy
+            st = self.farm[i] if i < len(self.farm) else {'crop': None, 'stage': 0}
+            pygame.draw.rect(surf, (86, 60, 38), (x + 3, y + 10, ts - 6, ts - 13))   # 흙칸
+            pygame.draw.rect(surf, (66, 44, 28), (x + 3, y + 10, ts - 6, 2))
+            pygame.draw.line(surf, (72, 48, 30), (x + 3, y + ts - 8), (x + ts - 3, y + ts - 8), 1)
+            crop = st.get('crop')
+            if not crop:
+                continue
+            stage = st.get('stage', 0)
+            ready = stage >= FARM_GROW_MAX
+            col = next((c for (cid, c, v) in CROPS if cid == crop), (120, 200, 90))
+            sway = int(math.sin(ticks * 0.003 + x) * 1)
+            gh = 3 + min(stage, FARM_GROW_MAX) * 6                  # 성장 높이
+            for ax in (9, 16, 23):
+                gx = x + ax + sway
+                pygame.draw.line(surf, (60, 130, 55), (gx, y + ts - 6), (gx, y + ts - 6 - gh), 2)
+                pygame.draw.circle(surf, (86, 170, 76), (gx, y + ts - 7 - gh), 2 + (1 if ready else 0))
+                if ready:
+                    pygame.draw.circle(surf, col, (gx, y + ts - 8 - gh), 3)     # 열매
+            if ready and (ticks // 300) % 2 == 0:                  # 수확 준비 반짝임
+                pygame.draw.circle(surf, (255, 245, 170), (x + ts // 2, y + 3), 2)
+
     @staticmethod
     def _draw_crop(s, x, y, tk):
         ts = TILE_SIZE
