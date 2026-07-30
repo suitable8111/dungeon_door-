@@ -2830,7 +2830,9 @@ class Game:
             self.messages.append((t('seed_plot_taken'), 'warn'))
             self.audio.play('no_gold')
             return
-        plot['crop'] = crop; plot['stage'] = 0; plot['watered'] = False
+        from core.town import FARM_GROW_MAX
+        plot['crop'] = crop; plot['watered'] = False
+        plot['stage'] = FARM_GROW_MAX if self._is_test_mode else 0  # 테스트: 즉시 수확
         farm[idx] = plot
         self._records['farm'] = farm
         if item in self.player.inventory:
@@ -3760,10 +3762,16 @@ class Game:
         """다음 +1에 필요한 희귀식물 개수 — 누적(현재 레벨 + 2)."""
         return self._relic_bonus()[stat] + 2
 
-    def _farm_action_enabled(self, plot, act):
+    def _plot_ready(self, plot):
+        """수확 가능 여부 — 테스트 모드에선 심자마자 즉시 수확 가능."""
         from core.town import FARM_GROW_MAX
+        if not plot.get('crop'):
+            return False
+        return self._is_test_mode or plot.get('stage', 0) >= FARM_GROW_MAX
+
+    def _farm_action_enabled(self, plot, act):
         crop = plot.get('crop')
-        ready = bool(crop) and plot.get('stage', 0) >= FARM_GROW_MAX
+        ready = self._plot_ready(plot)
         if act == 'plant':   return not crop
         if act == 'water':   return bool(crop) and not ready and not plot.get('watered')
         if act == 'harvest': return ready
@@ -3792,8 +3800,10 @@ class Game:
             return                                          # 불가 → 메뉴 유지
         crop = plot.get('crop')
         if act == 'plant':
+            from core.town import FARM_GROW_MAX
             cid, _c, _v = random.choice(CROPS)
-            plot['crop'] = cid; plot['stage'] = 0; plot['watered'] = False
+            plot['crop'] = cid; plot['watered'] = False
+            plot['stage'] = FARM_GROW_MAX if self._is_test_mode else 0  # 테스트: 즉시 수확
             self.messages.append((t('farm_planted', t('crop_' + cid)), 'good'))
             self.animator.particles.emit_heal(self.player.x, self.player.y)
             self.audio.play('use_item')
@@ -3871,7 +3881,6 @@ class Game:
     def _render_farm_menu(self):
         if self._farm_menu_plot is None or not self._town:
             return
-        from core.town import FARM_GROW_MAX
         plot = self._town.farm[self._farm_menu_plot]
         s = self.screen
         bw, bh = 214, 160
@@ -3881,7 +3890,7 @@ class Game:
         pygame.draw.rect(s, (120, 185, 90), (bx, by, bw, bh), 2, border_radius=6)
         crop = plot.get('crop')
         if crop:
-            ready = plot.get('stage', 0) >= FARM_GROW_MAX
+            ready = self._plot_ready(plot)
             sk = ('farm_status_ready' if ready else
                   ('farm_status_grow' if plot.get('watered') else 'farm_status_dry'))
             status = t('crop_' + crop) + ' — ' + t(sk)
@@ -4036,6 +4045,11 @@ class Game:
         self.state = 'fishing'
         self.audio.play('menu_select')
 
+    # 릴 감기: 어종 등급 → (목표 밴드 반폭, 커서 속도 fraction/ms)
+    _REEL_DIFF = {0: (0.20, 0.0011), 1: (0.15, 0.0014),
+                  2: (0.11, 0.0018), 3: (0.085, 0.0024)}
+    _REEL_LIMIT_MS = 4200
+
     def _update_fishing(self, dt):
         f = self._fish
         if not f:
@@ -4050,6 +4064,15 @@ class Game:
         elif ph == 'bite' and f['t'] >= self._BITE_WINDOW_MS:
             f['phase'] = 'result'; f['result'] = 'miss'; f['t'] = 0.0
             self.audio.play('no_gold')
+        elif ph == 'reel':
+            f['cursor'] += f['dir'] * f['speed'] * dt
+            if f['cursor'] <= 0.0:
+                f['cursor'] = 0.0; f['dir'] = 1
+            elif f['cursor'] >= 1.0:
+                f['cursor'] = 1.0; f['dir'] = -1
+            if f['t'] >= self._REEL_LIMIT_MS:            # 너무 오래 끌면 도망
+                f['phase'] = 'result'; f['result'] = 'escape'; f['t'] = 0.0
+                self.audio.play('no_gold')
 
     def _handle_fishing_action(self, action):
         f = self._fish
@@ -4067,18 +4090,36 @@ class Game:
             f['phase'] = 'result'; f['result'] = 'early'  # 너무 일찍 챔
             self.audio.play('no_gold')
         elif f['phase'] == 'bite':
-            self._fish_catch()
+            self._fish_hook()                            # 챔질 성공 → 릴 감기 단계
+        elif f['phase'] == 'reel':
+            if abs(f['cursor'] - f['band_c']) <= f['band_w']:
+                self._fish_land(*f['pending'])           # 타이밍 명중 → 낚음!
+            else:
+                f['phase'] = 'result'; f['result'] = 'escape'
+                self.audio.play('no_gold')
 
-    def _fish_catch(self):
+    def _fish_hook(self):
+        """챔질 성공 — 어종을 뽑고 등급별 난이도로 릴 감기 미니게임 시작."""
         import random
-        from core.save_load import save_records
-        f = self._fish
         keys = [s[0] for s in self.FISH_SPECIES]
         weights = [s[3] for s in self.FISH_SPECIES]
         key = random.choices(keys, weights=weights, k=1)[0]
         spec = next(s for s in self.FISH_SPECIES if s[0] == key)
         grade = spec[1]
         gold = int(spec[2] * getattr(self, '_gold_mult', 1.0))
+        band_w, spd = self._REEL_DIFF[grade]
+        f = self._fish
+        f.update({'phase': 'reel', 't': 0.0,
+                  'cursor': random.uniform(0.1, 0.9),
+                  'dir': random.choice((-1, 1)), 'speed': spd,
+                  'band_c': random.uniform(0.24, 0.76), 'band_w': band_w,
+                  'pending': (key, grade, gold), 'grade': grade})
+        self.audio.play('button')
+
+    def _fish_land(self, key, grade, gold):
+        """릴 감기 성공 — 보상 지급(골드/카운터/구운 생선) + 결과 화면."""
+        from core.save_load import save_records
+        f = self._fish
         self.player.gold += gold
         self._gold_flash_ms = 220
         counts = self._fish_counts()
@@ -4184,12 +4225,25 @@ class Game:
         ph = f.get('phase')
         cx = wx + ww // 2
         dip = 0
-        if ph == 'bite':
+        if ph in ('bite', 'reel'):
             dip = 8 if (pygame.time.get_ticks() // 90) % 2 == 0 else 3
         bob_y = wy + 20 + dip
         pygame.draw.line(s, (220, 220, 230), (cx, wy - 18), (cx, bob_y), 1)
         pygame.draw.circle(s, (232, 96, 84), (cx, bob_y), 4)
         pygame.draw.circle(s, (250, 220, 210), (cx - 1, bob_y - 1), 1)
+        # ── 릴 감기 바 (좌우로 움직이는 커서를 초록 밴드에 맞춰 E) ──────
+        if ph == 'reel':
+            rx, rw = wx + 12, ww - 24
+            ry = wy + wh - 22
+            pygame.draw.rect(s, (18, 40, 58), (rx, ry, rw, 12), border_radius=6)
+            bc = f.get('band_c', 0.5); bwd = f.get('band_w', 0.15)
+            band_x = int(rx + (bc - bwd) * rw)
+            band_w = max(4, int(2 * bwd * rw))
+            in_band = abs(f.get('cursor', 0) - bc) <= bwd
+            bandcol = (90, 220, 130) if in_band else (70, 170, 100)
+            pygame.draw.rect(s, bandcol, (band_x, ry, band_w, 12), border_radius=6)
+            curx = int(rx + f.get('cursor', 0) * rw)
+            pygame.draw.rect(s, (255, 244, 180), (curx - 2, ry - 4, 4, 20), border_radius=2)
         # 상단/하단 텍스트
         title = self.hud.font_sm.render(t('fish_title'), True, (200, 224, 246))
         s.blit(title, (bx + (bw - title.get_width()) // 2, by + 9))
@@ -4202,12 +4256,18 @@ class Game:
             flash = (pygame.time.get_ticks() // 100) % 2 == 0
             msg = t('fish_bite')
             col = (255, 236, 120) if flash else (255, 170, 60)
+        elif ph == 'reel':
+            flash = (pygame.time.get_ticks() // 120) % 2 == 0
+            msg = t('fish_reel')
+            col = (150, 240, 170) if flash else (110, 200, 140)
         else:
             res = f.get('result')
             if res == 'miss':
                 msg, col = t('fish_miss'), (200, 150, 150)
             elif res == 'early':
                 msg, col = t('fish_early'), (220, 170, 120)
+            elif res == 'escape':
+                msg, col = t('fish_escape'), (210, 160, 150)
             else:
                 grade = f.get('grade', 0)
                 col = self.FISH_GRADE_COL.get(grade, (220, 230, 240))
