@@ -13,6 +13,7 @@ storage_test.json
 # ── 대용량 소스 미디어 (트레일러 원본 녹화 등) ─────────────────────────────
 assets/steam/game_trailer*.mov
 assets/steam/game_tralier*.mov
+assets/steam/*.mp4
 assets/sprites/hero.zip
 
 # ── Python 캐시 ──────────────────────────────────────────────────────────────
