@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.7.0 — Homestead: Farm, Fish & Ranch
+
+The town becomes a life of its own — grow crops, cast a line, and raise a barnyard of your own.
+
+### Interactive Farm 🌱
+- **Tend your plots** from a popup menu: sow, water, harvest, or uproot. Watered crops grow each time you return to town.
+- **Harvest into food** — wheat/tomato/pumpkin/carrot become healing dishes (bread, soup, pie, stew), plus gold and a farming milestone bonus every few harvests.
+- **Seeds** drop from harvests — use a seed on an empty plot to plant that exact crop.
+- **Rare plants** occasionally sprout at harvest (higher-value crops = better odds).
+- **Ancient Altar** — offer rare plants for **permanent ATK / DEF / EVA boosts** that survive death and carry across runs, or exchange a stockpile for a tier of **ancient weapons**.
+
+### Fishing 🎣
+- **Riverbank fishing** — a two-beat minigame: hook on the bite, then **reel by landing the cursor in the green band**. Rarer fish reel faster and narrower.
+- **6 species across 4 grades** (common → legendary Ancient Fish), with weighted rarity and grade payouts.
+- **Grilled fish** joins your harvest stash as a healing food.
+- **Old Angler** by the river trades your catch (by grade) for **ancient relic accessories**.
+
+### Ranch & Chicken Farm 🐄🐔
+- **A fenced ranch** on the east side — buy livestock (chicken, sheep, pig, cow), feed them, and **collect eggs, milk, mutton, and pork belly**. Animals stay for renewable production.
+- **A lively chicken farm** next door with a wandering flock.
+- Pen animals now **mill about** their pens instead of standing still — and none of them escape the fence anymore.
+
+### Inventory Categories 📦
+- **Category tabs** — All / Gear / Items / Harvest, with count badges and per-item accents. Switch by mouse, Tab, or the arrow keys.
+- **Real item icons** — fish, seeds, bread, pie, egg, milk, and meat no longer all look like potions.
+
 ## v2.6.0 — The Axeman & a Living Town
 
 A brand-new class, and a town that finally feels like a real place to call home.
