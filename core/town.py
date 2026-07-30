@@ -70,6 +70,7 @@ class TownScene:
         self._citizen_spots = []     # 배회 엑스트라 시민 지점
         self._animal_spots = []      # 농장 동물 배치 지점
         self._coop_spots = []        # 닭농장 닭 배치 지점
+        self._coop_bounds = None     # 닭농장 마당 범위 (배회 가둠)
         self.portal_pos = (64, 88)   # 남쪽 광장
         self.spawn_pos  = (64, 85)
         self.dungeon = self._build_map()
@@ -143,20 +144,23 @@ class TownScene:
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': _rand_wait(), 'radius': 7,
                               'facing': _r.choice((-1, 1)), 'moving': False})
-        # 농장 동물 — 밭 안을 어슬렁 (비상호작용)
+        # 농장 동물 — 밭 안(울타리 범위)을 어슬렁 (비상호작용)
         kinds = ['chicken', 'cow', 'sheep', 'pig']
+        FARM_BOUNDS = (16, 41, 29, 52)
         for i, (x, y) in enumerate(self._animal_spots):
             self.npcs.append({'id': 'animal', 'animal': kinds[i % len(kinds)],
                               'x': x, 'y': y, 'ambient': True,
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': _rand_wait(), 'radius': 4,
+                              'bounds': FARM_BOUNDS,
                               'facing': _r.choice((-1, 1)), 'moving': False})
-        # 닭농장 — 닭 무리가 마당을 활발히 돌아다님 (비상호작용)
+        # 닭농장 — 닭 무리가 마당(울타리 안)을 활발히 돌아다님 (비상호작용)
         for (x, y) in self._coop_spots:
             self.npcs.append({'id': 'animal', 'animal': 'chicken',
                               'x': x, 'y': y, 'ambient': True,
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': _rand_wait() * 0.5, 'radius': 5,
+                              'bounds': self._coop_bounds,
                               'facing': _r.choice((-1, 1)), 'moving': False})
         # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트)
         self.visible_givers = None
@@ -324,15 +328,16 @@ class TownScene:
                             if not blocked(fx, fy) and (fx, fy) not in _pens
                             and (fx, fy) != (106, 51)])
 
-        # ── 닭농장 (남서, 강 남쪽) — 닭장 + 울타리 + 닭 무리 ──────────────
-        building(9, 62, 6, 5, kind='barn')                     # 닭장(헛간 형태)
-        cfence = ([(fx, 67) for fx in range(8, 25)] + [(fx, 75) for fx in range(8, 25)]
-                  + [(8, fy) for fy in range(68, 75)] + [(24, fy) for fy in range(68, 75)])
+        # ── 닭농장 (목장 서편) — 닭장 + 울타리 + 닭 무리 ──────────────────
+        building(84, 43, 5, 5, kind='barn')                    # 닭장
+        cfence = ([(fx, 43) for fx in range(83, 96)] + [(fx, 54) for fx in range(83, 96)]
+                  + [(83, fy) for fy in range(44, 54)] + [(95, fy) for fy in range(44, 54)])
         flat_deco('fence', [(fx, fy) for (fx, fy) in cfence
-                            if not blocked(fx, fy) and (fx, fy) != (16, 75)])  # 출입구
+                            if not blocked(fx, fy) and (fx, fy) != (89, 54)])  # 출입구
+        self._coop_bounds = (84, 48, 94, 53)   # 닭이 벗어나지 못할 마당 범위
         self._coop_spots = [(fx, fy) for (fx, fy) in
-                            ((11, 70), (15, 71), (19, 69), (13, 73),
-                             (20, 72), (17, 70), (22, 73), (12, 68))
+                            ((86, 49), (90, 48), (88, 51), (85, 50),
+                             (92, 49), (87, 52), (93, 51), (91, 52))
                             if not blocked(fx, fy)]
 
         # ── 도로변 가로등 + 대장간 통 + 외곽 나무 ──────────────────────
@@ -408,12 +413,15 @@ class TownScene:
     def _pick_target(self, npc, occ):
         import random as _r
         hx, hy = npc['home']
+        bnds = npc.get('bounds')          # (x0,y0,x1,y1) 울타리 안으로 배회 제한
         cands = []
         for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
             nx, ny = npc['x'] + ddx, npc['y'] + ddy
             if not self.dungeon.is_walkable(nx, ny):
                 continue
             if abs(nx - hx) + abs(ny - hy) > npc['radius']:
+                continue
+            if bnds and not (bnds[0] <= nx <= bnds[2] and bnds[1] <= ny <= bnds[3]):
                 continue
             if (nx, ny) in occ:
                 continue
