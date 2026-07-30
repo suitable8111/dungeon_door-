@@ -636,5 +636,20 @@
     "name": "고대의 라그나로크", "color": [232, 196, 120],
     "type": "weapon", "effect": "stat_up_all", "value": 20,
     "name_en": "Ancient Ragnarok", "name_ja": "古代のラグナロク", "name_zh": "远古诸神黄昏", "name_ru": "Древний Рагнарёк"
+  },
+  "relic_charm": {
+    "name": "심해의 부적", "color": [120, 190, 210],
+    "type": "accessory", "effect": "stat_up_all", "value": 6,
+    "name_en": "Abyssal Charm", "name_ja": "深海のお守り", "name_zh": "深海护符", "name_ru": "Амулет бездны"
+  },
+  "relic_pendant": {
+    "name": "인어의 목걸이", "color": [110, 214, 196],
+    "type": "accessory", "effect": "stat_up_all", "value": 11,
+    "name_en": "Mermaid Pendant", "name_ja": "人魚の首飾り", "name_zh": "人鱼吊坠", "name_ru": "Кулон русалки"
+  },
+  "relic_crown": {
+    "name": "해신의 왕관", "color": [130, 224, 236],
+    "type": "accessory", "effect": "stat_up_all", "value": 18,
+    "name_en": "Sea God's Crown", "name_ja": "海神の冠", "name_zh": "海神之冠", "name_ru": "Корона морского бога"
   }
 }

@@ -433,6 +433,8 @@ class Game:
         self._farm_menu_plot = None  # 농사 팝업 대상 밭칸
         self._farm_menu_idx = 0      # 농사 팝업 커서
         self._altar_idx = 0          # 고대 제단 메뉴 커서
+        self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
+        self._fish = None            # 낚시 미니게임 상태
         self.dungeon = None
         self.camera  = None
 
@@ -604,6 +606,8 @@ class Game:
                     self._update_collapse(world_dt)  # 붕괴 추격
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
+            elif self.state == 'fishing':
+                self._update_fishing(dt)
             self._update_bgm()
             self._render()
 
@@ -1741,7 +1745,8 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
-                elif self.state in ('storage', 'inn', 'questlog', 'farm_menu', 'altar'):
+                elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
+                                    'altar', 'angler', 'fishing'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -1775,6 +1780,10 @@ class Game:
                 self._handle_farm_menu_action(action)
             elif self.state == 'altar':
                 self._handle_altar_action(action)
+            elif self.state == 'angler':
+                self._handle_angler_action(action)
+            elif self.state == 'fishing':
+                self._handle_fishing_action(action)
             elif self.state == 'inn':
                 self._handle_inn_action(action)
             elif self.state == 'dialog':
@@ -3533,10 +3542,10 @@ class Game:
         """마을에서 E: 인접 NPC 상호작용."""
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
-                         'home_chest', 'altar')
+                         'home_chest', 'altar', 'angler')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
-            # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 액션 팝업
+            # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
             if self._town:
                 idx = self._town.farm_plot_at(self.player.x, self.player.y)
                 if idx is not None:
@@ -3544,6 +3553,8 @@ class Game:
                     self._farm_menu_idx = 0
                     self.state = 'farm_menu'
                     self.audio.play('menu_select')
+                elif self._town.water_adjacent(self.player.x, self.player.y):
+                    self._open_fishing()
             return
         if npc['id'] == 'chest':
             self._storage_cursor = 0
@@ -3573,6 +3584,8 @@ class Game:
             self.audio.play('shop_open')
         elif npc['id'] == 'altar':
             self._open_altar()
+        elif npc['id'] == 'angler':
+            self._open_angler()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -3855,19 +3868,257 @@ class Game:
                 break
             counts[k] -= 1
 
-    def _grant_ancient_weapon(self, wkey):
-        """고대 무기를 영구 창고에 지급 (없는 키면 무시)."""
+    def _grant_ancient_weapon(self, wkey, get_key='altar_weapon_get',
+                              banner_key='altar_weapon_banner'):
+        """고대 무기/유물을 영구 창고에 지급 (없는 키면 무시)."""
         from core.save_load import save_storage
         if wkey not in self._item_data:
             return
         name = self._item_data[wkey].get('name', wkey)
         if self._storage_add(wkey):
             save_storage(self._storage, self._storage_cap)
-            self.messages.append((t('altar_weapon_get', name), 'good'))
-            self.animator.add(BannerAnim(t('altar_weapon_banner'), (240, 190, 110), size=26))
+            self.messages.append((t(get_key, name), 'good'))
+            self.animator.add(BannerAnim(t(banner_key), (240, 190, 110), size=26))
             self.audio.play('levelup')
         else:
             self.messages.append((t('storage_cap_full'), 'warn'))
+
+    # ── 낚시 미니게임 (입질 타이밍) & 낚시 노인(고대 유물 교환) ────────────
+    # (key, grade, gold, weight)   grade: 0 일반 · 1 희귀 · 2 정예 · 3 전설
+    FISH_SPECIES = (('minnow', 0, 12, 42), ('carp', 0, 18, 34),
+                    ('trout', 1, 42, 16), ('koi', 1, 60, 8),
+                    ('golden_koi', 2, 130, 4), ('ancient_fish', 3, 320, 1))
+    FISH_GRADE_COL = {0: (176, 200, 214), 1: (120, 206, 150),
+                      2: (242, 200, 108), 3: (212, 150, 236)}
+    _FISH_POINTS = {0: 1, 1: 3, 2: 8, 3: 20}      # 등급별 교환 포인트
+    _BITE_WINDOW_MS = 750                          # 입질 후 챔질 허용시간
+    # 고대 유물(장신구) 교환 3단계 — (아이템 key, 요구 물고기 포인트)
+    ANGLER_RELICS = (('relic_charm', 20), ('relic_pendant', 48), ('relic_crown', 95))
+
+    def _open_fishing(self):
+        import random
+        self._fish = {'phase': 'cast', 't': 0.0,
+                      'wait': random.uniform(1000, 2600),
+                      'result': None, 'grade': None, 'gold': 0}
+        self.state = 'fishing'
+        self.audio.play('menu_select')
+
+    def _update_fishing(self, dt):
+        f = self._fish
+        if not f:
+            return
+        f['t'] += dt
+        ph = f['phase']
+        if ph == 'cast' and f['t'] >= 350:
+            f['phase'] = 'wait'; f['t'] = 0.0
+        elif ph == 'wait' and f['t'] >= f['wait']:
+            f['phase'] = 'bite'; f['t'] = 0.0
+            self.audio.play('button')                    # 입질 신호
+        elif ph == 'bite' and f['t'] >= self._BITE_WINDOW_MS:
+            f['phase'] = 'result'; f['result'] = 'miss'; f['t'] = 0.0
+            self.audio.play('no_gold')
+
+    def _handle_fishing_action(self, action):
+        f = self._fish
+        if not f:
+            return
+        ty = action['type']
+        confirm = ty in ('confirm', 'attack', 'interact')
+        if f['phase'] == 'result':
+            if confirm:
+                self._open_fishing()                     # 다시 던지기
+            return
+        if not confirm:
+            return
+        if f['phase'] in ('cast', 'wait'):
+            f['phase'] = 'result'; f['result'] = 'early'  # 너무 일찍 챔
+            self.audio.play('no_gold')
+        elif f['phase'] == 'bite':
+            self._fish_catch()
+
+    def _fish_catch(self):
+        import random
+        from core.save_load import save_records
+        f = self._fish
+        keys = [s[0] for s in self.FISH_SPECIES]
+        weights = [s[3] for s in self.FISH_SPECIES]
+        key = random.choices(keys, weights=weights, k=1)[0]
+        spec = next(s for s in self.FISH_SPECIES if s[0] == key)
+        grade = spec[1]
+        gold = int(spec[2] * getattr(self, '_gold_mult', 1.0))
+        self.player.gold += gold
+        self._gold_flash_ms = 220
+        counts = self._fish_counts()
+        counts[key] += 1
+        self._records['fish_total'] = int(self._records.get('fish_total', 0)) + 1
+        f['phase'] = 'result'; f['result'] = key; f['grade'] = grade; f['gold'] = gold
+        if grade >= 2:
+            self.animator.add(BannerAnim(t('fish_grade_' + str(grade)),
+                                         self.FISH_GRADE_COL[grade], size=24))
+            self.audio.play('levelup')
+        else:
+            self.audio.play('buy')
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        if not self._is_test_mode:
+            save_records(self._records)
+
+    def _fish_counts(self) -> dict:
+        c = self._records.get('fish_caught')
+        if not isinstance(c, dict):
+            c = {}
+        counts = {s[0]: int(c.get(s[0], 0)) for s in self.FISH_SPECIES}
+        self._records['fish_caught'] = counts
+        return counts
+
+    def _fish_points(self) -> int:
+        counts = self._fish_counts()
+        grade = {s[0]: s[1] for s in self.FISH_SPECIES}
+        return sum(counts[k] * self._FISH_POINTS[grade[k]] for k in counts)
+
+    def _consume_fish_points(self, need):
+        """낮은 등급 물고기부터 소비해 need 포인트 충당(고급 어종 보존)."""
+        counts = self._fish_counts()
+        grade = {s[0]: s[1] for s in self.FISH_SPECIES}
+        remain = need
+        for k in sorted(counts, key=lambda kk: grade[kk]):
+            while counts[k] > 0 and remain > 0:
+                counts[k] -= 1
+                remain -= self._FISH_POINTS[grade[k]]
+
+    def _open_angler(self):
+        self._angler_idx = 0
+        self.state = 'angler'
+        self.audio.play('shop_open')
+
+    def _angler_options(self):
+        """다음 미획득 고대 유물 1종 + 현재 물고기 포인트."""
+        pts = self._fish_points()
+        claimed = self._records.get('angler_claimed') or []
+        opts = []
+        for (rkey, need) in self.ANGLER_RELICS:
+            if rkey in claimed:
+                continue
+            opts.append({'rkey': rkey, 'need': need, 'pts': pts, 'can': pts >= need})
+            break
+        return opts, pts
+
+    def _handle_angler_action(self, action):
+        ty = action['type']
+        opts, _ = self._angler_options()
+        if not opts:
+            return
+        if ty == 'move':
+            d = action.get('dy') or action.get('dx')
+            if d:
+                self._angler_idx = (self._angler_idx + d) % len(opts)
+                self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._angler_do(opts[self._angler_idx % len(opts)])
+
+    def _angler_do(self, opt):
+        from core.save_load import save_records
+        if not opt['can']:
+            self.messages.append((t('angler_cant'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        self._consume_fish_points(opt['need'])
+        self._grant_ancient_weapon(opt['rkey'], 'angler_relic_get', 'angler_relic_banner')
+        claimed = self._records.setdefault('angler_claimed', [])
+        if opt['rkey'] not in claimed:
+            claimed.append(opt['rkey'])
+        if not self._is_test_mode:
+            save_records(self._records)
+        self._angler_idx = 0
+
+    def _render_fishing(self):
+        f = self._fish or {}
+        s = self.screen
+        bw, bh = 260, 180
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (14, 20, 30), (bx, by, bw, bh), border_radius=7)
+        pygame.draw.rect(s, (110, 170, 220), (bx, by, bw, bh), 2, border_radius=7)
+        # 물 + 찌
+        wx, wy, ww, wh = bx + 16, by + 40, bw - 32, 78
+        pygame.draw.rect(s, (32, 74, 110), (wx, wy, ww, wh), border_radius=5)
+        for i in range(3):
+            yy = wy + 16 + i * 22 + int(3 * math.sin(pygame.time.get_ticks() * 0.003 + i))
+            pygame.draw.line(s, (60, 108, 150), (wx + 8, yy), (wx + ww - 8, yy), 1)
+        ph = f.get('phase')
+        cx = wx + ww // 2
+        dip = 0
+        if ph == 'bite':
+            dip = 8 if (pygame.time.get_ticks() // 90) % 2 == 0 else 3
+        bob_y = wy + 20 + dip
+        pygame.draw.line(s, (220, 220, 230), (cx, wy - 18), (cx, bob_y), 1)
+        pygame.draw.circle(s, (232, 96, 84), (cx, bob_y), 4)
+        pygame.draw.circle(s, (250, 220, 210), (cx - 1, bob_y - 1), 1)
+        # 상단/하단 텍스트
+        title = self.hud.font_sm.render(t('fish_title'), True, (200, 224, 246))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 9))
+        big = self.hud.font_md
+        if ph == 'cast':
+            msg, col = t('fish_cast'), (180, 210, 230)
+        elif ph == 'wait':
+            msg, col = t('fish_wait'), (180, 210, 230)
+        elif ph == 'bite':
+            flash = (pygame.time.get_ticks() // 100) % 2 == 0
+            msg = t('fish_bite')
+            col = (255, 236, 120) if flash else (255, 170, 60)
+        else:
+            res = f.get('result')
+            if res == 'miss':
+                msg, col = t('fish_miss'), (200, 150, 150)
+            elif res == 'early':
+                msg, col = t('fish_early'), (220, 170, 120)
+            else:
+                grade = f.get('grade', 0)
+                col = self.FISH_GRADE_COL.get(grade, (220, 230, 240))
+                msg = t('fish_got', t('fish_' + res), f.get('gold', 0))
+        mt = big.render(msg, True, col)
+        s.blit(mt, (bx + (bw - mt.get_width()) // 2, by + bh - 40))
+        hint = self.hud.font_sm.render(t('fish_hint_menu'), True, (120, 150, 170))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 18))
+
+    def _render_angler(self):
+        opts, pts = self._angler_options()
+        counts = self._fish_counts()
+        s = self.screen
+        bw, bh = 320, 200
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (14, 22, 26), (bx, by, bw, bh), border_radius=7)
+        pygame.draw.rect(s, (120, 180, 200), (bx, by, bw, bh), 2, border_radius=7)
+        title = self.hud.font_sm.render(t('angler_title'), True, (198, 226, 234))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 8))
+        pts_txt = self.hud.font_sm.render(t('angler_points', pts), True, (150, 210, 230))
+        s.blit(pts_txt, (bx + (bw - pts_txt.get_width()) // 2, by + 26))
+        pygame.draw.line(s, (54, 74, 84), (bx + 12, by + 44), (bx + bw - 12, by + 44), 1)
+        # 어종 보유 요약 (등급색, 2열)
+        for i, s0 in enumerate(self.FISH_SPECIES):
+            key, grade = s0[0], s0[1]
+            col = self.FISH_GRADE_COL[grade]
+            ln = self.hud.font_sm.render(f"{t('fish_' + key)} x{counts[key]}", True, col)
+            s.blit(ln, (bx + 18 + (i % 2) * 152, by + 50 + (i // 2) * 20))
+        yb = by + 122
+        if opts:
+            opt = opts[0]
+            sel = True
+            pygame.draw.rect(s, (34, 50, 56), (bx + 12, yb, bw - 24, 34), border_radius=5)
+            pygame.draw.rect(s, (150, 210, 226), (bx + 12, yb, bw - 24, 34), 1, border_radius=5)
+            name = self._item_data.get(opt['rkey'], {}).get('name', opt['rkey'])
+            col = (238, 232, 210) if opt['can'] else (140, 150, 150)
+            ln = self.hud.font_sm.render(t('angler_relic_opt', name), True, col)
+            s.blit(ln, (bx + 22, yb + 5))
+            sub = self.hud.font_sm.render(f"{t('angler_relic_need')} {opt['pts']}/{opt['need']}",
+                                          True, (170, 210, 160) if opt['can'] else (140, 130, 130))
+            s.blit(sub, (bx + 22, yb + 18))
+        else:
+            done = self.hud.font_sm.render(t('angler_done'), True, (180, 210, 200))
+            s.blit(done, (bx + (bw - done.get_width()) // 2, yb + 8))
+        hint = self.hud.font_sm.render(t('angler_hint'), True, (120, 150, 160))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
+
 
     _RELIC_ICON = {'atk': (232, 96, 84), 'def': (110, 168, 236), 'eva': (150, 220, 150)}
 
@@ -6110,6 +6361,10 @@ class Game:
             self._render_farm_menu()
         elif self.state == 'altar':
             self._render_altar()
+        elif self.state == 'angler':
+            self._render_angler()
+        elif self.state == 'fishing':
+            self._render_fishing()
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'dialog' and self._dialog:

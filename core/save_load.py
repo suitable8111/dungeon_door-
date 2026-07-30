@@ -91,6 +91,9 @@ _DEFAULT_RECORDS  = {
     'rare_plants': {},         # 희귀식물 보유 {sunbloom/ironvine/galeleaf: n}
     'relic_bonus': {},         # 영구 강화 {atk/def/eva: +n} (고대 제단)
     'altar_claimed': [],       # 교환 완료한 고대 무기 key 목록
+    'fish_caught': {},         # 낚은 물고기 {어종key: n}
+    'fish_total': 0,           # 누적 낚시 성공 횟수
+    'angler_claimed': [],      # 교환 완료한 고대 유물(장신구) key 목록
 }
 
 # ── 상급 직업 해금 조건 ──────────────────────────────────────────────────

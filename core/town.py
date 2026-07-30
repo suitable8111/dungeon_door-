@@ -33,6 +33,9 @@ FARM_GROW_MAX = 2             # 심고 마을 N번 재방문하면 수확 가능
 CROPS = [('wheat', (224, 198, 96), 30), ('tomato', (226, 84, 66), 45),
          ('pumpkin', (234, 152, 52), 60), ('carrot', (232, 142, 72), 40)]
 
+# ── 낚시(인터랙티브) ─────────────────────────────────────────────────────
+RIVER_Y = 56                  # 강 밴드 상단 y (물 타일 56~57)
+
 
 def _rand_wait() -> float:
     import random
@@ -101,6 +104,16 @@ class TownScene:
                                   'name_key': 'altar_keeper',
                                   'home': (ax, ay), 'fx': ax * ts, 'fy': ay * ts,
                                   'tx': ax, 'ty': ay, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
+        # 낚시 노인 — 강둑 상주 (E로 물고기→고대 유물 교환)
+        for (fx, fy) in ((50, RIVER_Y - 1), (76, RIVER_Y + 2),
+                         (28, RIVER_Y - 1), (100, RIVER_Y + 2)):
+            if self.dungeon.is_walkable(fx, fy) and self.water_adjacent(fx, fy):
+                self.npcs.append({'id': 'angler', 'x': fx, 'y': fy,
+                                  'name_key': 'angler_keeper',
+                                  'home': (fx, fy), 'fx': fx * ts, 'fy': fy * ts,
+                                  'tx': fx, 'ty': fy, 'wait': 0.0, 'radius': 0,
                                   'facing': 1, 'moving': False})
                 break
         # 퀘스트 시민 5명 — 배회
@@ -390,6 +403,17 @@ class TownScene:
                 return i
         return None
 
+    def water_adjacent(self, px: int, py: int):
+        """플레이어 상하좌우에 물 타일이 있으면 (물칸 좌표) 반환 — 낚시터 판정."""
+        from map.tile import TileType
+        d = self.dungeon
+        for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+            wx, wy = px + dx, py + dy
+            if 0 <= wy < d.height and 0 <= wx < d.width:
+                if d.tiles[wy][wx].tile_type == TileType.WATER:
+                    return (wx, wy)
+        return None
+
     # ── 렌더링 ────────────────────────────────────────────────────────
     def draw(self, surf, cam_x: int, cam_y: int, px: int, py: int, font):
         ts = TILE_SIZE
@@ -457,6 +481,8 @@ class TownScene:
                 self._draw_home_board(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'altar':                   # 고대 제단 (희귀식물 교환)
                 self._draw_altar(surf, sx, sy + walk, ticks)
+            elif npc['id'] == 'angler':                  # 낚시 노인 (물고기 교환)
+                self._draw_angler(surf, sx, sy + walk, npc.get('facing', 1), ticks)
             elif npc['id'] == 'home_chest':              # 내 집 보관함
                 mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
@@ -482,6 +508,7 @@ class TownScene:
         surf.blit(txt, (sx + ts // 2 - txt.get_width() // 2, sy - 14))
 
         self._draw_farm_prompt(surf, ox, oy, px, py, font)   # 밭칸 [E] 안내
+        self._draw_fishing_prompt(surf, ox, oy, px, py, font)  # 강둑 [E] 낚시 안내
 
     @staticmethod
     def draw_portal(surf, pos, cam_x, cam_y, color=(160, 90, 255)):
@@ -560,6 +587,20 @@ class TownScene:
         sx = fx * TILE_SIZE - ox + TILE_SIZE // 2
         sy = fy * TILE_SIZE - oy
         txt = font.render(t('farm_hint_open'), True, (255, 235, 140))
+        bg = pygame.Surface((txt.get_width() + 8, txt.get_height() + 3), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 175))
+        surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
+        surf.blit(txt, (sx - txt.get_width() // 2, sy - 17))
+
+    def _draw_fishing_prompt(self, surf, ox, oy, px, py, font):
+        """강둑에 서면 [E] 낚시 안내 (인접 NPC/밭칸 없을 때만)."""
+        if self.npc_near(px, py) or self.farm_plot_at(px, py) is not None:
+            return
+        if self.water_adjacent(px, py) is None:
+            return
+        sx = px * TILE_SIZE - ox + TILE_SIZE // 2
+        sy = py * TILE_SIZE - oy
+        txt = font.render(t('fish_hint'), True, (150, 220, 255))
         bg = pygame.Surface((txt.get_width() + 8, txt.get_height() + 3), pygame.SRCALPHA)
         bg.fill((0, 0, 0, 175))
         surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
@@ -694,6 +735,27 @@ class TownScene:
                             [(cx, cyf - 8), (cx - 2, cyf - 1), (cx, cyf + 2), (cx + 2, cyf - 1)])
         if (tk // 240) % 2 == 0:
             pygame.draw.circle(surf, (255, 246, 200), (cx + 4, cyf - 4), 1)
+
+    @staticmethod
+    def _draw_angler(surf, x, y, facing, tk):
+        """낚시 노인 — 밀짚모자 + 낚싯대를 강 쪽으로 드리운 노인."""
+        import math as _m
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        # 몸통(외투) + 머리
+        pygame.draw.rect(surf, (86, 104, 96), (cx - 5, y + 13, 10, 12))
+        pygame.draw.circle(surf, (226, 196, 166), (cx, y + 10), 5)
+        pygame.draw.rect(surf, (206, 200, 180), (cx - 3, y + 12, 6, 3))     # 흰 수염
+        # 밀짚모자
+        pygame.draw.ellipse(surf, (204, 176, 108), (cx - 8, y + 5, 16, 5))
+        pygame.draw.ellipse(surf, (224, 198, 128), (cx - 4, y + 2, 8, 5))
+        # 낚싯대(앞으로) + 흔들리는 낚싯줄
+        rod_x = cx + 8 * facing
+        pygame.draw.line(surf, (140, 96, 54), (cx + 2 * facing, y + 15),
+                         (rod_x, y + 4), 2)
+        bob = y + 20 + int(2 * _m.sin(tk * 0.005))
+        pygame.draw.line(surf, (210, 210, 220), (rod_x, y + 4), (rod_x, bob), 1)
+        pygame.draw.circle(surf, (228, 96, 84), (rod_x, bob), 2)             # 찌
 
     def _draw_trophies(self, surf, ix, iy, iw):
         """내 집 실내 상단 선반에 보스 전리품(처치한 보스층 수)을 진열."""
