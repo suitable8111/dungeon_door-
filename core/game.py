@@ -2801,6 +2801,8 @@ class Game:
             if item in self.player.inventory:
                 self.player.inventory.remove(item)
             self._skill_whirl(no_cooldown=True)
+        elif item.effect == 'seed':
+            self._plant_seed(item)
         elif item.equip_slot:
             msg = item.use(self.player)
             self.messages.append((msg, 'good'))
@@ -2811,6 +2813,34 @@ class Game:
                 self.player.inventory.remove(item)
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
+
+    def _plant_seed(self, item):
+        """씨앗 아이템 사용 — 서 있는 빈 밭칸에 해당 작물을 심는다."""
+        from core.save_load import save_records
+        crop = self._SEED_CROP.get(item.key)
+        idx = (self._town.farm_plot_at(self.player.x, self.player.y)
+               if (self._in_town and self._town) else None)
+        if crop is None or idx is None:
+            self.messages.append((t('seed_need_plot'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        farm = self._town.farm
+        plot = farm[idx]
+        if plot.get('crop'):
+            self.messages.append((t('seed_plot_taken'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        plot['crop'] = crop; plot['stage'] = 0; plot['watered'] = False
+        farm[idx] = plot
+        self._records['farm'] = farm
+        if item in self.player.inventory:
+            self.player.inventory.remove(item)
+        if not self._is_test_mode:
+            save_records(self._records)
+        self.messages.append((t('farm_planted', t('crop_' + crop)), 'good'))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self.audio.play('use_item')
+        self.state = 'playing'                 # 인벤 닫고 밭 확인
 
     def _player_attack(self, enemy, dmg_mul=1.0):
         # 두려움: 명중률 40%
@@ -3688,6 +3718,9 @@ class Game:
     FARM_ACTIONS = ('plant', 'water', 'harvest', 'uproot')
     _CROP_PRODUCE = {'wheat': 'food_bread', 'tomato': 'food_soup',
                      'pumpkin': 'food_pie', 'carrot': 'food_stew'}
+    _CROP_SEED = {'wheat': 'seed_wheat', 'tomato': 'seed_tomato',
+                  'pumpkin': 'seed_pumpkin', 'carrot': 'seed_carrot'}
+    _SEED_CROP = {v: k for k, v in _CROP_SEED.items()}
 
     # ── 희귀식물(고대 제단) ────────────────────────────────────────────────
     # 수확 시 낮은 확률로 등장 → 영구 스탯 강화 재료 & 고대 무기 교환 재료.
@@ -3801,6 +3834,10 @@ class Game:
             self.messages.append((t('farm_harvest_item', added, gold), 'good'))
         else:
             self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
+        # 채집품: 씨앗을 인벤토리에 지급 (밭에서 다시 심을 수 있음)
+        seed = self._give_inventory_item(self._CROP_SEED.get(crop))
+        if seed:
+            self.messages.append((t('farm_seed_get', seed), 'info'))
         self.animator.particles.emit_levelup(self.player.x, self.player.y)
         self.audio.play('buy')
         self._farm_quest_progress()
@@ -3979,6 +4016,18 @@ class Game:
     # 고대 유물(장신구) 교환 3단계 — (아이템 key, 요구 물고기 포인트)
     ANGLER_RELICS = (('relic_charm', 20), ('relic_pendant', 48), ('relic_crown', 95))
 
+    def _give_inventory_item(self, key):
+        """아이템 1개를 인벤토리에 지급. 성공 시 이름, 실패(꽉참/없음) 시 None."""
+        from entities.item import Item
+        if key not in self._item_data:
+            return None
+        if len(self.player.inventory) >= self.player.max_inventory:
+            return None
+        d = dict(self._item_data[key]); d['key'] = key
+        it = Item(0, 0, d)
+        self.player.inventory.append(it)
+        return it.name
+
     def _open_fishing(self):
         import random
         self._fish = {'phase': 'cast', 't': 0.0,
@@ -4035,6 +4084,10 @@ class Game:
         counts = self._fish_counts()
         counts[key] += 1
         self._records['fish_total'] = int(self._records.get('fish_total', 0)) + 1
+        # 채집품: 구운 생선을 인벤토리에 지급(고급 어종은 특상 생선구이)
+        f['food'] = self._give_inventory_item('deluxe_fish' if grade >= 2 else 'grilled_fish')
+        if f['food']:
+            self.messages.append((t('fish_food_get', f['food']), 'info'))
         f['phase'] = 'result'; f['result'] = key; f['grade'] = grade; f['gold'] = gold
         if grade >= 2:
             self.animator.add(BannerAnim(t('fish_grade_' + str(grade)),

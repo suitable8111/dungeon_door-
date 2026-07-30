@@ -763,5 +763,101 @@
     "name_ja": "海神の冠",
     "name_zh": "海神之冠",
     "name_ru": "Корона морского бога"
+  },
+  "grilled_fish": {
+    "name": "생선구이",
+    "color": [
+      210,
+      170,
+      120
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 26,
+    "category": "gather",
+    "name_en": "Grilled Fish",
+    "name_ja": "焼き魚",
+    "name_zh": "烤鱼",
+    "name_ru": "Жареная рыба"
+  },
+  "deluxe_fish": {
+    "name": "특상 생선구이",
+    "color": [
+      236,
+      196,
+      120
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 52,
+    "category": "gather",
+    "name_en": "Deluxe Grilled Fish",
+    "name_ja": "特上焼き魚",
+    "name_zh": "顶级烤鱼",
+    "name_ru": "Отборная рыба"
+  },
+  "seed_wheat": {
+    "name": "밀 씨앗",
+    "color": [
+      214,
+      196,
+      120
+    ],
+    "type": "consumable",
+    "effect": "seed",
+    "value": 0,
+    "category": "gather",
+    "name_en": "Wheat Seed",
+    "name_ja": "小麦の種",
+    "name_zh": "小麦种子",
+    "name_ru": "Семя пшеницы"
+  },
+  "seed_tomato": {
+    "name": "토마토 씨앗",
+    "color": [
+      220,
+      110,
+      96
+    ],
+    "type": "consumable",
+    "effect": "seed",
+    "value": 0,
+    "category": "gather",
+    "name_en": "Tomato Seed",
+    "name_ja": "トマトの種",
+    "name_zh": "番茄种子",
+    "name_ru": "Семя помидора"
+  },
+  "seed_pumpkin": {
+    "name": "호박 씨앗",
+    "color": [
+      226,
+      160,
+      80
+    ],
+    "type": "consumable",
+    "effect": "seed",
+    "value": 0,
+    "category": "gather",
+    "name_en": "Pumpkin Seed",
+    "name_ja": "カボチャの種",
+    "name_zh": "南瓜种子",
+    "name_ru": "Семя тыквы"
+  },
+  "seed_carrot": {
+    "name": "당근 씨앗",
+    "color": [
+      226,
+      150,
+      96
+    ],
+    "type": "consumable",
+    "effect": "seed",
+    "value": 0,
+    "category": "gather",
+    "name_en": "Carrot Seed",
+    "name_ja": "ニンジンの種",
+    "name_zh": "胡萝卜种子",
+    "name_ru": "Семя моркови"
   }
 }

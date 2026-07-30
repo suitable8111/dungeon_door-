@@ -1295,13 +1295,16 @@ class HUD:
     _INV_EQUIP_TYPES = ('weapon', 'armor', 'head', 'off_hand', 'accessory',
                         'boots', 'feet')
 
+    _INV_GATHER_PREFIXES = ('food_', 'seed_', 'grilled', 'deluxe')
+
     def _inv_cat_of(self, item):
         """아이템 → 카테고리(슬롯 색 강조용). game._item_category와 동일 규칙."""
         if item is None:
             return 'consume'
         if item.item_type in self._INV_EQUIP_TYPES:
             return 'equip'
-        if (getattr(item, 'key', '') or '').startswith('food_'):
+        key = getattr(item, 'key', '') or ''
+        if key.startswith(self._INV_GATHER_PREFIXES):
             return 'gather'
         return 'consume'
 
