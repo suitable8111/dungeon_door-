@@ -1289,19 +1289,42 @@ class HUD:
         screen.blit(self.font_sm.render(text, True, color), (x, y))
 
     # ------------------------------------------------------------------ #
+    _INV_CAT_COL = {'equip': (108, 152, 232), 'consume': (108, 200, 140),
+                    'gather': (232, 182, 92)}
+    _INV_CAT_KEYS = ('all', 'equip', 'consume', 'gather')
+    _INV_EQUIP_TYPES = ('weapon', 'armor', 'head', 'off_hand', 'accessory',
+                        'boots', 'feet')
+
+    def _inv_cat_of(self, item):
+        """아이템 → 카테고리(슬롯 색 강조용). game._item_category와 동일 규칙."""
+        if item is None:
+            return 'consume'
+        if item.item_type in self._INV_EQUIP_TYPES:
+            return 'equip'
+        if (getattr(item, 'key', '') or '').startswith('food_'):
+            return 'gather'
+        return 'consume'
+
     def render_inventory(self, screen, player, sel, mouse_pos=(0, 0),
-                         drag_idx=None, drag_pos=(0, 0)):
-        """인벤토리 화면 오버레이."""
+                         drag_idx=None, drag_pos=(0, 0),
+                         view=None, cat=0, cat_counts=None):
+        """인벤토리 화면 오버레이 (카테고리 탭 + 필터 뷰)."""
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
         ov = pygame.Surface((W, H), pygame.SRCALPHA)
         ov.fill((0, 0, 0, 200))
         screen.blit(ov, (0, 0))
 
+        inv = player.inventory
+        if view is None:
+            view = list(range(len(inv)))
+        cat_counts = cat_counts or {}
+
         cols, rows = 5, 4
         cell = 140
         pad  = 6
+        grid_dy = 76
         pw   = cols * cell + pad * 2
-        ph   = 56 + rows * cell + pad * 2 + 60
+        ph   = grid_dy + rows * cell + pad * 2 + 60
         bx   = W // 2 - pw // 2
         by   = H // 2 - ph // 2
 
@@ -1310,21 +1333,48 @@ class HUD:
 
         # 제목
         title = self.font_lg.render(t('inv_title'), True, GOLD_COLOR)
-        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 12))
-        pygame.draw.line(screen, (60, 60, 90), (bx+12, by+46), (bx+pw-12, by+46))
+        screen.blit(title, (bx + (pw - title.get_width()) // 2, by + 6))
 
-        # 슬롯 그리드
+        # ── 카테고리 탭 (전체/장비/소모품/채집품) ──────────────────────
+        tw = (pw - pad * 2) // 4
+        ty, th = by + 42, 26
+        _tab_lbl = {'all': t('inv_cat_all'), 'equip': t('inv_cat_equip'),
+                    'consume': t('inv_cat_consume'), 'gather': t('inv_cat_gather')}
+        for ci, ckey in enumerate(self._INV_CAT_KEYS):
+            tr = pygame.Rect(bx + pad + ci * tw, ty, tw - 4, th)
+            active = (ci == cat)
+            accent = self._INV_CAT_COL.get(ckey, (150, 150, 170))
+            if active:
+                pygame.draw.rect(screen, (44, 44, 74), tr, border_radius=4)
+                pygame.draw.rect(screen, accent, tr, 2, border_radius=4)
+            elif tr.collidepoint(mouse_pos):
+                pygame.draw.rect(screen, (26, 26, 46), tr, border_radius=4)
+                pygame.draw.rect(screen, (70, 70, 100), tr, 1, border_radius=4)
+            else:
+                pygame.draw.rect(screen, (18, 18, 34), tr, border_radius=4)
+                pygame.draw.rect(screen, (48, 48, 74), tr, 1, border_radius=4)
+            lbl = _tab_lbl[ckey]
+            if ckey != 'all':
+                lbl += f" {cat_counts.get(ckey, 0)}"
+            col = (255, 255, 255) if active else (150, 150, 175)
+            ls = self.font_sm.render(lbl, True, col)
+            screen.blit(ls, (tr.centerx - ls.get_width() // 2,
+                             tr.centery - ls.get_height() // 2))
+
+        # 슬롯 그리드 — view 순서대로 표시
         gx = bx + pad
-        gy = by + 56
-        inv = player.inventory
+        gy = by + grid_dy
         for i in range(player.max_inventory):
             col_i = i % cols
             row_i = i // cols
             sx = gx + col_i * cell
             sy = gy + row_i * cell
 
+            item = inv[view[i]] if i < len(view) else None
             is_sel = (i == sel)
             is_hov = pygame.Rect(sx, sy, cell-2, cell-2).collidepoint(mouse_pos)
+            accent = (self._INV_CAT_COL.get(self._inv_cat_of(item), (60, 60, 90))
+                      if item else None)
             if is_sel:
                 pygame.draw.rect(screen, (50, 50, 90), (sx, sy, cell-2, cell-2), border_radius=4)
                 pygame.draw.rect(screen, GOLD_COLOR,   (sx, sy, cell-2, cell-2), 2, border_radius=4)
@@ -1333,10 +1383,13 @@ class HUD:
                 pygame.draw.rect(screen, (75, 75, 108), (sx, sy, cell-2, cell-2), 1, border_radius=4)
             else:
                 pygame.draw.rect(screen, (20, 20, 38), (sx, sy, cell-2, cell-2), border_radius=4)
-                pygame.draw.rect(screen, (45, 45, 70), (sx, sy, cell-2, cell-2), 1, border_radius=4)
+                pygame.draw.rect(screen, accent if accent else (45, 45, 70),
+                                 (sx, sy, cell-2, cell-2), 1, border_radius=4)
+            if item is not None and accent:
+                pygame.draw.rect(screen, accent, (sx, sy, 4, cell - 2),
+                                 border_top_left_radius=4, border_bottom_left_radius=4)
 
-            if i < len(inv):
-                item = inv[i]
+            if item is not None:
                 # 아이콘
                 ico_size = 44 if USE_MC_ITEMS else 28
                 ico_x = sx + (cell - 2 - ico_size) // 2
@@ -1364,15 +1417,14 @@ class HUD:
                         screen.blit(eq_s, (sx + cell - 2 - eq_s.get_width() - 3, sy + 3))
                         break
             else:
-                empty_s = self.font_sm.render(str(i+1), True, (35, 35, 55))
-                screen.blit(empty_s, (sx + (cell-2-empty_s.get_width())//2,
-                                       sy + (cell-2-empty_s.get_height())//2))
+                pygame.draw.circle(screen, (34, 34, 52),
+                                   (sx + (cell-2)//2, sy + (cell-2)//2), 3)
 
         # 선택된 아이템 정보
         info_y = gy + rows * cell + pad + 4
         pygame.draw.line(screen, (50, 50, 80), (bx+12, info_y), (bx+pw-12, info_y))
-        if sel < len(inv):
-            item = inv[sel]
+        if sel < len(view):
+            item = inv[view[sel]]
             type_map = {'weapon': t('inv_type_weapon'), 'armor': t('inv_type_armor'),
                         'head': t('inv_type_head'), 'off_hand': t('inv_type_off'),
                         'accessory': t('inv_type_acc'), 'boots': t('inv_type_boots'),
@@ -1405,7 +1457,7 @@ class HUD:
         over_trash = (trash_rect.collidepoint(mouse_pos) or
                       (drag_idx is not None and trash_rect.collidepoint(drag_pos)) or
                       drag_outside)
-        has_active = (sel < len(player.inventory)) or (drag_idx is not None)
+        has_active = (sel < len(view)) or (drag_idx is not None)
         if over_trash and has_active:
             pygame.draw.rect(screen, (80, 18, 18), trash_rect, border_radius=4)
             pygame.draw.rect(screen, (240, 70, 70), trash_rect, 2, border_radius=4)

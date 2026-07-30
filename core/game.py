@@ -318,6 +318,7 @@ class Game:
 
         # 인벤토리 / 장비 화면 선택 인덱스
         self._inv_sel   = 0
+        self._inv_cat   = 0   # 카테고리 탭: 0 전체 · 1 장비 · 2 소모품 · 3 채집품
         self._equip_sel = 0
 
         # 인벤토리 드래그 상태
@@ -1633,8 +1634,17 @@ class Game:
                 elif self.state == 'paused':
                     self._handle_pause_click(event.pos)
                 elif self.state == 'inventory':
-                    # 드래그 시작 — 실제 클릭/버리기 처리는 MOUSEBUTTONUP에서
-                    self._inv_drag_idx   = self._inv_slot_at(event.pos)
+                    # 카테고리 탭 클릭이면 전환하고 드래그 안 함
+                    _tab_hit = next((ci for ci, r in enumerate(self._inv_tab_rects())
+                                     if r.collidepoint(event.pos)), None)
+                    if _tab_hit is not None:
+                        self._inv_set_cat(_tab_hit)
+                        self._inv_drag_idx = None
+                    else:
+                        # 드래그 시작 — 뷰 위치를 실제 인벤 인덱스로 변환해 보관
+                        _vp = self._inv_slot_at(event.pos)
+                        self._inv_drag_idx = (self._inv_real_idx(_vp)
+                                              if _vp is not None else None)
                     self._inv_drag_start = event.pos
                     self._inv_drag_pos   = event.pos
                 elif self.state == 'equipment':
@@ -1675,8 +1685,12 @@ class Game:
                         self._inv_confirm_idx = None
                     elif event.key in (pygame.K_n, pygame.K_ESCAPE):
                         self._inv_confirm_idx = None
+                elif self.state == 'inventory' and event.key == pygame.K_TAB:
+                    self._inv_set_cat((self._inv_cat + 1) % len(self._INV_CATS))
                 elif self.state == 'inventory' and event.key in (pygame.K_DELETE, pygame.K_BACKSPACE):
-                    self._start_discard_confirm(self._inv_sel)
+                    _ri = self._inv_real_idx(self._inv_sel)
+                    if _ri is not None:
+                        self._start_discard_confirm(_ri)
                 elif self.state == 'char_create':
                     self._handle_char_create_key(event.key, event.unicode)
                 elif (self.state == 'menu' and self._menu_page == 'main'
@@ -2035,17 +2049,70 @@ class Game:
 
     # ── 인벤토리 레이아웃 헬퍼 ────────────────────────────────────────
     _INV_COLS = 5; _INV_CELL = 140; _INV_PAD = 6
+    _INV_GRID_DY = 76             # 그리드 상단 오프셋 (제목 + 카테고리 탭 아래)
+    _INV_CATS = ('all', 'equip', 'consume', 'gather')
+    _EQUIP_TYPES = ('weapon', 'armor', 'head', 'off_hand', 'accessory',
+                    'boots', 'feet')
 
     def _inv_layout(self):
         pw = self._INV_COLS * self._INV_CELL + self._INV_PAD * 2
-        ph = 56 + 4 * self._INV_CELL + self._INV_PAD * 2 + 60
+        ph = self._INV_GRID_DY + 4 * self._INV_CELL + self._INV_PAD * 2 + 60
         bx = WINDOW_WIDTH  // 2 - pw // 2
         by = WINDOW_HEIGHT // 2 - ph // 2
         return pw, ph, bx, by
 
+    def _item_category(self, item):
+        """아이템 → 카테고리('equip'/'consume'/'gather')."""
+        cat = self._item_data.get(getattr(item, 'key', ''), {}).get('category')
+        if cat in ('equip', 'consume', 'gather'):
+            return cat
+        if item.item_type in self._EQUIP_TYPES:
+            return 'equip'
+        return 'consume'
+
+    def _inv_view(self, cat=None):
+        """현재(또는 지정) 카테고리 탭에 해당하는 실제 인벤 인덱스 리스트.
+        '전체'는 카테고리 순(장비→소모품→채집품)으로 정렬해 보여준다."""
+        if not self.player:
+            return []
+        cat = self._INV_CATS[self._inv_cat] if cat is None else cat
+        inv = self.player.inventory
+        if cat == 'all':
+            order = {'equip': 0, 'consume': 1, 'gather': 2}
+            return sorted(range(len(inv)),
+                          key=lambda i: (order.get(self._item_category(inv[i]), 3), i))
+        return [i for i in range(len(inv)) if self._item_category(inv[i]) == cat]
+
+    def _inv_cat_counts(self):
+        """카테고리별 보유 개수 {equip,consume,gather} (탭 배지용)."""
+        counts = {'equip': 0, 'consume': 0, 'gather': 0}
+        if self.player:
+            for it in self.player.inventory:
+                counts[self._item_category(it)] += 1
+        return counts
+
+    def _inv_real_idx(self, view_pos):
+        """뷰(격자) 위치 → 실제 인벤 인덱스 (범위 밖이면 None)."""
+        view = self._inv_view()
+        return view[view_pos] if 0 <= view_pos < len(view) else None
+
+    def _inv_tab_rects(self):
+        """카테고리 탭 사각형 4개 (전체/장비/소모품/채집품) — 클릭 판정 공용."""
+        pw, ph, bx, by = self._inv_layout()
+        tw = (pw - self._INV_PAD * 2) // 4
+        ty, th = by + 42, 26
+        return [pygame.Rect(bx + self._INV_PAD + i * tw, ty, tw - 4, th)
+                for i in range(4)]
+
+    def _inv_set_cat(self, cat_idx):
+        if cat_idx != self._inv_cat:
+            self._inv_cat = cat_idx % len(self._INV_CATS)
+            self._inv_sel = 0
+            self.audio.play('menu_select')
+
     def _inv_slot_at(self, pos):
         _, _, bx, by = self._inv_layout()
-        gx = bx + self._INV_PAD; gy = by + 56
+        gx = bx + self._INV_PAD; gy = by + self._INV_GRID_DY
         for i in range(self.player.max_inventory if self.player else 20):
             sx = gx + (i % self._INV_COLS) * self._INV_CELL
             sy = gy + (i // self._INV_COLS) * self._INV_CELL
@@ -2085,13 +2152,21 @@ class Game:
         return panel, yes_rect, no_rect
 
     def _handle_inventory_click(self, pos):
+        # 카테고리 탭 클릭 우선
+        for ci, r in enumerate(self._inv_tab_rects()):
+            if r.collidepoint(pos):
+                self._inv_set_cat(ci)
+                return
         i = self._inv_slot_at(pos)
         if i is None:
             return
-        inv = self.player.inventory
-        if i == self._inv_sel and i < len(inv):
-            self._do_use_inventory_item(inv[i])
-            self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
+        view = self._inv_view()
+        if i >= len(view):
+            return
+        real = view[i]
+        if i == self._inv_sel:
+            self._do_use_inventory_item(self.player.inventory[real])
+            self._inv_sel = min(self._inv_sel, max(0, len(self._inv_view()) - 1))
         else:
             self._inv_sel = i
 
@@ -2211,14 +2286,23 @@ class Game:
         t = action['type']
         inv = self.player.inventory
         cols = 5
+        view = self._inv_view()
         if t == 'move':
             dx, dy = action.get('dx', 0), action.get('dy', 0)
-            self._inv_sel = max(0, min(self.player.max_inventory - 1,
-                                       self._inv_sel + dx + dy * cols))
+            # 좌우 끝에서 좌우 이동 → 카테고리 탭 전환
+            if dx and not dy:
+                col = self._inv_sel % cols
+                if (dx < 0 and col == 0) or (dx > 0 and (col == cols - 1
+                                             or self._inv_sel + 1 >= max(1, len(view)))):
+                    self._inv_set_cat((self._inv_cat + (1 if dx > 0 else -1))
+                                      % len(self._INV_CATS))
+                    return
+            limit = max(0, len(view) - 1)
+            self._inv_sel = max(0, min(limit, self._inv_sel + dx + dy * cols))
         elif t in ('confirm', 'wait', 'attack'):
-            if self._inv_sel < len(inv):
-                self._do_use_inventory_item(inv[self._inv_sel])
-                self._inv_sel = min(self._inv_sel, max(0, len(inv) - 1))
+            if self._inv_sel < len(view):
+                self._do_use_inventory_item(inv[view[self._inv_sel]])
+                self._inv_sel = min(self._inv_sel, max(0, len(self._inv_view()) - 1))
 
     # ------------------------------------------------------------------ #
     def _try_enemy_drop(self, enemy, force=False):
@@ -6386,7 +6470,10 @@ class Game:
             self.hud.render_inventory(self.screen, self.player, self._inv_sel,
                                       mouse_pos=pygame.mouse.get_pos(),
                                       drag_idx=self._inv_drag_idx,
-                                      drag_pos=self._inv_drag_pos)
+                                      drag_pos=self._inv_drag_pos,
+                                      view=self._inv_view(),
+                                      cat=self._inv_cat,
+                                      cat_counts=self._inv_cat_counts())
             if self._inv_confirm_idx is not None and \
                     self._inv_confirm_idx < len(self.player.inventory):
                 item_name = self.player.inventory[self._inv_confirm_idx].name
