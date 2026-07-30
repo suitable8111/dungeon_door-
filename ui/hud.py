@@ -1399,7 +1399,8 @@ class HUD:
                 ico_y = sy + 6
                 if USE_MC_ITEMS:
                     draw_mc_item(screen, ico_x, ico_y, ico_size,
-                                 item.item_type, item.color)
+                                 item.item_type, item.color,
+                                 key=getattr(item, 'key', None))
                 else:
                     pygame.draw.rect(screen, item.color, (ico_x, ico_y, ico_size, ico_size), border_radius=3)
                     pygame.draw.rect(screen, tuple(max(0, c-60) for c in item.color),
@@ -2619,7 +2620,8 @@ class HUD:
                 ico = 16 if USE_MC_ITEMS else 10
                 if USE_MC_ITEMS:
                     draw_mc_item(screen, sx + 3, sy + SH - ico - 3, ico,
-                                 item.item_type, item.color)
+                                 item.item_type, item.color,
+                                 key=getattr(item, 'key', None))
                 else:
                     pygame.draw.rect(screen, item.color, (sx + 5, sy + SH - ico - 5, ico, ico), border_radius=2)
                 nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'

@@ -16,7 +16,24 @@ _WOOD = (140, 100, 56)
 _WOOD_D = (96, 68, 38)
 
 
-def draw_mc_item(surf, x, y, size, item_type, col):
+def _resolve_icon(key, item_type):
+    """아이템 key로 특수 채집품 아이콘 종류를 판별 (없으면 None → 타입 렌더)."""
+    if not key:
+        return None
+    if key.startswith(('grilled', 'deluxe')):
+        return 'fish'
+    if key.startswith('seed_'):
+        return 'seed'
+    if key == 'food_bread':
+        return 'bread'
+    if key in ('food_soup', 'food_stew'):
+        return 'bowl'
+    if key == 'food_pie':
+        return 'pie'
+    return None
+
+
+def draw_mc_item(surf, x, y, size, item_type, col, key=None):
     """16×16 논리 그리드를 size에 맞춰 블록 아이템을 그린다."""
     u = max(1, size // 16)
     ox = x + (size - u * 16) // 2
@@ -28,6 +45,47 @@ def draw_mc_item(surf, x, y, size, item_type, col):
     def diag(cells, c):
         for gx, gy in cells:
             B(gx, gy, c)
+
+    icon = _resolve_icon(key, item_type)
+    if icon == 'fish':                           # 생선 (좌향, 꼬리 우측)
+        body, d, l = col, _D(col, 45), _L(col, 35)
+        B(5, 7, body, 7, 3)                      # 몸통
+        B(6, 6, body, 5, 1); B(6, 10, body, 5, 1)
+        B(12, 6, d, 2, 1); B(12, 10, d, 2, 1)    # 꼬리 위/아래
+        B(13, 7, d, 1, 3)
+        B(5, 7, l, 7, 1)                          # 등 광택
+        B(6, 8, (245, 248, 250)); B(6, 8, (30, 34, 44))  # 눈(머리 왼쪽)
+        B(5, 9, d, 1, 1)                          # 입
+        return
+    if icon == 'seed':                           # 씨앗 몇 알 + 새싹
+        d, l = _D(col, 40), _L(col, 35)
+        B(8, 4, (96, 184, 96)); B(7, 5, (96, 184, 96)); B(9, 5, (120, 206, 120))  # 새싹
+        B(6, 8, col, 2, 3); B(6, 8, l, 2, 1); B(6, 10, d, 2, 1)   # 씨앗1
+        B(9, 9, col, 2, 3); B(9, 9, l, 2, 1); B(9, 11, d, 2, 1)   # 씨앗2
+        B(8, 12, col, 2, 2)                       # 씨앗3
+        return
+    if icon == 'bread':                          # 빵 덩어리
+        d, l = _D(col, 45), _L(col, 30)
+        B(4, 7, col, 8, 5)
+        B(4, 7, l, 8, 1); B(4, 11, d, 8, 1)
+        B(4, 8, col, 1, 3); B(11, 8, col, 1, 3)
+        B(6, 7, d, 1, 4); B(9, 7, d, 1, 4)        # 칼집
+        return
+    if icon == 'bowl':                           # 국/스튜 그릇
+        bowl, bd = (214, 216, 226), (150, 152, 164)
+        B(6, 7, col, 5, 2); B(6, 7, _L(col, 45), 5, 1)   # 국물
+        B(4, 9, bowl, 9, 1)                        # 그릇 테두리
+        B(5, 10, bowl, 7, 2); B(6, 12, bd, 5, 1)   # 그릇 몸통
+        B(4, 9, _L(bowl, 20), 9, 1)
+        return
+    if icon == 'pie':                            # 파이
+        crust, cd, cl = (214, 172, 112), (168, 128, 78), (236, 200, 150)
+        B(4, 9, crust, 8, 3)                      # 바닥 크러스트
+        B(4, 9, cl, 8, 1); B(4, 11, cd, 8, 1)
+        B(5, 7, col, 6, 2)                         # 속(작물색)
+        B(5, 7, _L(col, 40), 6, 1)
+        B(6, 7, cd, 1, 2); B(8, 7, cd, 1, 2); B(10, 7, cd, 1, 2)  # 격자
+        return
 
     t = item_type
     if t == 'weapon':

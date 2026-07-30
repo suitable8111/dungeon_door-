@@ -7610,7 +7610,8 @@ class Game:
             pygame.draw.ellipse(s, (24, 22, 30),
                                 (x + 9, y + ts - 7, ts - 18, 4))   # 발밑 그림자
             from entities.item_icons import draw_mc_item
-            draw_mc_item(s, x + 4, y + 2 + bob, ts - 8, item.item_type, item.color)
+            draw_mc_item(s, x + 4, y + 2 + bob, ts - 8, item.item_type, item.color,
+                         key=getattr(item, 'key', None))
             return
         ccx, ccy = x+ts//2, y+ts//2
         col = item.color
