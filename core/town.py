@@ -69,6 +69,7 @@ class TownScene:
         self._quest_spots = []       # 퀘스트 시민 배치 지점
         self._citizen_spots = []     # 배회 엑스트라 시민 지점
         self._animal_spots = []      # 농장 동물 배치 지점
+        self._coop_spots = []        # 닭농장 닭 배치 지점
         self.portal_pos = (64, 88)   # 남쪽 광장
         self.spawn_pos  = (64, 85)
         self.dungeon = self._build_map()
@@ -149,6 +150,13 @@ class TownScene:
                               'x': x, 'y': y, 'ambient': True,
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': _rand_wait(), 'radius': 4,
+                              'facing': _r.choice((-1, 1)), 'moving': False})
+        # 닭농장 — 닭 무리가 마당을 활발히 돌아다님 (비상호작용)
+        for (x, y) in self._coop_spots:
+            self.npcs.append({'id': 'animal', 'animal': 'chicken',
+                              'x': x, 'y': y, 'ambient': True,
+                              'home': (x, y), 'fx': x * ts, 'fy': y * ts,
+                              'tx': x, 'ty': y, 'wait': _rand_wait() * 0.5, 'radius': 5,
                               'facing': _r.choice((-1, 1)), 'moving': False})
         # 등장한 시민 giver 집합 (None = 전부 표시, 예: 테스트)
         self.visible_givers = None
@@ -315,6 +323,17 @@ class TownScene:
         flat_deco('fence', [(fx, fy) for (fx, fy) in rfence
                             if not blocked(fx, fy) and (fx, fy) not in _pens
                             and (fx, fy) != (106, 51)])
+
+        # ── 닭농장 (남서, 강 남쪽) — 닭장 + 울타리 + 닭 무리 ──────────────
+        building(9, 62, 6, 5, kind='barn')                     # 닭장(헛간 형태)
+        cfence = ([(fx, 67) for fx in range(8, 25)] + [(fx, 75) for fx in range(8, 25)]
+                  + [(8, fy) for fy in range(68, 75)] + [(24, fy) for fy in range(68, 75)])
+        flat_deco('fence', [(fx, fy) for (fx, fy) in cfence
+                            if not blocked(fx, fy) and (fx, fy) != (16, 75)])  # 출입구
+        self._coop_spots = [(fx, fy) for (fx, fy) in
+                            ((11, 70), (15, 71), (19, 69), (13, 73),
+                             (20, 72), (17, 70), (22, 73), (12, 68))
+                            if not blocked(fx, fy)]
 
         # ── 도로변 가로등 + 대장간 통 + 외곽 나무 ──────────────────────
         flat_deco('lamp', [(28, 20), (44, 20), (82, 20), (98, 20),
@@ -659,12 +678,17 @@ class TownScene:
             animal = st.get('animal')
             if not animal:
                 continue
-            self._draw_animal(surf, x, y - 2, animal,
-                              1 if i % 2 == 0 else -1, ticks + i * 90)
+            # 우리 안을 어슬렁 — 좌우로 서성이며 방향 전환
+            phase = ticks * 0.0012 + i * 2.1
+            wx = int(14 * math.sin(phase))
+            wy = int(4 * math.sin(phase * 1.7 + i * 0.7))
+            facing = 1 if math.cos(phase) >= 0 else -1
+            ax, ay = x + wx, y - 2 + wy
+            self._draw_animal(surf, ax, ay, animal, facing, ticks + i * 90)
             if st.get('stage', 0) >= RANCH_FEED_MAX:      # 생산물 준비 반짝
-                by = y - 6 + int(2 * math.sin(ticks * 0.006 + i))
-                pygame.draw.circle(surf, (255, 236, 130), (x + ts - 7, by), 4)
-                pygame.draw.circle(surf, (255, 255, 224), (x + ts - 8, by - 1), 1)
+                by = ay - 4 + int(2 * math.sin(ticks * 0.006 + i))
+                pygame.draw.circle(surf, (255, 236, 130), (ax + ts - 7, by), 4)
+                pygame.draw.circle(surf, (255, 255, 224), (ax + ts - 8, by - 1), 1)
 
     # ── 농장: 인터랙티브 밭 / 울타리 / 동물 ──────────────────────────
     def _draw_farm_plots(self, surf, ox, oy, ticks):
