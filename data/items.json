@@ -601,5 +601,40 @@
     "name_ja": "大斧",
     "name_zh": "巨斧",
     "name_ru": "Секира"
+  },
+  "food_bread": {
+    "name": "갓 구운 빵", "color": [222, 186, 110],
+    "type": "consumable", "effect": "heal", "value": 22,
+    "name_en": "Fresh Bread", "name_ja": "焼きたてパン", "name_zh": "新鲜面包", "name_ru": "Свежий хлеб"
+  },
+  "food_soup": {
+    "name": "토마토 수프", "color": [224, 90, 72],
+    "type": "consumable", "effect": "heal", "value": 28,
+    "name_en": "Tomato Soup", "name_ja": "トマトスープ", "name_zh": "番茄汤", "name_ru": "Томатный суп"
+  },
+  "food_pie": {
+    "name": "호박 파이", "color": [234, 156, 60],
+    "type": "consumable", "effect": "heal", "value": 40,
+    "name_en": "Pumpkin Pie", "name_ja": "カボチャパイ", "name_zh": "南瓜派", "name_ru": "Тыквенный пирог"
+  },
+  "food_stew": {
+    "name": "당근 스튜", "color": [232, 148, 78],
+    "type": "consumable", "effect": "heal", "value": 34,
+    "name_en": "Carrot Stew", "name_ja": "ニンジンシチュー", "name_zh": "胡萝卜炖菜", "name_ru": "Морковное рагу"
+  },
+  "ancient_dagger": {
+    "name": "고대의 단검", "color": [180, 214, 200],
+    "type": "weapon", "effect": "attack_up", "value": 16,
+    "name_en": "Ancient Dagger", "name_ja": "古代の短剣", "name_zh": "远古匕首", "name_ru": "Древний кинжал"
+  },
+  "ancient_glaive": {
+    "name": "고대의 창검", "color": [160, 226, 224],
+    "type": "weapon", "effect": "attack_up", "value": 22,
+    "name_en": "Ancient Glaive", "name_ja": "古代の長刀", "name_zh": "远古长刃", "name_ru": "Древняя глефа"
+  },
+  "ancient_ragnarok": {
+    "name": "고대의 라그나로크", "color": [232, 196, 120],
+    "type": "weapon", "effect": "stat_up_all", "value": 20,
+    "name_en": "Ancient Ragnarok", "name_ja": "古代のラグナロク", "name_zh": "远古诸神黄昏", "name_ru": "Древний Рагнарёк"
   }
 }

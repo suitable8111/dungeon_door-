@@ -94,6 +94,15 @@ class TownScene:
                                   'tx': chx, 'ty': chy, 'wait': 0.0, 'radius': 0,
                                   'facing': 1, 'moving': False})
                 break
+        # 고대 제단지기 — 밭 근처 상주 (E로 희귀식물 교환/영구강화)
+        for (ax, ay) in ((30, 46), (30, 43), (30, 49), (14, 46), (32, 46)):
+            if self.dungeon.is_walkable(ax, ay):
+                self.npcs.append({'id': 'altar', 'x': ax, 'y': ay,
+                                  'name_key': 'altar_keeper',
+                                  'home': (ax, ay), 'fx': ax * ts, 'fy': ay * ts,
+                                  'tx': ax, 'ty': ay, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
         # 퀘스트 시민 5명 — 배회
         qids = ['villager_boy', 'villager_farmer', 'villager_granny',
                 'villager_hunter', 'villager_scholar']
@@ -446,6 +455,8 @@ class TownScene:
                 continue
             if npc['id'] == 'home_board':                # 내 집 커스터마이즈 보드
                 self._draw_home_board(surf, sx, sy + walk, ticks)
+            elif npc['id'] == 'altar':                   # 고대 제단 (희귀식물 교환)
+                self._draw_altar(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'home_chest':              # 내 집 보관함
                 mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
@@ -548,7 +559,7 @@ class TownScene:
         fx, fy = FARM_PLOTS[idx]
         sx = fx * TILE_SIZE - ox + TILE_SIZE // 2
         sy = fy * TILE_SIZE - oy
-        txt = font.render(t(self._farm_action_key(idx)), True, (255, 235, 140))
+        txt = font.render(t('farm_hint_open'), True, (255, 235, 140))
         bg = pygame.Surface((txt.get_width() + 8, txt.get_height() + 3), pygame.SRCALPHA)
         bg.fill((0, 0, 0, 175))
         surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
@@ -657,6 +668,32 @@ class TownScene:
         pygame.draw.rect(surf, (150, 90, 80), (cx - 4, y + 15, 8, 4), 1)
         if (tk // 350) % 2 == 0:
             pygame.draw.circle(surf, (255, 235, 150), (cx + 7, y + 7), 1)
+
+    @staticmethod
+    def _draw_altar(surf, x, y, tk):
+        """고대 제단 — 돌 받침 + 맥동하는 보랏빛 수정."""
+        import math as _m
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        base = y + ts - 3
+        # 돌 받침 (2단)
+        pygame.draw.rect(surf, (78, 72, 92), (cx - 9, base - 6, 18, 6))
+        pygame.draw.rect(surf, (58, 54, 72), (cx - 7, base - 12, 14, 7))
+        pygame.draw.rect(surf, (96, 88, 116), (cx - 9, base - 6, 18, 1))
+        # 룬 광채
+        glow = 0.5 + 0.5 * _m.sin(tk * 0.006)
+        halo = int(60 + 90 * glow)
+        aura = pygame.Surface((ts, ts), pygame.SRCALPHA)
+        pygame.draw.circle(aura, (150, 90, 210, halo), (ts // 2, ts // 2), 9)
+        surf.blit(aura, (x, base - 20 - ts // 2))
+        # 부유 수정
+        cyf = base - 20 - int(2 * _m.sin(tk * 0.005))
+        pygame.draw.polygon(surf, (198, 150, 236),
+                            [(cx, cyf - 8), (cx - 5, cyf), (cx, cyf + 7), (cx + 5, cyf)])
+        pygame.draw.polygon(surf, (238, 214, 252),
+                            [(cx, cyf - 8), (cx - 2, cyf - 1), (cx, cyf + 2), (cx + 2, cyf - 1)])
+        if (tk // 240) % 2 == 0:
+            pygame.draw.circle(surf, (255, 246, 200), (cx + 4, cyf - 4), 1)
 
     def _draw_trophies(self, surf, ix, iy, iw):
         """내 집 실내 상단 선반에 보스 전리품(처치한 보스층 수)을 진열."""

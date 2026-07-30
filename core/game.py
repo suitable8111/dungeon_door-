@@ -430,6 +430,9 @@ class Game:
         self._pet    = None          # 활성 Pet 객체 (런타임)
         self._pet_sel = 0            # 펫 상태창 커서
         self._pet_trail = []         # 플레이어 경로(타일) — 펫이 밟고 따라감
+        self._farm_menu_plot = None  # 농사 팝업 대상 밭칸
+        self._farm_menu_idx = 0      # 농사 팝업 커서
+        self._altar_idx = 0          # 고대 제단 메뉴 커서
         self.dungeon = None
         self.camera  = None
 
@@ -1477,6 +1480,7 @@ class Game:
                                         char_class=self._char_class, char_name=self._char_name,
                                         appearance=self._char_appearance)
         self._attach_pet()
+        self._apply_relic_bonus()
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         if not self._is_test_mode:
@@ -1500,6 +1504,7 @@ class Game:
                                  char_name=getattr(self, '_char_name', 'Hero'))
             self.player.appearance = dict(getattr(self, '_char_appearance', None)
                                           or {'skin': 0, 'hair': 0, 'haircol': 0})
+            self._apply_relic_bonus()
             self.messages.append((t('welcome'), 'good'))
             self.messages.append((t('wasd_hint'), 'info'))
             _hint = {'archer': 'archer_hint', 'mage': 'mage_hint',
@@ -1736,7 +1741,7 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
-                elif self.state in ('storage', 'inn', 'questlog'):
+                elif self.state in ('storage', 'inn', 'questlog', 'farm_menu', 'altar'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -1766,6 +1771,10 @@ class Game:
                 self._handle_shop_action(action)
             elif self.state == 'storage':
                 self._handle_storage_action(action)
+            elif self.state == 'farm_menu':
+                self._handle_farm_menu_action(action)
+            elif self.state == 'altar':
+                self._handle_altar_action(action)
             elif self.state == 'inn':
                 self._handle_inn_action(action)
             elif self.state == 'dialog':
@@ -3523,14 +3532,18 @@ class Game:
     def _town_interact(self):
         """마을에서 E: 인접 NPC 상호작용."""
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
-        _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board', 'home_chest')
+        _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
+                         'home_chest', 'altar')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
-            # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사(심기/수확)
+            # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 액션 팝업
             if self._town:
                 idx = self._town.farm_plot_at(self.player.x, self.player.y)
                 if idx is not None:
-                    self._farm_interact(idx)
+                    self._farm_menu_plot = idx
+                    self._farm_menu_idx = 0
+                    self.state = 'farm_menu'
+                    self.audio.play('menu_select')
             return
         if npc['id'] == 'chest':
             self._storage_cursor = 0
@@ -3558,6 +3571,8 @@ class Game:
             self._storage_pane = 0
             self.state = 'storage'
             self.audio.play('shop_open')
+        elif npc['id'] == 'altar':
+            self._open_altar()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -3572,41 +3587,339 @@ class Game:
                 farm[i] = {'crop': None, 'stage': 0}
         return farm
 
-    def _farm_interact(self, idx):
-        """밭칸 상호작용 — 비었으면 심기, 다 자랐으면 수확, 아니면 성장 중."""
-        from core.town import CROPS, FARM_GROW_MAX
+    # ── 농사 팝업 메뉴 (씨앗뿌리기/물주기/수확하기/뽑고버리기) ──────────
+    FARM_ACTIONS = ('plant', 'water', 'harvest', 'uproot')
+    _CROP_PRODUCE = {'wheat': 'food_bread', 'tomato': 'food_soup',
+                     'pumpkin': 'food_pie', 'carrot': 'food_stew'}
+
+    # ── 희귀식물(고대 제단) ────────────────────────────────────────────────
+    # 수확 시 낮은 확률로 등장 → 영구 스탯 강화 재료 & 고대 무기 교환 재료.
+    RARE_PLANTS = ('sunbloom', 'ironvine', 'galeleaf')   # 공격/방어/회피 계열
+    _RARE_STAT  = {'sunbloom': 'atk', 'ironvine': 'def', 'galeleaf': 'eva'}
+    _RELIC_CAP  = {'atk': 15, 'def': 12, 'eva': 12}       # 영구 강화 상한
+    _RARE_BASE_CHANCE = 0.12                              # 기본 희귀 드랍 확률
+    # 고대 무기 교환: 3단계, 각 (희귀식물 총량 요구, 지급 무기 key)
+    ALTAR_WEAPONS = (('ancient_dagger', 12), ('ancient_glaive', 24),
+                     ('ancient_ragnarok', 40))
+
+    def _apply_relic_bonus(self):
+        """기록의 영구 희귀식물 보너스를 현재 플레이어에 반영."""
+        rb = (self._records or {}).get('relic_bonus') or {}
+        if getattr(self, 'player', None):
+            self.player.relic_atk = int(rb.get('atk', 0))
+            self.player.relic_def = int(rb.get('def', 0))
+            self.player.relic_eva = int(rb.get('eva', 0))
+
+    def _rare_counts(self) -> dict:
+        rp = self._records.get('rare_plants')
+        if not isinstance(rp, dict):
+            rp = {}
+        counts = {k: int(rp.get(k, 0)) for k in self.RARE_PLANTS}
+        self._records['rare_plants'] = counts
+        return counts
+
+    def _relic_bonus(self) -> dict:
+        rb = self._records.get('relic_bonus')
+        if not isinstance(rb, dict):
+            rb = {}
+        bonus = {k: int(rb.get(k, 0)) for k in ('atk', 'def', 'eva')}
+        self._records['relic_bonus'] = bonus
+        return bonus
+
+    def _relic_cost(self, stat) -> int:
+        """다음 +1에 필요한 희귀식물 개수 — 누적(현재 레벨 + 2)."""
+        return self._relic_bonus()[stat] + 2
+
+    def _farm_action_enabled(self, plot, act):
+        from core.town import FARM_GROW_MAX
+        crop = plot.get('crop')
+        ready = bool(crop) and plot.get('stage', 0) >= FARM_GROW_MAX
+        if act == 'plant':   return not crop
+        if act == 'water':   return bool(crop) and not ready and not plot.get('watered')
+        if act == 'harvest': return ready
+        if act == 'uproot':  return bool(crop)
+        return False
+
+    def _handle_farm_menu_action(self, action):
+        ty = action['type']
+        if ty == 'move':
+            d = action.get('dy') or action.get('dx')
+            if d:
+                self._farm_menu_idx = (self._farm_menu_idx + d) % len(self.FARM_ACTIONS)
+                self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._farm_do(self.FARM_ACTIONS[self._farm_menu_idx])
+
+    def _farm_do(self, act):
+        from core.town import CROPS
         from core.save_load import save_records
         import random
         farm = self._town.farm
-        plot = farm[idx]
+        plot = farm[self._farm_menu_plot]
+        if not self._farm_action_enabled(plot, act):
+            self.messages.append((t('farm_cant'), 'warn'))
+            self.audio.play('no_gold')
+            return                                          # 불가 → 메뉴 유지
         crop = plot.get('crop')
-        if not crop:                                       # 심기
-            cid, _col, _val = random.choice(CROPS)
+        if act == 'plant':
+            cid, _c, _v = random.choice(CROPS)
             plot['crop'] = cid; plot['stage'] = 0; plot['watered'] = False
             self.messages.append((t('farm_planted', t('crop_' + cid)), 'good'))
             self.animator.particles.emit_heal(self.player.x, self.player.y)
             self.audio.play('use_item')
-        elif plot.get('stage', 0) >= FARM_GROW_MAX:        # 수확
-            val = next((v for (cid, c, v) in CROPS if cid == crop), 30)
-            gold = int(val * getattr(self, '_gold_mult', 1.0))
-            self.player.gold += gold
-            self._gold_flash_ms = 220
-            self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
-            self.animator.particles.emit_levelup(self.player.x, self.player.y)
-            self.audio.play('buy')
-            plot['crop'] = None; plot['stage'] = 0; plot['watered'] = False
-        elif not plot.get('watered'):                      # 물주기
+        elif act == 'water':
             plot['watered'] = True
             self.messages.append((t('farm_watered', t('crop_' + crop)), 'good'))
             self.animator.particles.emit_heal(self.player.x, self.player.y)
             self.audio.play('use_item')
-        else:                                              # 이미 물 줌 (성장 대기)
-            self.messages.append((t('farm_growing', FARM_GROW_MAX - plot.get('stage', 0)), 'info'))
-            self.audio.play('menu_select')
-            return
+        elif act == 'harvest':
+            self._farm_harvest(plot, crop)
+        elif act == 'uproot':
+            plot['crop'] = None; plot['stage'] = 0; plot['watered'] = False
+            self.messages.append((t('farm_uprooted'), 'info'))
+            self.audio.play('pickup')
+        farm[self._farm_menu_plot] = plot
         self._records['farm'] = farm
         if not self._is_test_mode:
             save_records(self._records)
+        self.state = 'playing'                              # 액션 후 메뉴 닫기
+
+    def _farm_harvest(self, plot, crop):
+        """수확 — 치유 아이템(수확물) 인벤 지급 + 소액 골드 + 농사 진척(퀘스트형)."""
+        from core.town import CROPS
+        from entities.item import Item
+        val = next((v for (cid, c, v) in CROPS if cid == crop), 30)
+        gold = int(val * getattr(self, '_gold_mult', 1.0) * 0.5)
+        self.player.gold += gold
+        self._gold_flash_ms = 220
+        pkey = self._CROP_PRODUCE.get(crop)
+        added = None
+        if pkey and pkey in self._item_data and len(self.player.inventory) < self.player.max_inventory:
+            d = dict(self._item_data[pkey]); d['key'] = pkey
+            it = Item(0, 0, d)
+            self.player.inventory.append(it)
+            added = it.name
+        plot['crop'] = None; plot['stage'] = 0; plot['watered'] = False
+        if added:
+            self.messages.append((t('farm_harvest_item', added, gold), 'good'))
+        else:
+            self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self.audio.play('buy')
+        self._farm_quest_progress()
+        self._roll_rare_plant(crop, val)
+
+    def _roll_rare_plant(self, crop, val):
+        """수확 시 낮은 확률로 희귀식물 획득 — 작물 가치가 높을수록 확률↑."""
+        import random
+        chance = self._RARE_BASE_CHANCE + max(0, val - 30) * 0.004   # 최대 ~+12%p
+        if random.random() >= chance:
+            return
+        rp = random.choice(self.RARE_PLANTS)
+        counts = self._rare_counts()
+        counts[rp] += 1
+        self.messages.append((t('rare_found', t('rare_' + rp)), 'good'))
+        self.animator.add(BannerAnim(t('rare_banner'), (210, 150, 235), size=22))
+        self.animator.particles.emit_heal(self.player.x, self.player.y)
+        self.audio.play('levelup')
+
+    def _farm_quest_progress(self):
+        """수확 누적(퀘스트형) — 5회마다 농부의 인정 보너스."""
+        n = int(self._records.get('harvest_total', 0)) + 1
+        self._records['harvest_total'] = n
+        if n % 5 == 0:
+            bonus = 100 * (n // 5)
+            self.player.gold += bonus
+            self.messages.append((t('farm_quest_milestone', n, bonus), 'good'))
+            self.animator.add(BannerAnim(t('farm_quest_banner'), (120, 210, 90), size=24))
+            self.audio.play('levelup')
+
+    def _render_farm_menu(self):
+        if self._farm_menu_plot is None or not self._town:
+            return
+        from core.town import FARM_GROW_MAX
+        plot = self._town.farm[self._farm_menu_plot]
+        s = self.screen
+        bw, bh = 214, 160
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (16, 22, 12), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(s, (120, 185, 90), (bx, by, bw, bh), 2, border_radius=6)
+        crop = plot.get('crop')
+        if crop:
+            ready = plot.get('stage', 0) >= FARM_GROW_MAX
+            sk = ('farm_status_ready' if ready else
+                  ('farm_status_grow' if plot.get('watered') else 'farm_status_dry'))
+            status = t('crop_' + crop) + ' — ' + t(sk)
+        else:
+            status = t('farm_status_empty')
+        title = self.hud.font_sm.render(status, True, (200, 235, 170))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 9))
+        pygame.draw.line(s, (60, 90, 44), (bx + 12, by + 28), (bx + bw - 12, by + 28), 1)
+        labels = {'plant': t('farm_btn_plant'), 'water': t('farm_btn_water'),
+                  'harvest': t('farm_btn_harvest'), 'uproot': t('farm_btn_uproot')}
+        y = by + 36
+        for i, act in enumerate(self.FARM_ACTIONS):
+            enabled = self._farm_action_enabled(plot, act)
+            sel = (i == self._farm_menu_idx)
+            if sel:
+                pygame.draw.rect(s, (40, 62, 30), (bx + 10, y, bw - 20, 25), border_radius=4)
+                pygame.draw.rect(s, (150, 220, 110), (bx + 10, y, bw - 20, 25), 1, border_radius=4)
+                pygame.draw.polygon(s, (150, 220, 110),
+                                    [(bx + 16, y + 7), (bx + 16, y + 18), (bx + 22, y + 12)])
+            col = (238, 246, 214) if enabled else (92, 98, 86)
+            lbl = self.hud.font_sm.render(labels[act], True, col)
+            s.blit(lbl, (bx + 28, y + 6))
+            y += 28
+        hint = self.hud.font_sm.render(t('farm_menu_hint'), True, (110, 130, 100))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
+
+    # ── 고대 제단 — 희귀식물 영구강화 & 고대 무기 교환 ────────────────────
+    def _open_altar(self):
+        self._altar_idx = 0
+        self.state = 'altar'
+        self.audio.play('shop_open')
+
+    def _altar_options(self):
+        """제단 메뉴 항목 — 스탯강화 3종 + 다음 미획득 고대 무기 1종."""
+        counts = self._rare_counts()
+        bonus = self._relic_bonus()
+        opts = []
+        for plant in self.RARE_PLANTS:
+            stat = self._RARE_STAT[plant]
+            cap = self._RELIC_CAP[stat]
+            cur = bonus[stat]
+            cost = self._relic_cost(stat)
+            maxed = cur >= cap
+            opts.append({'kind': 'stat', 'stat': stat, 'plant': plant,
+                         'cost': cost, 'cur': cur, 'cap': cap, 'maxed': maxed,
+                         'have': counts[plant],
+                         'can': (not maxed) and counts[plant] >= cost})
+        claimed = self._records.get('altar_claimed') or []
+        total = sum(counts.values())
+        for (wkey, need) in self.ALTAR_WEAPONS:
+            if wkey in claimed:
+                continue
+            opts.append({'kind': 'weapon', 'wkey': wkey, 'need': need,
+                         'total': total, 'can': total >= need})
+            break
+        return opts
+
+    def _handle_altar_action(self, action):
+        ty = action['type']
+        opts = self._altar_options()
+        if not opts:
+            return
+        if ty == 'move':
+            d = action.get('dy') or action.get('dx')
+            if d:
+                self._altar_idx = (self._altar_idx + d) % len(opts)
+                self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._altar_do(opts[self._altar_idx % len(opts)])
+
+    def _altar_do(self, opt):
+        from core.save_load import save_records
+        if not opt.get('can'):
+            self.messages.append((t('altar_cant'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        counts = self._rare_counts()
+        if opt['kind'] == 'stat':
+            counts[opt['plant']] -= opt['cost']
+            bonus = self._relic_bonus()
+            bonus[opt['stat']] += 1
+            self._apply_relic_bonus()
+            self.messages.append((t('altar_stat_up',
+                                    t('relic_stat_' + opt['stat']), bonus[opt['stat']]), 'good'))
+            self.animator.add(BannerAnim(t('altar_stat_banner'), (235, 200, 90), size=24))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self.audio.play('levelup')
+        else:
+            self._consume_rare(opt['need'])
+            self._grant_ancient_weapon(opt['wkey'])
+            claimed = self._records.setdefault('altar_claimed', [])
+            if opt['wkey'] not in claimed:
+                claimed.append(opt['wkey'])
+        if not self._is_test_mode:
+            save_records(self._records)
+        opts = self._altar_options()
+        self._altar_idx = min(self._altar_idx, max(0, len(opts) - 1))
+
+    def _consume_rare(self, n):
+        """희귀식물 총 n개를 균등(보유 많은 순)으로 차감."""
+        counts = self._rare_counts()
+        for _ in range(n):
+            k = max(self.RARE_PLANTS, key=lambda p: counts[p])
+            if counts[k] <= 0:
+                break
+            counts[k] -= 1
+
+    def _grant_ancient_weapon(self, wkey):
+        """고대 무기를 영구 창고에 지급 (없는 키면 무시)."""
+        from core.save_load import save_storage
+        if wkey not in self._item_data:
+            return
+        name = self._item_data[wkey].get('name', wkey)
+        if self._storage_add(wkey):
+            save_storage(self._storage, self._storage_cap)
+            self.messages.append((t('altar_weapon_get', name), 'good'))
+            self.animator.add(BannerAnim(t('altar_weapon_banner'), (240, 190, 110), size=26))
+            self.audio.play('levelup')
+        else:
+            self.messages.append((t('storage_cap_full'), 'warn'))
+
+    _RELIC_ICON = {'atk': (232, 96, 84), 'def': (110, 168, 236), 'eva': (150, 220, 150)}
+
+    def _render_altar(self):
+        opts = self._altar_options()
+        counts = self._rare_counts()
+        s = self.screen
+        bw, bh = 306, 226
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (18, 14, 26), (bx, by, bw, bh), border_radius=7)
+        pygame.draw.rect(s, (188, 150, 224), (bx, by, bw, bh), 2, border_radius=7)
+        title = self.hud.font_sm.render(t('altar_title'), True, (224, 198, 246))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 8))
+        # 보유 희귀식물 요약
+        summ = '  '.join(f"{t('rare_' + p)} x{counts[p]}" for p in self.RARE_PLANTS)
+        ss = self.hud.font_sm.render(summ, True, (200, 180, 150))
+        s.blit(ss, (bx + (bw - ss.get_width()) // 2, by + 26))
+        pygame.draw.line(s, (70, 54, 92), (bx + 12, by + 44), (bx + bw - 12, by + 44), 1)
+        y = by + 52
+        for i, opt in enumerate(opts):
+            sel = (i == self._altar_idx)
+            if sel:
+                pygame.draw.rect(s, (44, 34, 60), (bx + 10, y, bw - 20, 30), border_radius=4)
+                pygame.draw.rect(s, (198, 160, 234), (bx + 10, y, bw - 20, 30), 1, border_radius=4)
+            if opt['kind'] == 'stat':
+                ic = self._RELIC_ICON[opt['stat']]
+                pygame.draw.circle(s, ic, (bx + 24, y + 15), 6)
+                if opt['maxed']:
+                    line = f"{t('relic_stat_' + opt['stat'])} MAX ({opt['cur']})"
+                    sub = ''
+                    col = (150, 140, 120)
+                else:
+                    line = f"{t('relic_stat_' + opt['stat'])} +1  →  {opt['cur'] + 1}/{opt['cap']}"
+                    sub = f"{t('rare_' + opt['plant'])} {opt['have']}/{opt['cost']}"
+                    col = (238, 230, 246) if opt['can'] else (120, 110, 130)
+            else:
+                pygame.draw.polygon(s, (240, 190, 110),
+                                    [(bx + 20, y + 21), (bx + 24, y + 9), (bx + 28, y + 21)])
+                name = self._item_data.get(opt['wkey'], {}).get('name', opt['wkey'])
+                line = f"{t('altar_weapon_opt', name)}"
+                sub = f"{t('altar_weapon_need')} {opt['total']}/{opt['need']}"
+                col = (244, 214, 160) if opt['can'] else (140, 120, 100)
+            ln = self.hud.font_sm.render(line, True, col)
+            s.blit(ln, (bx + 38, y + 3))
+            if sub:
+                sb = self.hud.font_sm.render(sub, True,
+                                             (170, 210, 150) if opt['can'] else (120, 104, 120))
+                s.blit(sb, (bx + 38, y + 16))
+            y += 34
+        hint = self.hud.font_sm.render(t('altar_hint'), True, (120, 110, 130))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
 
     _HOME_STYLES = ('cozy', 'noble', 'rustic', 'study', 'garden')
 
@@ -5793,6 +6106,10 @@ class Game:
                                     capacity=self._storage_cap,
                                     upgrade_cost=self._STORAGE_UPGRADES.get(self._storage_cap),
                                     carried_groups=self._inv_group_view())
+        elif self.state == 'farm_menu':
+            self._render_farm_menu()
+        elif self.state == 'altar':
+            self._render_altar()
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'dialog' and self._dialog:

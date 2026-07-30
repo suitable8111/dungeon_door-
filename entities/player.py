@@ -35,6 +35,11 @@ class Player(Entity):
         self.gold = 0
         self.enhance_stones = 0  # 강화석 보유 수량
 
+        # 희귀식물 영구 강화 (고대 제단 · 사망/런 무관 영구 보너스, 기록에서 주입)
+        self.relic_atk = 0
+        self.relic_def = 0
+        self.relic_eva = 0
+
         # 신규 능력치
         self.attack_speed = 1.0   # 높을수록 공격 쿨다운 단축
         self.evasion      = 0     # 회피율 (0~100 %)
@@ -133,7 +138,7 @@ class Player(Entity):
             item.enhance_level for item in self.equipment.values()
             if item and not item.broken and item.item_type == 'weapon'
         )
-        base = self.attack + bonus + enhance + self.token_atk
+        base = self.attack + bonus + enhance + self.token_atk + self.relic_atk
         if self.atk_bonus_ms > 0:
             base = int(base * (1.0 + self.atk_bonus_pct))
         if self.atk_down_ms > 0:
@@ -151,7 +156,7 @@ class Player(Entity):
             if item and not item.broken and item.item_type in ('armor', 'off_hand')
         )
         heal_buf = self.heal_def_bonus if self.heal_def_ms > 0 else 0
-        return self.defense + bonus + enhance + heal_buf + self.token_def
+        return self.defense + bonus + enhance + heal_buf + self.token_def + self.relic_def
 
     @property
     def dungeon_inventory(self) -> list:
@@ -173,7 +178,7 @@ class Player(Entity):
             item.enhance_level for item in self.equipment.values()
             if item and not item.broken and item.item_type == 'head'
         )
-        return min(80, self.evasion + enhance)
+        return min(80, self.evasion + enhance + self.relic_eva)
 
     @property
     def skill_damage_mul(self) -> float:
