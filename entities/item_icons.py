@@ -30,6 +30,12 @@ def _resolve_icon(key, item_type):
         return 'bowl'
     if key == 'food_pie':
         return 'pie'
+    if key == 'egg':
+        return 'egg'
+    if key == 'milk':
+        return 'milk'
+    if key in ('mutton', 'pork_belly'):
+        return 'meat'
     return None
 
 
@@ -85,6 +91,32 @@ def draw_mc_item(surf, x, y, size, item_type, col, key=None):
         B(5, 7, col, 6, 2)                         # 속(작물색)
         B(5, 7, _L(col, 40), 6, 1)
         B(6, 7, cd, 1, 2); B(8, 7, cd, 1, 2); B(10, 7, cd, 1, 2)  # 격자
+        return
+    if icon == 'egg':                            # 달걀
+        sh = (248, 244, 232); shl = (255, 255, 250); shd = (206, 200, 182)
+        B(7, 3, sh, 2, 1); B(6, 4, sh, 4, 1)
+        B(5, 5, sh, 6, 5); B(6, 10, sh, 4, 1); B(7, 11, sh, 2, 1)
+        B(6, 4, shl, 2, 2)                        # 하이라이트
+        B(5, 9, shd, 6, 1)
+        return
+    if icon == 'milk':                           # 우유병
+        gl, ml, md = (206, 224, 236), (245, 245, 250), (206, 206, 216)
+        B(7, 2, (220, 220, 228), 2, 1)           # 뚜껑
+        B(6, 3, gl, 4, 1)
+        B(5, 4, gl, 6, 8)                         # 병
+        B(6, 6, ml, 4, 5)                         # 우유
+        B(6, 6, (255, 255, 255), 4, 1)
+        B(6, 11, md, 4, 1)
+        B(6, 4, (255, 255, 255), 1, 6)            # 반짝
+        return
+    if icon == 'meat':                           # 고기 (드럼스틱)
+        m, ml, md = col, _L(col, 35), _D(col, 45)
+        B(5, 4, m, 5, 5)                          # 살점
+        B(5, 4, ml, 5, 1); B(5, 8, md, 5, 1)
+        B(6, 3, m, 3, 1); B(9, 5, m, 1, 3)
+        B(9, 9, (238, 228, 210), 2, 2)           # 뼈
+        B(10, 11, (238, 228, 210), 2, 2)
+        B(9, 9, (255, 250, 240), 1, 1)
         return
 
     t = item_type

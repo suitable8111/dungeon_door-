@@ -87,6 +87,7 @@ _DEFAULT_RECORDS  = {
     'home_style': 0,           # 내 집 인테리어 스타일 (마을 커스터마이즈)
     'max_boss_floor': 0,       # 클리어한 최고 보스층 (내 집 전리품 진열용)
     'farm': [],                # 마을 밭 상태 [{crop, stage}…] (인터랙티브 농장)
+    'ranch': [],               # 목장 상태 [{animal, fed, stage}…] (가축 사육)
     'harvest_total': 0,        # 누적 수확 횟수 (농사 퀘스트 이정표)
     'rare_plants': {},         # 희귀식물 보유 {sunbloom/ironvine/galeleaf: n}
     'relic_bonus': {},         # 영구 강화 {atk/def/eva: +n} (고대 제단)

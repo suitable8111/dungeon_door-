@@ -36,6 +36,10 @@ CROPS = [('wheat', (224, 198, 96), 30), ('tomato', (226, 84, 66), 45),
 # ── 낚시(인터랙티브) ─────────────────────────────────────────────────────
 RIVER_Y = 56                  # 강 밴드 상단 y (물 타일 56~57)
 
+# ── 목장(가축 사육) ──────────────────────────────────────────────────────
+RANCH_PENS = [(x, y) for y in (44, 48) for x in (101, 105, 109)]  # 6개 우리
+RANCH_FEED_MAX = 2            # 먹이 주고 마을 N번 재방문하면 생산물 수확
+
 
 def _rand_wait() -> float:
     import random
@@ -73,6 +77,8 @@ class TownScene:
         self.home_style = 0          # 내 집 인테리어 스타일 (게임이 기록에서 주입)
         self.trophies = {}           # 처치한 테마 보스 전리품 {theme_idx: count} (게임 주입)
         self.farm = [{'crop': None, 'stage': 0} for _ in FARM_PLOTS]  # 밭 상태(게임 주입)
+        self.ranch = [{'animal': None, 'fed': False, 'stage': 0}
+                      for _ in RANCH_PENS]                             # 목장 상태(게임 주입)
         self.npcs = []
         # 시설 NPC — 문 앞 상주 (건물별 좌표는 _build_map에서)
         for nid, nk in (('inn', 'npc_storage'), ('chest', 'npc_chest'),
@@ -300,6 +306,16 @@ class TownScene:
                               ((18, 44), (24, 46), (20, 50), (27, 43), (17, 48), (22, 51))
                               if not blocked(fx, fy)]
 
+        # ── 목장 (동부, 강 북쪽) — 헛간 + 우리 + 울타리 ────────────────────
+        building(115, 40, 8, 7, kind='barn')                   # 목장 헛간(동쪽)
+        rfence = ([(fx, 42) for fx in range(99, 114)] + [(fx, 51) for fx in range(99, 114)]
+                  + [(99, fy) for fy in range(43, 51)] + [(113, fy) for fy in range(43, 51)])
+        # 우리 칸(RANCH_PENS)과 출입구는 울타리에서 제외
+        _pens = set(RANCH_PENS)
+        flat_deco('fence', [(fx, fy) for (fx, fy) in rfence
+                            if not blocked(fx, fy) and (fx, fy) not in _pens
+                            and (fx, fy) != (106, 51)])
+
         # ── 도로변 가로등 + 대장간 통 + 외곽 나무 ──────────────────────
         flat_deco('lamp', [(28, 20), (44, 20), (82, 20), (98, 20),
                            (28, 46), (52, 48), (78, 48), (98, 46),
@@ -403,6 +419,13 @@ class TownScene:
                 return i
         return None
 
+    def pen_at(self, px: int, py: int):
+        """플레이어가 서 있는(또는 바로 옆) 목장 우리 인덱스 (없으면 None)."""
+        for i, (fx, fy) in enumerate(RANCH_PENS):
+            if max(abs(px - fx), abs(py - fy)) == 0:
+                return i
+        return None
+
     def water_adjacent(self, px: int, py: int):
         """플레이어 상하좌우에 물 타일이 있으면 (물칸 좌표) 반환 — 낚시터 판정."""
         from map.tile import TileType
@@ -429,6 +452,7 @@ class TownScene:
         for fx_, fy_ in self._deco['fence']:
             self._draw_fence(surf, fx_ * ts - ox, fy_ * ts - oy)
         self._draw_farm_plots(surf, ox, oy, ticks)      # 인터랙티브 밭
+        self._draw_ranch(surf, ox, oy, ticks)           # 목장 우리 + 가축
         for fx, fy in self._deco['flower']:
             self._draw_flower(surf, fx * ts - ox, fy * ts - oy, ticks)
         for lx, ly in self._deco['lamp']:
@@ -509,6 +533,7 @@ class TownScene:
 
         self._draw_farm_prompt(surf, ox, oy, px, py, font)   # 밭칸 [E] 안내
         self._draw_fishing_prompt(surf, ox, oy, px, py, font)  # 강둑 [E] 낚시 안내
+        self._draw_ranch_prompt(surf, ox, oy, px, py, font)    # 우리 [E] 목장 안내
 
     @staticmethod
     def draw_portal(surf, pos, cam_x, cam_y, color=(160, 90, 255)):
@@ -605,6 +630,41 @@ class TownScene:
         bg.fill((0, 0, 0, 175))
         surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
         surf.blit(txt, (sx - txt.get_width() // 2, sy - 17))
+
+    def _draw_ranch_prompt(self, surf, ox, oy, px, py, font):
+        """우리 위에 서면 [E] 목장 안내 (인접 NPC 없을 때)."""
+        if self.npc_near(px, py):
+            return
+        idx = self.pen_at(px, py)
+        if idx is None:
+            return
+        fx, fy = RANCH_PENS[idx]
+        sx = fx * TILE_SIZE - ox + TILE_SIZE // 2
+        sy = fy * TILE_SIZE - oy
+        txt = font.render(t('ranch_hint_open'), True, (255, 224, 150))
+        bg = pygame.Surface((txt.get_width() + 8, txt.get_height() + 3), pygame.SRCALPHA)
+        bg.fill((0, 0, 0, 175))
+        surf.blit(bg, (sx - txt.get_width() // 2 - 4, sy - 19))
+        surf.blit(txt, (sx - txt.get_width() // 2, sy - 17))
+
+    # ── 목장: 우리 + 가축 + 생산물 표시 ──────────────────────────────
+    def _draw_ranch(self, surf, ox, oy, ticks):
+        ts = TILE_SIZE
+        for i, (fx, fy) in enumerate(RANCH_PENS):
+            x, y = fx * ts - ox, fy * ts - oy
+            st = self.ranch[i] if i < len(self.ranch) else {}
+            # 여물통
+            pygame.draw.rect(surf, (108, 78, 46), (x + 5, y + ts - 8, ts - 10, 5))
+            pygame.draw.rect(surf, (148, 110, 64), (x + 5, y + ts - 8, ts - 10, 2))
+            animal = st.get('animal')
+            if not animal:
+                continue
+            self._draw_animal(surf, x, y - 2, animal,
+                              1 if i % 2 == 0 else -1, ticks + i * 90)
+            if st.get('stage', 0) >= RANCH_FEED_MAX:      # 생산물 준비 반짝
+                by = y - 6 + int(2 * math.sin(ticks * 0.006 + i))
+                pygame.draw.circle(surf, (255, 236, 130), (x + ts - 7, by), 4)
+                pygame.draw.circle(surf, (255, 255, 224), (x + ts - 8, by - 1), 1)
 
     # ── 농장: 인터랙티브 밭 / 울타리 / 동물 ──────────────────────────
     def _draw_farm_plots(self, surf, ox, oy, ticks):

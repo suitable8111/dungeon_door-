@@ -436,6 +436,8 @@ class Game:
         self._altar_idx = 0          # 고대 제단 메뉴 커서
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
         self._fish = None            # 낚시 미니게임 상태
+        self._ranch_menu_pen = None  # 목장 팝업 대상 우리
+        self._ranch_menu_idx = 0     # 목장 팝업 커서
         self.dungeon = None
         self.camera  = None
 
@@ -1760,7 +1762,7 @@ class Game:
                 elif self.state == 'shop':
                     self.state = 'playing'
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
-                                    'altar', 'angler', 'fishing'):
+                                    'altar', 'angler', 'fishing', 'ranch_menu'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -1798,6 +1800,8 @@ class Game:
                 self._handle_angler_action(action)
             elif self.state == 'fishing':
                 self._handle_fishing_action(action)
+            elif self.state == 'ranch_menu':
+                self._handle_ranch_menu_action(action)
             elif self.state == 'inn':
                 self._handle_inn_action(action)
             elif self.state == 'dialog':
@@ -3166,6 +3170,15 @@ class Game:
                 plot['watered'] = False
         self._records['farm'] = farm
         self._town.farm = farm
+        # 목장: 재방문할 때마다 먹이 준 가축이 한 단계 성장(먹이 소모)
+        from core.town import RANCH_FEED_MAX as _RFM
+        ranch = self._ranch_state()
+        for pen in ranch:
+            if pen.get('animal') and pen.get('stage', 0) < _RFM and pen.get('fed'):
+                pen['stage'] = pen.get('stage', 0) + 1
+                pen['fed'] = False
+        self._records['ranch'] = ranch
+        self._town.ranch = ranch
         # ① 던전 세션 저장 (객체 참조 보존 — 적 위치/맵/층 무손실)
         self._dungeon_session = {
             'dungeon': self.dungeon,
@@ -3664,11 +3677,14 @@ class Game:
             # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
             if self._town:
                 idx = self._town.farm_plot_at(self.player.x, self.player.y)
+                pen = self._town.pen_at(self.player.x, self.player.y)
                 if idx is not None:
                     self._farm_menu_plot = idx
                     self._farm_menu_idx = 0
                     self.state = 'farm_menu'
                     self.audio.play('menu_select')
+                elif pen is not None:
+                    self._open_ranch_menu(pen)
                 elif self._town.water_adjacent(self.player.x, self.player.y):
                     self._open_fishing()
             return
@@ -3716,6 +3732,173 @@ class Game:
                 farm[i] = {'crop': None, 'stage': 0}
         return farm
 
+    # ── 목장 팝업 메뉴 (가축 구입 / 먹이주기 / 수확 / 처분) ────────────────
+    def _ranch_state(self):
+        """records의 목장 상태 리스트를 정규화해 반환."""
+        from core.town import RANCH_PENS
+        ranch = self._records.get('ranch')
+        if not isinstance(ranch, list) or len(ranch) != len(RANCH_PENS):
+            ranch = [{'animal': None, 'fed': False, 'stage': 0} for _ in RANCH_PENS]
+        for i in range(len(ranch)):
+            if not isinstance(ranch[i], dict):
+                ranch[i] = {'animal': None, 'fed': False, 'stage': 0}
+        return ranch
+
+    def _pen_ready(self, pen):
+        """생산물 수확 가능 여부 — 테스트 모드면 가축만 있으면 즉시."""
+        from core.town import RANCH_FEED_MAX
+        if not pen.get('animal'):
+            return False
+        return self._is_test_mode or pen.get('stage', 0) >= RANCH_FEED_MAX
+
+    def _open_ranch_menu(self, pen_idx):
+        self._ranch_menu_pen = pen_idx
+        self._ranch_menu_idx = 0
+        self.state = 'ranch_menu'
+        self.audio.play('menu_select')
+
+    def _ranch_options(self, pen):
+        """빈 우리 → 가축 구입 목록 / 가축 있음 → 먹이·수확·처분."""
+        if not pen.get('animal'):
+            return [{'act': 'buy', 'animal': k, 'cost': c, 'prod': p, 'gold': g}
+                    for (k, c, p, g) in self.LIVESTOCK]
+        return [{'act': a} for a in self.RANCH_ACTIONS]
+
+    def _ranch_action_enabled(self, pen, opt):
+        act = opt['act']
+        if act == 'buy':
+            return self.player.gold >= opt['cost']
+        if act == 'feed':
+            return (bool(pen.get('animal')) and not self._pen_ready(pen)
+                    and not pen.get('fed'))
+        if act == 'collect':
+            return self._pen_ready(pen)
+        if act == 'sell':
+            return bool(pen.get('animal'))
+        return False
+
+    def _handle_ranch_menu_action(self, action):
+        ty = action['type']
+        pen = self._town.ranch[self._ranch_menu_pen]
+        opts = self._ranch_options(pen)
+        if ty == 'move':
+            d = action.get('dy') or action.get('dx')
+            if d:
+                self._ranch_menu_idx = (self._ranch_menu_idx + d) % len(opts)
+                self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._ranch_do(opts[self._ranch_menu_idx % len(opts)])
+
+    def _ranch_do(self, opt):
+        from core.town import RANCH_FEED_MAX
+        from core.save_load import save_records
+        ranch = self._town.ranch
+        pen = ranch[self._ranch_menu_pen]
+        if not self._ranch_action_enabled(pen, opt):
+            self.messages.append((t('ranch_cant'), 'warn'))
+            self.audio.play('no_gold')
+            return
+        act = opt['act']
+        if act == 'buy':
+            self.player.gold -= opt['cost']
+            self._gold_flash_ms = 220
+            pen['animal'] = opt['animal']
+            pen['fed'] = False
+            pen['stage'] = RANCH_FEED_MAX if self._is_test_mode else 0
+            self.messages.append((t('ranch_bought', t('animal_' + opt['animal']),
+                                    opt['cost']), 'good'))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self.audio.play('buy')
+        elif act == 'feed':
+            pen['fed'] = True
+            if self._is_test_mode:
+                pen['stage'] = RANCH_FEED_MAX
+            self.messages.append((t('ranch_fed', t('animal_' + pen['animal'])), 'good'))
+            self.animator.particles.emit_heal(self.player.x, self.player.y)
+            self.audio.play('use_item')
+        elif act == 'collect':
+            self._ranch_collect(pen)
+        elif act == 'sell':
+            refund = self._livestock_cost(pen['animal']) // 2
+            self.player.gold += refund
+            self._gold_flash_ms = 220
+            self.messages.append((t('ranch_sold', t('animal_' + pen['animal']),
+                                    refund), 'info'))
+            pen['animal'] = None; pen['fed'] = False; pen['stage'] = 0
+            self.audio.play('pickup')
+        ranch[self._ranch_menu_pen] = pen
+        self._records['ranch'] = ranch
+        if not self._is_test_mode:
+            save_records(self._records)
+        self.state = 'playing'
+
+    def _livestock_cost(self, animal):
+        return next((c for (k, c, p, g) in self.LIVESTOCK if k == animal), 60)
+
+    def _ranch_collect(self, pen):
+        """생산물 수확 — 아이템(채집품) + 골드, 가축은 남아 재생산(먹이 필요)."""
+        animal = pen['animal']
+        spec = next((s for s in self.LIVESTOCK if s[0] == animal), None)
+        if not spec:
+            return
+        _k, _c, pkey, pgold = spec
+        gold = int(pgold * getattr(self, '_gold_mult', 1.0))
+        self.player.gold += gold
+        self._gold_flash_ms = 220
+        added = self._give_inventory_item(pkey)
+        pen['fed'] = False; pen['stage'] = 0          # 재생산 위해 다시 먹이 필요
+        if added:
+            self.messages.append((t('ranch_collect_item', added, gold), 'good'))
+        else:
+            self.messages.append((t('ranch_collect', t('animal_' + animal), gold), 'good'))
+        self.animator.add(BannerAnim(t('ranch_collect_banner'), (230, 210, 120), size=22))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self.audio.play('buy')
+
+    def _render_ranch_menu(self):
+        if self._ranch_menu_pen is None or not self._town:
+            return
+        pen = self._town.ranch[self._ranch_menu_pen]
+        opts = self._ranch_options(pen)
+        s = self.screen
+        empty = not pen.get('animal')
+        bw = 236
+        bh = 52 + len(opts) * 26 + 22
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (26, 20, 12), (bx, by, bw, bh), border_radius=6)
+        pygame.draw.rect(s, (206, 168, 96), (bx, by, bw, bh), 2, border_radius=6)
+        # 상태 헤더
+        if empty:
+            status = t('ranch_status_empty')
+        else:
+            ready = self._pen_ready(pen)
+            sk = ('ranch_status_ready' if ready else
+                  ('ranch_status_grow' if pen.get('fed') else 'ranch_status_hungry'))
+            status = t('animal_' + pen['animal']) + ' — ' + t(sk)
+        title = self.hud.font_sm.render(status, True, (238, 216, 160))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 9))
+        pygame.draw.line(s, (96, 74, 44), (bx + 12, by + 28), (bx + bw - 12, by + 28), 1)
+        y = by + 36
+        for i, opt in enumerate(opts):
+            enabled = self._ranch_action_enabled(pen, opt)
+            sel = (i == self._ranch_menu_idx)
+            if sel:
+                pygame.draw.rect(s, (60, 46, 26), (bx + 10, y, bw - 20, 23), border_radius=4)
+                pygame.draw.rect(s, (220, 184, 110), (bx + 10, y, bw - 20, 23), 1, border_radius=4)
+                pygame.draw.polygon(s, (220, 184, 110),
+                                    [(bx + 16, y + 6), (bx + 16, y + 16), (bx + 22, y + 11)])
+            if opt['act'] == 'buy':
+                label = t('animal_' + opt['animal']) + f"  {opt['cost']}G"
+            else:
+                label = t('ranch_btn_' + opt['act'])
+            col = (240, 232, 210) if enabled else (110, 100, 84)
+            lbl = self.hud.font_sm.render(label, True, col)
+            s.blit(lbl, (bx + 28, y + 4))
+            y += 26
+        hint = self.hud.font_sm.render(t('ranch_menu_hint'), True, (140, 122, 92))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
+
     # ── 농사 팝업 메뉴 (씨앗뿌리기/물주기/수확하기/뽑고버리기) ──────────
     FARM_ACTIONS = ('plant', 'water', 'harvest', 'uproot')
     _CROP_PRODUCE = {'wheat': 'food_bread', 'tomato': 'food_soup',
@@ -3723,6 +3906,16 @@ class Game:
     _CROP_SEED = {'wheat': 'seed_wheat', 'tomato': 'seed_tomato',
                   'pumpkin': 'seed_pumpkin', 'carrot': 'seed_carrot'}
     _SEED_CROP = {v: k for k, v in _CROP_SEED.items()}
+
+    # ── 목장(가축 사육) ─────────────────────────────────────────────────────
+    # (key, 구입가, 생산물 아이템, 생산 골드) — 가축 그림은 town._draw_animal 재사용
+    LIVESTOCK = (('chicken', 60,  'egg',        18),
+                 ('sheep',   130, 'mutton',     34),
+                 ('pig',     170, 'pork_belly', 42),
+                 ('cow',     240, 'milk',       55))
+    _LIVESTOCK_COL = {'chicken': (238, 232, 214), 'sheep': (226, 226, 230),
+                      'pig': (232, 176, 180), 'cow': (86, 74, 66)}
+    RANCH_ACTIONS = ('feed', 'collect', 'sell')
 
     # ── 희귀식물(고대 제단) ────────────────────────────────────────────────
     # 수확 시 낮은 확률로 등장 → 영구 스탯 강화 재료 & 고대 무기 교환 재료.
@@ -6562,6 +6755,8 @@ class Game:
             self._render_angler()
         elif self.state == 'fishing':
             self._render_fishing()
+        elif self.state == 'ranch_menu':
+            self._render_ranch_menu()
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'dialog' and self._dialog:

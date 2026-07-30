@@ -859,5 +859,69 @@
     "name_ja": "ニンジンの種",
     "name_zh": "胡萝卜种子",
     "name_ru": "Семя моркови"
+  },
+  "egg": {
+    "name": "달걀",
+    "color": [
+      240,
+      232,
+      210
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 14,
+    "category": "gather",
+    "name_en": "Egg",
+    "name_ja": "卵",
+    "name_zh": "鸡蛋",
+    "name_ru": "Яйцо"
+  },
+  "milk": {
+    "name": "우유",
+    "color": [
+      238,
+      238,
+      244
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 30,
+    "category": "gather",
+    "name_en": "Milk",
+    "name_ja": "牛乳",
+    "name_zh": "牛奶",
+    "name_ru": "Молоко"
+  },
+  "mutton": {
+    "name": "양고기",
+    "color": [
+      206,
+      120,
+      110
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 36,
+    "category": "gather",
+    "name_en": "Mutton",
+    "name_ja": "羊肉",
+    "name_zh": "羊肉",
+    "name_ru": "Баранина"
+  },
+  "pork_belly": {
+    "name": "삼겹살",
+    "color": [
+      224,
+      150,
+      150
+    ],
+    "type": "consumable",
+    "effect": "heal",
+    "value": 44,
+    "category": "gather",
+    "name_en": "Pork Belly",
+    "name_ja": "豚バラ",
+    "name_zh": "五花肉",
+    "name_ru": "Свинина"
   }
 }
