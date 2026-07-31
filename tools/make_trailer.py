@@ -37,6 +37,48 @@ F_CAP = fonts.load_font(26, bold=True)
 GOLD = (255, 212, 96)
 WHITE = (240, 244, 252)
 
+# ── 언어별 자막 (UI 언어도 함께 전환) ─────────────────────────────────────
+_LANG = "ko"
+CAPS = {
+    "title_sub":  {"ko": "문 너머, 무엇이든",            "en": "Beyond the Door — Anything"},
+    "axe_intro":  {"ko": "신규 클래스 · 도끼맨",          "en": "NEW CLASS — THE AXEMAN"},
+    "axe_ult":    {"ko": "궁극기 라그나로크 — 무적의 폭풍", "en": "RAGNAROK — Unstoppable Fury"},
+    "warrior":    {"ko": "전사 — 검과 방패의 정면승부",    "en": "Warrior — Blade & Shield"},
+    "archer":     {"ko": "궁수 — 쏟아지는 화살",          "en": "Archer — Rain of Arrows"},
+    "mage":       {"ko": "마법사 — 원소를 지배하라",       "en": "Mage — Master the Elements"},
+    "four":       {"ko": "네 직업, 네 가지 전투",          "en": "Four Classes, Four Playstyles"},
+    "feat":       {"ko": "사냥만이 전부가 아니다",         "en": "It's not all about the fight"},
+    "farm":       {"ko": "농사로 작물을 길러라",           "en": "Grow crops on your farm"},
+    "fish":       {"ko": "손맛 오지는 낚시",              "en": "Cast a line, reel it in"},
+    "ranch":      {"ko": "목장에서 가축을 키워라",         "en": "Raise livestock on your ranch"},
+    "adv":        {"ko": "문 너머 999층의 심연을 정복하라", "en": "Conquer the 999-floor abyss"},
+    "outro_sub":  {"ko": "사냥 · 생활 · 모험",            "en": "HUNT · LIVE · ADVENTURE"},
+}
+
+
+def L(key):
+    return CAPS[key][_LANG]
+
+
+def set_ui_lang(lang):
+    """게임 UI 언어 전환 (트레일러 내 화면 텍스트)."""
+    global _LANG
+    _LANG = lang if lang in ("ko", "en") else "ko"
+    try:
+        from core.lang import set_lang
+        set_lang(_LANG)
+    except Exception:
+        pass
+
+
+# 직업별 칩 (이모지 미지원 → 텍스트만). (라벨, 강조색)
+CLASS_CHIP = {
+    "axeman":  ("AXEMAN",  (255, 150, 60)),
+    "warrior": ("WARRIOR", (255, 96, 74)),
+    "archer":  ("ARCHER",  (120, 220, 140)),
+    "mage":    ("MAGE",    (156, 132, 255)),
+}
+
 
 # ── 프레임 합성 헬퍼 ───────────────────────────────────────────────────────
 def cinematic(view):
@@ -263,36 +305,48 @@ def enemy_keys(g):
                         'goblin', 'zombie', 'spider') if k in g._enemy_data]
 
 
-def hunt_driver(ranged=False):
+def face_nearest(g):
+    """가장 가까운 적을 바라보게 (원거리 직업 조준 자연스럽게)."""
+    if not g.dungeon.enemies:
+        return
+    t = min(g.dungeon.enemies,
+            key=lambda e: abs(e.x - g.player.x) + abs(e.y - g.player.y))
+    dx, dy = t.x - g.player.x, t.y - g.player.y
+    g._facing = ('right' if dx > 0 else 'left') if abs(dx) >= abs(dy) \
+        else ('down' if dy > 0 else 'up')
+
+
+def combat_driver(skills=('A', 'S', 'D'), ult_at=None, ranged=False, topup=6):
+    """깔끔한 전투 연출: 제자리에서 적을 상대하며 스킬/궁극기 전개.
+    (이전 버전의 지그재그 이동 어색함 제거 — 이동 최소화)."""
     def drv(g, i):
         g.player.stamina = g.player.stamina_max
-        # 스킬 로테이션으로 화려하게
-        if i % 22 == 6:
-            _safe(g._process, {'type': 'skill', 'skill': 'A'})
-        if i % 22 == 14:
-            _safe(g._process, {'type': 'skill', 'skill': 'D'})
-        # 적이 줄면 다시 채워 계속 북적이게
-        if i % 30 == 0 and len(g.dungeon.enemies) < 5:
-            spawn_ring(g, enemy_keys(g), radius=4, n=8)
+        # 적 보충 — 항상 북적이게 (가까이 붙여서 바로 교전)
+        if i % 24 == 0 and len(g.dungeon.enemies) < topup:
+            spawn_ring(g, enemy_keys(g), radius=2, n=9)
+        if ult_at is not None and i == ult_at:
+            _safe(g._process, {'type': 'ultimate', 'key': 'R'})
+        # 스킬 로테이션(크게, 간격 있게)
+        if i > 4 and i % 16 == 8:
+            sk = skills[(i // 16) % len(skills)]
+            _safe(g._process, {'type': 'skill', 'skill': sk})
+        face_nearest(g)
         if g.dungeon.enemies:
-            tgt = min(g.dungeon.enemies,
-                      key=lambda e: abs(e.x - g.player.x) + abs(e.y - g.player.y))
-            dx = (tgt.x > g.player.x) - (tgt.x < g.player.x)
-            dy = (tgt.y > g.player.y) - (tgt.y < g.player.y)
-            adj = abs(tgt.x - g.player.x) + abs(tgt.y - g.player.y) <= 1
+            adj = any(abs(e.x - g.player.x) + abs(e.y - g.player.y) <= 1
+                      for e in g.dungeon.enemies)
             if ranged:
-                self_face = dx if dx else dy
-                if i % 2 == 0:
-                    _safe(g._process, {'type': 'attack'})  # 궁수: 화살
-                elif i % 5 == 0:
-                    _safe(g._process, {'type': 'move', 'dx': -dx, 'dy': 0})  # 카이팅
+                if i % 3 == 0:
+                    _safe(g._process, {'type': 'attack'})   # 원거리 연사
             elif adj:
-                _safe(g._process, {'type': 'attack'})
-            elif i % 2 == 0:
-                _safe(g._process, {'type': 'move', 'dx': dx, 'dy': 0})
-            else:
-                _safe(g._process, {'type': 'move', 'dx': 0, 'dy': dy})
-        g.camera.center_on(g.player.x, g.player.y)   # 카메라 추적
+                if i % 2 == 0:
+                    _safe(g._process, {'type': 'attack'})   # 제자리 난타
+            elif i % 5 == 0:                                 # 멀면 가끔 한 걸음
+                t = min(g.dungeon.enemies,
+                        key=lambda e: abs(e.x - g.player.x) + abs(e.y - g.player.y))
+                dx = (t.x > g.player.x) - (t.x < g.player.x)
+                dy = (t.y > g.player.y) - (t.y < g.player.y)
+                _safe(g._process, {'type': 'move', 'dx': dx, 'dy': dy})
+        g.camera.center_on(g.player.x, g.player.y)
     return drv
 
 
@@ -311,6 +365,37 @@ def pan_driver(path):
         g.camera.center_on(int(round(x)), int(round(y)))
     drv.total = 1
     return drv
+
+
+def flash(d, n=2, col=(255, 255, 255)):
+    """하드 컷 사이 화이트 플래시 (역동감)."""
+    for _ in range(n):
+        fr = pygame.Surface((OUT_W, OUT_H))
+        fr.fill(col)
+        d.emit(fr)
+
+
+def fishing_scene(d, gt, frames, chip_lbl, chip_col, cap):
+    """낚시 릴 미니게임 (fishing 상태는 step()에서 안 도니 직접 갱신)."""
+    gt.state = 'playing'
+    gt._open_fishing()
+    gt._fish.update({'phase': 'reel', 't': 0.0, 'cursor': 0.15, 'dir': 1,
+                     'speed': 0.0017, 'band_c': 0.5, 'band_w': 0.13,
+                     'pending': ('koi', 1, 60), 'grade': 1})
+    for i in range(frames):
+        f = gt._fish
+        f['cursor'] += f['dir'] * f['speed'] * DT
+        if f['cursor'] <= 0:
+            f['cursor'] = 0; f['dir'] = 1
+        elif f['cursor'] >= 1:
+            f['cursor'] = 1; f['dir'] = -1
+        gt._render()
+        view = gt.screen.subsurface((GAME_X, GAME_Y, GAME_W, GAME_H)).copy()
+        frame = cinematic(view); vignette(frame); letterbox(frame)
+        chip(frame, chip_lbl, chip_col)
+        caption(frame, cap, 255)
+        d.emit(frame)
+    gt.state = 'playing'
 
 
 def fill_town_life(g):
@@ -332,127 +417,95 @@ def fill_town_life(g):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-def build(out_path):
+def build(out_path, lang="ko"):
+    set_ui_lang(lang)
     d = Director(out_path)
 
-    # ── 1. TITLE ──────────────────────────────────────────────────────────
-    card(d, 82, "DUNGEON DOOR", "문 너머, 무엇이든", GOLD)
-
-    # ── 2. HUNT ───────────────────────────────────────────────────────────
-    # (a) 전사 근접 난전
-    g = Game(); g.start_test_mode(7, char_class='warrior')
-    g.player.stamina = g.player.stamina_max
-    spawn_ring(g, enemy_keys(g), radius=3, n=10)
-    g.camera.center_on(g.player.x, g.player.y)
-    play_scene(d, g, 230, "⚔  HUNT", (255, 90, 70),
-               "지하 999층 — 사냥이 시작된다", driver=hunt_driver(),
-               fade_in=True)
-
-    # (b) 도끼맨 궁극기 라그나로크
-    gb = Game(); gb.start_test_mode(10, char_class='axeman')
-    gb.player.stamina = gb.player.stamina_max
-    spawn_ring(gb, enemy_keys(gb), radius=3, n=10)
-    gb.camera.center_on(gb.player.x, gb.player.y)
-
-    def boss_drv(g, i):
+    def combat(cls, floor, frames, cap_key, skills, ult_at=None, ranged=False,
+               fade_in=False, fade_out=False):
+        g = Game(); g.start_test_mode(floor, char_class=cls)
         g.player.stamina = g.player.stamina_max
-        if i == 6:
-            _safe(g._process, {'type': 'ultimate', 'key': 'R'})
-        if i % 18 == 12:
-            _safe(g._process, {'type': 'skill', 'skill': 'D'})
-        if i % 34 == 0 and len(g.dungeon.enemies) < 5:
-            spawn_ring(g, enemy_keys(g), radius=4, n=8)
-        if g.dungeon.enemies and i % 2:
-            _safe(g._process, {'type': 'attack'})
+        spawn_ring(g, enemy_keys(g), radius=2, n=9)
         g.camera.center_on(g.player.x, g.player.y)
-    play_scene(d, gb, 200, "⚔  HUNT", (255, 90, 70),
-               "궁극기 한 방으로 쓸어버려라", driver=boss_drv)
+        lbl, col = CLASS_CHIP[cls]
+        play_scene(d, g, frames, lbl, col, L(cap_key),
+                   driver=combat_driver(skills, ult_at=ult_at, ranged=ranged),
+                   fade_in=fade_in, fade_out=fade_out)
 
-    # (c) 궁수 원거리 카이팅
-    ga2 = Game(); ga2.start_test_mode(8, char_class='archer')
-    ga2.player.stamina = ga2.player.stamina_max
-    spawn_ring(ga2, enemy_keys(ga2), radius=4, n=10)
-    ga2.camera.center_on(ga2.player.x, ga2.player.y)
-    play_scene(d, ga2, 180, "⚔  HUNT", (255, 90, 70),
-               "네 가지 직업, 네 가지 전투", driver=hunt_driver(ranged=True),
-               fade_out=True)
+    # ── 1. TITLE ──────────────────────────────────────────────────────────
+    card(d, 74, "DUNGEON DOOR", L("title_sub"), GOLD)
 
-    # ── 3. LIVE ───────────────────────────────────────────────────────────
+    # ── 2. HUNT — 도끼맨(신규·메인)을 앞세워 4직업 전부 ────────────────────
+    # (a) AXEMAN 등장 — 도끼 스킬 난전
+    combat('axeman', 9, 190, "axe_intro", ('W', 'D', 'S'), fade_in=True)
+    flash(d, 2)
+    # (b) AXEMAN 궁극기 라그나로크 — 하이라이트
+    combat('axeman', 12, 180, "axe_ult", ('W', 'D'), ult_at=8)
+    flash(d, 3)
+    # (c) WARRIOR
+    combat('warrior', 7, 135, "warrior", ('A', 'D', 'S'))
+    flash(d, 2)
+    # (d) MAGE — 원소/궁극기
+    combat('mage', 11, 165, "mage", ('A', 'D', 'S'), ult_at=10)
+    flash(d, 2)
+    # (e) ARCHER — 원거리 연사
+    combat('archer', 8, 140, "archer", ('A', 'D', 'S'), ranged=True, fade_out=True)
+
+    # ── 3. 생활 콘텐츠 — 슬로우 팬 대신 빠른 플래시 컷 ─────────────────────
+    from core.town import FARM_PLOTS, RANCH_PENS
     gt = Game(); gt.start_town_test(30, char_class='archer')
     fill_town_life(gt)
-    from core.town import FARM_PLOTS, RANCH_PENS
     fx, fy = FARM_PLOTS[0]
     rx, ry = RANCH_PENS[0]
-    pan = pan_driver([(fx + 4, fy + 2), (60, 46), (rx - 6, ry + 2), (rx + 2, ry)])
-    pan.total = 240
-    play_scene(d, gt, 240, "🌾  LIVE", (120, 210, 120),
-               "농사 · 낚시 · 목장 — 마을의 삶", driver=pan, fade_in=True)
 
-    # 농사 팝업 데모
+    # 인트로 한 컷
+    gt.camera.center_on(fx + 5, fy + 2)
+    play_scene(d, gt, 60, "TOWN", GOLD, L("feat"),
+               driver=pan_driver_short([(fx + 3, fy + 2), (fx + 8, fy + 3)], 60),
+               fade_in=True)
+    flash(d, 2)
+    # 농사 팝업
     gt.player.x, gt.player.y = FARM_PLOTS[2]
     gt.camera.center_on(gt.player.x, gt.player.y)
-    gt._farm_menu_plot = 2
-    gt._farm_menu_idx = 2
-    gt.state = 'farm_menu'
-
-    def farm_menu_drv(g, i):
-        g._farm_menu_idx = (i // 18) % 4
-    play_scene(d, gt, 120, "🌾  LIVE", (120, 210, 120),
-               "심고 · 기르고 · 거두고", driver=farm_menu_drv)
+    gt._farm_menu_plot = 2; gt.state = 'farm_menu'
+    play_scene(d, gt, 78, "FARM", (150, 220, 120), L("farm"),
+               driver=lambda g, i: setattr(g, '_farm_menu_idx', (i // 16) % 4))
     gt.state = 'playing'
-
-    # 낚시 릴 미니게임 데모
+    flash(d, 2)
+    # 낚시 릴 미니게임
     gt.player.x, gt.player.y = 50, 55
-    gt.camera.center_on(gt.player.x, gt.player.y)
-    gt._open_fishing()
-    gt._fish.update({'phase': 'reel', 't': 0.0, 'cursor': 0.2, 'dir': 1,
-                     'speed': 0.0016, 'band_c': 0.5, 'band_w': 0.14,
-                     'pending': ('koi', 1, 60), 'grade': 1})
-
-    def fish_drv(g, i):
-        f = g._fish
-        f['cursor'] += f['dir'] * f['speed'] * DT
-        if f['cursor'] <= 0:
-            f['cursor'] = 0; f['dir'] = 1
-        elif f['cursor'] >= 1:
-            f['cursor'] = 1; f['dir'] = -1
-    # fishing 상태는 step()에서 안 도니 직접 갱신
-    for i in range(150):
-        fish_drv(gt, i)
-        gt._render()
-        view = gt.screen.subsurface((GAME_X, GAME_Y, GAME_W, GAME_H)).copy()
-        frame = cinematic(view); vignette(frame); letterbox(frame)
-        chip(frame, "🌾  LIVE", (120, 210, 120))
-        caption(frame, "손맛 오지는 낚시 — 릴을 감아라", 255)
-        d.emit(frame)
-    gt.state = 'playing'
-
-    # 목장 근접 (가축 어슬렁)
+    gt.camera.center_on(50, 55)
+    fishing_scene(d, gt, 96, "FISH", (110, 200, 236), L("fish"))
+    flash(d, 2)
+    # 목장 근접
     gt.camera.center_on(rx, ry)
-    rpan = pan_driver([(rx - 3, ry), (rx + 4, ry + 1), (rx, ry)]); rpan.total = 150
-    play_scene(d, gt, 150, "🌾  LIVE", (120, 210, 120),
-               "가축을 길러 우유·달걀·고기를 얻어라",
-               driver=rpan, fade_out=True)
+    play_scene(d, gt, 86, "RANCH", (232, 182, 92), L("ranch"),
+               driver=pan_driver_short([(rx - 2, ry), (rx + 4, ry + 1)], 86),
+               fade_out=True)
 
     # ── 4. ADVENTURE ──────────────────────────────────────────────────────
-    ga = Game(); ga.start_test_mode(14, char_class='mage')
+    ga = Game(); ga.start_test_mode(14, char_class='axeman')
     ga.dungeon.reveal_all()
-    ga.camera.center_on(ga.player.x, ga.player.y)
     cx, cy = ga.player.x, ga.player.y
-    apan = pan_driver([(cx - 9, cy - 5), (cx + 9, cy + 5), (cx + 2, cy - 3), (cx, cy)])
-    apan.total = 260
-    play_scene(d, ga, 260, "🚪  ADVENTURE", (150, 130, 255),
-               "문 너머의 심연 — 999층을 정복하라", driver=apan,
+    play_scene(d, ga, 165, "ADVENTURE", (150, 130, 255), L("adv"),
+               driver=pan_driver_short([(cx - 8, cy - 4), (cx + 8, cy + 5),
+                                        (cx, cy)], 165),
                fade_in=True, fade_out=True)
 
     # ── 5. OUTRO ──────────────────────────────────────────────────────────
-    card(d, 135, "DUNGEON DOOR", "HUNT · LIVE · ADVENTURE", GOLD, wishlist=True)
+    card(d, 128, "DUNGEON DOOR", L("outro_sub"), GOLD, wishlist=True)
 
     d.close()
     return d.n
 
 
+def pan_driver_short(path, total):
+    p = pan_driver(path); p.total = total
+    return p
+
+
 if __name__ == "__main__":
-    out = sys.argv[1] if len(sys.argv) > 1 else "dungeon_door_trailer_v270.mp4"
-    n = build(out)
-    print(f"OK  {out}  ({n} frames, ~{n / FPS:.1f}s)")
+    out = sys.argv[1] if len(sys.argv) > 1 else "dungeon_door_trailer.mp4"
+    lang = sys.argv[2] if len(sys.argv) > 2 else "ko"
+    n = build(out, lang)
+    print(f"OK  {out}  [{lang}]  ({n} frames, ~{n / FPS:.1f}s)")
