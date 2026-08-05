@@ -240,7 +240,8 @@ class HUD:
 
     # ------------------------------------------------------------------ #
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
-                    page='main', settings=None, settings_sel=0):
+                    page='main', settings=None, settings_sel=0,
+                    mp_ip=None, mp_status=None, mp_banner=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -281,7 +282,7 @@ class HUD:
             p_h = 82 + len(cards) * 62 + 16 + 54 + 50 + 52
         elif page == 'multiplayer':
             p_w = 440
-            p_h = 300
+            p_h = 336
         else:
             p_w = 440
             p_h = 350
@@ -414,7 +415,10 @@ class HUD:
             fy = p_y + p_h - 32
             pygame.draw.line(screen, (42, 40, 64),
                              (p_x+20, fy-10), (p_x+p_w-20, fy-10))
-            hint = self.font_sm.render(t('menu_hint'), True, (60, 58, 90))
+            if mp_banner:
+                hint = self.font_sm.render(t('menu_mp_pick'), True, (150, 200, 250))
+            else:
+                hint = self.font_sm.render(t('menu_hint'), True, (60, 58, 90))
             screen.blit(hint, (cx - hint.get_width()//2, fy))
             # 테두리를 마지막에 그려 내용에 가리지 않게
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
@@ -434,17 +438,29 @@ class HUD:
 
             # ── 안내 문구 ──────────────────────────────────────────
             notice = self.font_sm.render(t('menu_mp_notice'), True, (150, 165, 200))
-            screen.blit(notice, (cx - notice.get_width()//2, p_y + 74))
+            screen.blit(notice, (cx - notice.get_width()//2, p_y + 64))
 
-            # ── 호스트 / 참가 (P1에서 실제 로비 연결) ──────────────
             mb_w = p_w - 40
-            mb_h = 50
             mb_x = p_x + 20
+
+            # ── 호스트 IP 입력 필드 (참가용) ───────────────────────
+            ip_lbl = self.font_sm.render(t('menu_mp_ip'), True, (150, 170, 205))
+            screen.blit(ip_lbl, (mb_x, p_y + 90))
+            ip_box = pygame.Rect(mb_x + 90, p_y + 86, mb_w - 90, 28)
+            pygame.draw.rect(screen, (10, 14, 26), ip_box, border_radius=4)
+            pygame.draw.rect(screen, (70, 104, 160), ip_box, 1, border_radius=4)
+            ipv = self.font_sm.render((mp_ip or ''), True, (215, 230, 250))
+            screen.blit(ipv, (ip_box.left + 8, ip_box.centery - ipv.get_height()//2))
+            iphint = self.font_sm.render(t('menu_mp_ip_hint'), True, (92, 108, 140))
+            screen.blit(iphint, (mb_x, p_y + 118))
+
+            # ── 방 만들기 / 친구 참가 ──────────────────────────────
+            mb_h = 46
             for i, (act_tag, lbl_key) in enumerate([
                 ('mp_host', 'menu_mp_host'),
                 ('mp_join', 'menu_mp_join'),
             ]):
-                by   = p_y + 104 + i * 60
+                by   = p_y + 140 + i * 52
                 rect = pygame.Rect(mb_x, by, mb_w, mb_h)
                 act  = (i == settings_sel)
                 hov  = rect.collidepoint(mouse_pos)
@@ -456,14 +472,17 @@ class HUD:
                 lbl = self.font_md.render(t(lbl_key), True, tc)
                 screen.blit(lbl, (rect.left + 20,
                                   rect.centery - lbl.get_height()//2))
-                # beta 준비 중 표기 (우측)
-                soon = self.font_sm.render(t('menu_mp_soon'), True, (110, 130, 160))
-                screen.blit(soon, (rect.right - soon.get_width() - 16,
-                                   rect.centery - soon.get_height()//2))
                 buttons.append((rect, act_tag))
 
+            # ── 상태 문구 (연결 중 / 실패) ─────────────────────────
+            if mp_status:
+                stc = (255, 150, 120) if ('실패' in mp_status or 'fail' in mp_status.lower()
+                                          or 'сбой' in mp_status.lower()) else (150, 210, 160)
+                st = self.font_sm.render(mp_status, True, stc)
+                screen.blit(st, (cx - st.get_width()//2, p_y + 246))
+
             # ── 뒤로 ───────────────────────────────────────────────
-            back_rect = pygame.Rect(mb_x, p_y + 104 + 2 * 60 + 6, mb_w, 42)
+            back_rect = pygame.Rect(mb_x, p_y + 270, mb_w, 40)
             act  = (settings_sel == 2)
             hov  = back_rect.collidepoint(mouse_pos)
             bg_c, bd_c, tc = _btn_colors(act, hov)

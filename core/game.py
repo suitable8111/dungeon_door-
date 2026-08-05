@@ -443,6 +443,13 @@ class Game:
 
         # 멀티플레이 세션 (None=싱글). P1: 마을 co-op(대칭 상태 브로드캐스트).
         self.net = None
+        # 메뉴 → co-op 시작 흐름 상태
+        self._pending_net    = None   # (role, transport) — 캐릭터 선택 후 부착 대기
+        self._mp_ip          = '127.0.0.1'
+        self._mp_status      = None   # 멀티 페이지 상태 문구(연결 중/실패)
+        self._mp_connecting  = False
+        self._mp_connect_result = None  # ('ok', tp) | ('err', msg) — 스레드가 채움
+        self._mp_mode_banner = None   # 메인 카드 화면 배너: 'host' | 'join'
 
     # ─────────────── 멀티플레이 (P1: 마을 co-op) ──────────────────────
     def _net_local_state(self):
@@ -662,6 +669,8 @@ class Game:
                                   f"peers={self.net.tp.peers()}", flush=True)
             elif self.state == 'fishing':
                 self._update_fishing(dt)
+            if self._mp_connecting:
+                self._mp_poll_connect()
             self._update_bgm()
             self._render()
 
@@ -1379,6 +1388,7 @@ class Game:
             d = dict(self._item_data['return_scroll']); d['key'] = 'return_scroll'
             self.player.inventory.append(Item(0, 0, d))
         self.state = 'playing'
+        self._maybe_begin_coop()   # co-op 대기 중이면 마을 진입 + 세션 부착
 
     # ─────────────── 테스트 모드 ──────────────────────────────────────
     def start_test_mode(self, floor: int = 1, char_class='warrior'):
@@ -1545,6 +1555,7 @@ class Game:
             self.dungeon.update_visibility(self.player.x, self.player.y)
         self.messages.append((t('floor_cont', self.floor), 'good'))
         self.state = 'playing'
+        self._maybe_begin_coop()   # co-op 대기 중이면 마을 진입 + 세션 부착
 
     def _load_floor(self, is_new_game=False):
         # 엔들리스(심연): 999 클리어 후엔 999 너머로 하강 허용
@@ -1746,6 +1757,10 @@ class Game:
                         self._start_discard_confirm(_ri)
                 elif self.state == 'char_create':
                     self._handle_char_create_key(event.key, event.unicode)
+                elif (self.state == 'menu' and self._menu_page == 'multiplayer'
+                        and (event.unicode in '0123456789.'
+                             or event.key == pygame.K_BACKSPACE)):
+                    self._handle_mp_key(event.key, event.unicode)
                 elif (self.state == 'menu' and self._menu_page == 'main'
                         and event.key == pygame.K_DELETE):
                     if self._menu_sel < len(self._cards):
@@ -1829,6 +1844,8 @@ class Game:
                 elif self.state == 'menu':
                     if self._menu_page in ('settings', 'multiplayer'):
                         self._menu_page = 'main'
+                    elif self._pending_net is not None:
+                        self._cancel_pending_net()   # co-op 캐릭터 선택 취소
                     else:
                         pygame.quit(); sys.exit()
                 elif self.state == 'dead':
@@ -1936,11 +1953,99 @@ class Game:
             self._activate_mp_item(self._menu_settings_sel)
 
     def _activate_mp_item(self, idx):
-        if idx == 2:                       # 뒤로
+        if idx == 0:                       # 방 만들기 (호스트)
+            self._begin_host()
+        elif idx == 1:                     # 친구 참가 (IP 접속)
+            self._begin_join()
+        else:                              # 뒤로
             self.audio.play('menu_select')
             self._menu_page = 'main'
-        else:                              # 호스트 / 참가 — 버튼에 'beta 준비 중' 표기
-            self.audio.play('menu_select')  # P1에서 실제 로비/친구초대 연결
+
+    def _handle_mp_key(self, key, uni):
+        """멀티 페이지 IP 필드 편집 (숫자·점·백스페이스)."""
+        if key == pygame.K_BACKSPACE:
+            self._mp_ip = self._mp_ip[:-1]
+        elif uni in '0123456789.' and len(self._mp_ip) < 21:
+            self._mp_ip += uni
+
+    def _begin_host(self):
+        """소켓 호스트를 열고 캐릭터 선택 화면으로. 접속 배관은 백그라운드."""
+        from net.socket_transport import SocketTransport, DEFAULT_PORT
+        if self._mp_connecting:
+            return
+        try:
+            tp = SocketTransport.host(port=DEFAULT_PORT)
+        except OSError:
+            self._mp_status = t('menu_mp_failed')
+            return
+        self.audio.play('menu_confirm')
+        self._pending_net    = ('host', tp)
+        self._mp_mode_banner = 'host'
+        self._mp_status      = None
+        self._menu_page      = 'main'
+
+    def _begin_join(self):
+        """입력한 IP로 접속을 백그라운드 스레드에서 시도한다(UI 프리즈 방지)."""
+        import threading
+        if self._mp_connecting:
+            return
+        ip = (self._mp_ip.strip() or '127.0.0.1')
+        self._mp_connecting     = True
+        self._mp_connect_result = None
+        self._mp_status         = t('menu_mp_connecting')
+        self.audio.play('menu_select')
+
+        def worker():
+            from net.socket_transport import SocketTransport, DEFAULT_PORT
+            try:
+                tp = SocketTransport.connect(ip, DEFAULT_PORT, timeout=12.0)
+                self._mp_connect_result = ('ok', tp)
+            except Exception as e:  # noqa: BLE001
+                self._mp_connect_result = ('err', str(e))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _mp_poll_connect(self):
+        """매 프레임 호출 — 접속 스레드 결과를 확인해 상태를 전이한다."""
+        res = self._mp_connect_result
+        if res is None:
+            return
+        self._mp_connect_result = None
+        self._mp_connecting     = False
+        kind, val = res
+        if kind == 'ok':
+            self._pending_net    = ('join', val)
+            self._mp_mode_banner = 'join'
+            self._mp_status      = None
+            self._menu_page      = 'main'
+            self.audio.play('menu_confirm')
+        else:
+            self._mp_status = t('menu_mp_failed')
+
+    def _cancel_pending_net(self):
+        """캐릭터 선택 중 취소 — 열어둔 전송을 닫고 상태 초기화."""
+        role_tp = self._pending_net
+        self._pending_net    = None
+        self._mp_mode_banner = None
+        self._mp_status      = None
+        if role_tp is not None:
+            try:
+                role_tp[1].close()
+            except Exception:
+                pass
+        self.audio.play('menu_select')
+
+    def _maybe_begin_coop(self):
+        """게임 월드 생성 직후 호출 — co-op 대기 중이면 마을 진입 + 세션 부착."""
+        if not self._pending_net:
+            return
+        role, tp = self._pending_net
+        self._pending_net    = None
+        self._mp_mode_banner = None
+        self._mp_status      = None
+        if not self._in_town:
+            self._enter_town()
+        self.start_net_session(tp, mode='town')
 
     def _select_card(self, card):
         """카드 선택 — 있으면 이어하기, 비었으면 캐릭터 생성."""
@@ -2091,12 +2196,11 @@ class Game:
                     break
             return
         if self._menu_page == 'multiplayer':
+            _tag_idx = {'mp_host': 0, 'mp_join': 1, 'mp_back': 2}
             for rect, tag in self._menu_buttons:
                 if rect.collidepoint(pos):
-                    if tag == 'mp_back':
-                        self._activate_mp_item(2)
-                    elif tag in ('mp_host', 'mp_join'):
-                        self._activate_mp_item(0)
+                    if tag in _tag_idx:
+                        self._activate_mp_item(_tag_idx[tag])
                     break
             return
         for rect, action in self._menu_buttons:
@@ -6782,6 +6886,9 @@ class Game:
                 page=self._menu_page,
                 settings=self._settings,
                 settings_sel=self._menu_settings_sel,
+                mp_ip=self._mp_ip,
+                mp_status=self._mp_status,
+                mp_banner=self._mp_mode_banner,
             )
             pygame.display.flip()
             return
