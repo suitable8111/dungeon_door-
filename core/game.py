@@ -1776,7 +1776,7 @@ class Game:
                     self._pause_sel = 0
                     self.state = 'paused'
                 elif self.state == 'menu':
-                    if self._menu_page == 'settings':
+                    if self._menu_page in ('settings', 'multiplayer'):
                         self._menu_page = 'main'
                     else:
                         pygame.quit(); sys.exit()
@@ -1845,9 +1845,12 @@ class Game:
         if self._menu_page == 'settings':
             self._handle_menu_settings_action(action)
             return
+        if self._menu_page == 'multiplayer':
+            self._handle_menu_mp_action(action)
+            return
         typ = action['type']
         n = len(self._cards)
-        total = n + 2  # + settings + quit
+        total = n + 3  # + multiplayer + settings + quit
         if typ == 'move':
             dy = action.get('dy', 0)
             if dy != 0:
@@ -1857,11 +1860,36 @@ class Game:
             if self._menu_sel < n:
                 self._select_card(self._cards[self._menu_sel])
             elif self._menu_sel == n:
+                self._open_multiplayer()
+            elif self._menu_sel == n + 1:
                 self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
-            elif self._menu_sel == n + 1:
+            elif self._menu_sel == n + 2:
                 pygame.quit(); sys.exit()
+
+    def _open_multiplayer(self):
+        """멀티플레이(beta) 페이지 진입. 실제 로비 연결은 P1에서."""
+        self.audio.play('menu_select')
+        self._menu_page = 'multiplayer'
+        self._menu_settings_sel = 0
+
+    def _handle_menu_mp_action(self, action):
+        typ = action['type']
+        if typ == 'move':
+            dy = action.get('dy', 0)
+            if dy != 0:
+                self._menu_settings_sel = (self._menu_settings_sel + dy) % 3
+                self.audio.play('menu_select')
+        elif typ in ('wait', 'confirm', 'load'):
+            self._activate_mp_item(self._menu_settings_sel)
+
+    def _activate_mp_item(self, idx):
+        if idx == 2:                       # 뒤로
+            self.audio.play('menu_select')
+            self._menu_page = 'main'
+        else:                              # 호스트 / 참가 — 버튼에 'beta 준비 중' 표기
+            self.audio.play('menu_select')  # P1에서 실제 로비/친구초대 연결
 
     def _select_card(self, card):
         """카드 선택 — 있으면 이어하기, 비었으면 캐릭터 생성."""
@@ -2011,6 +2039,15 @@ class Game:
                     self._handle_menu_settings_click(tag)
                     break
             return
+        if self._menu_page == 'multiplayer':
+            for rect, tag in self._menu_buttons:
+                if rect.collidepoint(pos):
+                    if tag == 'mp_back':
+                        self._activate_mp_item(2)
+                    elif tag in ('mp_host', 'mp_join'):
+                        self._activate_mp_item(0)
+                    break
+            return
         for rect, action in self._menu_buttons:
             if rect.collidepoint(pos):
                 if action.startswith('slot:'):
@@ -2022,6 +2059,8 @@ class Game:
                     self._delete_card(int(action.split(':')[1]))
                 elif action == 'test_mode' and self._test_floor is not None:
                     self.start_test_mode(self._test_floor)
+                elif action == 'multiplayer':
+                    self._open_multiplayer()
                 elif action == 'settings':
                     self._menu_page = 'settings'
                     self._menu_settings_sel = 0

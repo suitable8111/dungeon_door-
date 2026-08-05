@@ -79,6 +79,18 @@ def _draw_x_icon(surf, cx, cy, col):
     pygame.draw.line(surf, col, (cx+5, cy-5), (cx-5, cy+5), 2)
 
 
+def _draw_network_icon(surf, cx, cy, col):
+    """두 노드를 잇는 링크 — 멀티플레이(P2P) 아이콘."""
+    # 좌하·우상 두 피어 + 연결선
+    a = (cx - 6, cy + 5)
+    b = (cx + 6, cy - 5)
+    pygame.draw.line(surf, col, a, b, 2)
+    pygame.draw.circle(surf, col, a, 4)
+    pygame.draw.circle(surf, col, b, 4)
+    pygame.draw.circle(surf, (0, 0, 0), a, 2)
+    pygame.draw.circle(surf, (0, 0, 0), b, 2)
+
+
 def _btn_colors(active, hovered, danger=False):
     """(bg, border, text_col) 반환."""
     if danger:
@@ -266,7 +278,10 @@ class HUD:
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
             p_w = 470
-            p_h = 82 + len(cards) * 62 + 16 + 50 + 52
+            p_h = 82 + len(cards) * 62 + 16 + 54 + 50 + 52
+        elif page == 'multiplayer':
+            p_w = 440
+            p_h = 300
         else:
             p_w = 440
             p_h = 350
@@ -347,11 +362,29 @@ class HUD:
             pygame.draw.line(screen, (44, 42, 66),
                              (p_x+30, sep_y), (p_x+p_w-30, sep_y))
 
+            # ── 멀티플레이 (beta) 버튼 (전체 폭) ───────────────────
+            mp_idx = len(cards)
+            mp_h = 46
+            mp_rect = pygame.Rect(p_x + 20, sep_y + 12, p_w - 40, mp_h)
+            mp_act  = (mp_idx == sel)
+            mp_hov  = mp_rect.collidepoint(mouse_pos)
+            # 베타 강조: 파란빛 액센트 + 부드러운 발광 테두리
+            mp_bg = (26, 34, 58) if (mp_act or mp_hov) else (18, 24, 42)
+            mp_bd = (90, 150, 235) if (mp_act or mp_hov) else (58, 92, 150)
+            mp_tc = (200, 224, 255) if (mp_act or mp_hov) else (150, 180, 224)
+            pygame.draw.rect(screen, mp_bg, mp_rect, border_radius=5)
+            pygame.draw.rect(screen, mp_bd, mp_rect, 2 if mp_act else 1, border_radius=5)
+            _draw_network_icon(screen, mp_rect.left + 22, mp_rect.centery, mp_tc)
+            mlbl = self.font_md.render(t('menu_multiplayer'), True, mp_tc)
+            screen.blit(mlbl, (mp_rect.left + 42,
+                               mp_rect.centery - mlbl.get_height() // 2))
+            buttons.append((mp_rect, 'multiplayer'))
+
             # ── 설정 / 종료 버튼 (나란히, 작은 크기) ───────────────
             sm_h = 44
             sm_w = (p_w - 60) // 2
-            sm_y = sep_y + 12
-            s_idx = len(cards);     q_idx = len(cards) + 1
+            sm_y = mp_rect.bottom + 12
+            s_idx = len(cards) + 1;     q_idx = len(cards) + 2
 
             for idx, action, lbl_key, danger, sm_x in [
                 (s_idx, 'settings', 'menu_settings', False, p_x + 20),
@@ -386,6 +419,63 @@ class HUD:
             # 테두리를 마지막에 그려 내용에 가리지 않게
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
+
+        # ════════════════════════════════════════════════════════════
+        elif page == 'multiplayer':
+        # ════════════════════════════════════════════════════════════
+
+            # ── 타이틀 ─────────────────────────────────────────────
+            pygame.draw.rect(screen, (12, 14, 30), (p_x, p_y, p_w, 54))
+            pygame.draw.line(screen, (70, 110, 160),
+                             (p_x+20, p_y+54), (p_x+p_w-20, p_y+54))
+            _draw_network_icon(screen, p_x + 34, p_y + 27, (150, 190, 245))
+            ts = self.font_lg.render(t('menu_multiplayer'), True, (190, 218, 255))
+            screen.blit(ts, (p_x + 54, p_y + 27 - ts.get_height()//2))
+
+            # ── 안내 문구 ──────────────────────────────────────────
+            notice = self.font_sm.render(t('menu_mp_notice'), True, (150, 165, 200))
+            screen.blit(notice, (cx - notice.get_width()//2, p_y + 74))
+
+            # ── 호스트 / 참가 (P1에서 실제 로비 연결) ──────────────
+            mb_w = p_w - 40
+            mb_h = 50
+            mb_x = p_x + 20
+            for i, (act_tag, lbl_key) in enumerate([
+                ('mp_host', 'menu_mp_host'),
+                ('mp_join', 'menu_mp_join'),
+            ]):
+                by   = p_y + 104 + i * 60
+                rect = pygame.Rect(mb_x, by, mb_w, mb_h)
+                act  = (i == settings_sel)
+                hov  = rect.collidepoint(mouse_pos)
+                bg_c = (24, 32, 54) if (act or hov) else (16, 22, 38)
+                bd_c = (88, 148, 230) if (act or hov) else (54, 86, 140)
+                tc   = (200, 224, 255) if (act or hov) else (140, 170, 214)
+                pygame.draw.rect(screen, bg_c, rect, border_radius=5)
+                pygame.draw.rect(screen, bd_c, rect, 2 if act else 1, border_radius=5)
+                lbl = self.font_md.render(t(lbl_key), True, tc)
+                screen.blit(lbl, (rect.left + 20,
+                                  rect.centery - lbl.get_height()//2))
+                # beta 준비 중 표기 (우측)
+                soon = self.font_sm.render(t('menu_mp_soon'), True, (110, 130, 160))
+                screen.blit(soon, (rect.right - soon.get_width() - 16,
+                                   rect.centery - soon.get_height()//2))
+                buttons.append((rect, act_tag))
+
+            # ── 뒤로 ───────────────────────────────────────────────
+            back_rect = pygame.Rect(mb_x, p_y + 104 + 2 * 60 + 6, mb_w, 42)
+            act  = (settings_sel == 2)
+            hov  = back_rect.collidepoint(mouse_pos)
+            bg_c, bd_c, tc = _btn_colors(act, hov)
+            pygame.draw.rect(screen, bg_c, back_rect, border_radius=4)
+            pygame.draw.rect(screen, bd_c, back_rect, 1, border_radius=4)
+            bl = self.font_md.render(t('menu_back'), True, tc)
+            screen.blit(bl, (back_rect.centerx - bl.get_width()//2,
+                             back_rect.centery - bl.get_height()//2))
+            buttons.append((back_rect, 'mp_back'))
+
+            pygame.draw.rect(screen, (62, 78, 112), (p_x,   p_y,   p_w,   p_h  ), 2)
+            pygame.draw.rect(screen, (38, 48, 72), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         # ════════════════════════════════════════════════════════════
         else:  # page == 'settings'
