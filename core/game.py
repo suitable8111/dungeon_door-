@@ -655,6 +655,11 @@ class Game:
                 # 멀티플레이: 마을에서 내 상태 브로드캐스트 + 원격 플레이어 동기화
                 if self.net is not None and self._in_town:
                     self.net.tick(dt)
+                    if os.environ.get('DD_MP_DEBUG'):
+                        self._mp_dbg = getattr(self, '_mp_dbg', 0) + 1
+                        if self._mp_dbg % 60 == 0:
+                            print(f"[MP] REMOTES={len(self.net.remote_players)} "
+                                  f"peers={self.net.tp.peers()}", flush=True)
             elif self.state == 'fishing':
                 self._update_fishing(dt)
             self._update_bgm()
