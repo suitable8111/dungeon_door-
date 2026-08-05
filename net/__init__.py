@@ -13,7 +13,7 @@
 from net.protocol import (
     CH_CONTROL, CH_INPUT, CH_SNAPSHOT,
     encode, decode,
-    hello, input_msg, snapshot, chat, event,
+    hello, input_msg, snapshot, state_msg, chat, event,
 )
 from net.transport import Transport, LoopbackTransport, loopback_pair
 from net.session import Session
@@ -21,7 +21,7 @@ from net.session import Session
 __all__ = [
     "CH_CONTROL", "CH_INPUT", "CH_SNAPSHOT",
     "encode", "decode",
-    "hello", "input_msg", "snapshot", "chat", "event",
+    "hello", "input_msg", "snapshot", "state_msg", "chat", "event",
     "Transport", "LoopbackTransport", "loopback_pair",
     "Session",
 ]

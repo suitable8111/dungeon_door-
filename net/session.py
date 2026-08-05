@@ -33,21 +33,29 @@ class Session:
         name: str = "Hero",
         appearance: Optional[dict] = None,
         *,
+        mode: str = "town",
         local_player_state: Optional[Callable[[], dict]] = None,
         walkable: Optional[Callable[[int, int], bool]] = None,
         spawn: tuple[int, int] = (0, 0),
         snapshot_interval: int = 3,
+        state_interval: int = 3,
     ):
+        # mode:
+        #   'town'    — 각 피어가 자기 상태를 브로드캐스트(소유자 권위). 플레이어
+        #               아바타 동기화에 적합. 지터 없음.
+        #   'dungeon' — 호스트가 모든 상태의 권위. 적/월드 동기화용(P3).
+        self.mode = mode
         self.tp = transport
         self.is_host = transport.is_host
         self.char_class = char_class
         self.name = name
         self.appearance = appearance or {}
 
-        # 클라가 없으면(=호스트가 provider 미제공) 세션이 자체 상태를 들고 이동시킨다.
+        # 로컬 플레이어 상태 공급자(실제 Player에서 player_state dict 생성).
         self._provider = local_player_state
         self._walkable = walkable or (lambda x, y: True)
         self._snapshot_interval = max(1, snapshot_interval)
+        self._state_interval = max(1, state_interval)
 
         # 로컬 플레이어의 권위 상태 (호스트 기준). provider가 있으면 매 틱 덮어씀.
         self._local = P.player_state(
@@ -87,6 +95,21 @@ class Session:
             self._seq += 1
             self._send(P.CH_INPUT, P.input_msg(action, self._seq))
 
+    def broadcast_local_state(self, state: Optional[dict] = None) -> None:
+        """마을 모델: 자기 플레이어 상태를 모든 피어에게 알린다.
+
+        state 미지정 시 provider에서 가져온다. 소유자 권위이므로 예측/보정 불필요.
+        """
+        if state is None and self._provider is not None:
+            state = self._provider()
+        if not state:
+            state = self._local
+        state = dict(state)
+        state["id"] = self.tp.local_id()
+        self._local = state
+        self._authoritative[self.tp.local_id()] = state
+        self.tp.broadcast(P.CH_SNAPSHOT, P.encode(P.state_msg(state)))
+
     def send_chat(self, text: str) -> None:
         msg = P.chat(self.tp.local_id(), text)
         self.chat_log.append((self.tp.local_id(), text))
@@ -100,26 +123,28 @@ class Session:
         self.tp.run_callbacks()
         self._tick += 1
 
-        # 로컬 권위 상태를 실제 플레이어에서 갱신 (제공된 경우)
-        if self.is_host and self._provider is not None:
-            st = self._provider()
-            if st:
-                st["id"] = self.tp.local_id()
-                self._authoritative[self.tp.local_id()] = st
-                self._local = st
-
-        # 수신 메시지 처리
-        for from_id, channel, data in self.tp.poll():
-            self._handle(from_id, channel, P.decode(data))
-
-        # 호스트: 권위 상태 → 자기 RemotePlayer 뷰 동기화 (렌더를 양쪽 공통화)
-        if self.is_host:
-            self._sync_host_views()
-            # 주기적 스냅샷 브로드캐스트
-            if self._tick % self._snapshot_interval == 0:
-                players = list(self._authoritative.values())
-                self.tp.broadcast(P.CH_SNAPSHOT,
-                                  P.encode(P.snapshot(self._tick, players)))
+        if self.mode == "town":
+            # 마을: 양쪽 피어가 주기적으로 자기 상태를 알린다.
+            if self._provider is not None and self._tick % self._state_interval == 0:
+                self.broadcast_local_state()
+            for from_id, channel, data in self.tp.poll():
+                self._handle(from_id, channel, P.decode(data))
+        else:
+            # 던전: 호스트가 모든 상태의 권위.
+            if self.is_host and self._provider is not None:
+                st = self._provider()
+                if st:
+                    st["id"] = self.tp.local_id()
+                    self._authoritative[self.tp.local_id()] = st
+                    self._local = st
+            for from_id, channel, data in self.tp.poll():
+                self._handle(from_id, channel, P.decode(data))
+            if self.is_host:
+                self._sync_host_views()
+                if self._tick % self._snapshot_interval == 0:
+                    players = list(self._authoritative.values())
+                    self.tp.broadcast(P.CH_SNAPSHOT,
+                                      P.encode(P.snapshot(self._tick, players)))
 
         # 원격 플레이어 보간 갱신 (양쪽 공통)
         for rp in self.remote_players.values():
@@ -132,6 +157,16 @@ class Session:
             self._register_remote(from_id, msg)
         elif t == P.T_INPUT and self.is_host:
             self._apply_action(from_id, msg.get("a", {}))
+        elif t == P.T_STATE:
+            # 마을 모델: 보낸 피어의 자기 상태. 출처는 전송 from_id를 신뢰
+            # (Steam에서는 인증된 SteamID이므로 스푸핑 방지).
+            st = dict(msg.get("p", {}))
+            st["id"] = from_id
+            rp = self.remote_players.get(from_id)
+            if rp is None:
+                rp = RemotePlayer(from_id)
+                self.remote_players[from_id] = rp
+            rp.apply_state(st)
         elif t == P.T_SNAPSHOT and not self.is_host:
             self._apply_snapshot(msg)
         elif t == P.T_CHAT:

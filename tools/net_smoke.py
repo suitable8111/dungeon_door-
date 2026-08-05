@@ -34,11 +34,11 @@ def _walkable(x, y):
 def run() -> bool:
     host_tp, client_tp = loopback_pair()
 
-    # 호스트: provider 없이 자체 이동(도끼맨), 스폰 (10,10)
-    host = Session(host_tp, char_class="axeman", name="HOST",
+    # 호스트 권위(던전) 모델 검증: 호스트가 모든 상태의 권위.
+    host = Session(host_tp, char_class="axeman", name="HOST", mode="dungeon",
                    walkable=_walkable, spawn=(10, 10), snapshot_interval=2)
     # 클라: 마법사, 접속 시 호스트 옆에 스폰됨
-    client = Session(client_tp, char_class="mage", name="GUEST",
+    client = Session(client_tp, char_class="mage", name="GUEST", mode="dungeon",
                      walkable=_walkable, spawn=(0, 0))
 
     host.start()

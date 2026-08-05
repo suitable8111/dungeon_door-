@@ -18,6 +18,7 @@ CH_SNAPSHOT = 2   # 호스트 → 클라 상태 스냅샷 (고빈도)
 T_HELLO    = "hello"
 T_INPUT    = "input"
 T_SNAPSHOT = "snap"
+T_STATE    = "state"   # 마을 모델: 각 피어가 '자기' 상태를 스스로 알림(소유자 권위)
 T_CHAT     = "chat"
 T_EVENT    = "evt"
 
@@ -52,6 +53,11 @@ def input_msg(action: dict, seq: int = 0) -> dict:
 def snapshot(tick: int, players: list[dict]) -> dict:
     """호스트 → 클라: 권위 상태. players는 player_state() dict의 리스트."""
     return {"t": T_SNAPSHOT, "k": tick, "p": players}
+
+
+def state_msg(player: dict) -> dict:
+    """마을 모델: 한 피어가 자기 자신의 player_state를 브로드캐스트."""
+    return {"t": T_STATE, "p": player}
 
 
 def chat(sender_id: int, text: str) -> dict:
