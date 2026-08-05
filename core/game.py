@@ -441,6 +441,49 @@ class Game:
         self.dungeon = None
         self.camera  = None
 
+        # 멀티플레이 세션 (None=싱글). P1: 마을 co-op(대칭 상태 브로드캐스트).
+        self.net = None
+
+    # ─────────────── 멀티플레이 (P1: 마을 co-op) ──────────────────────
+    def _net_local_state(self):
+        """내 플레이어의 네트워크 상태 dict — Session provider로 사용."""
+        from net import protocol as P
+        p = self.player
+        if p is None:
+            return None
+        pid = self.net.tp.local_id() if self.net is not None else 0
+        return P.player_state(
+            pid, p.x, p.y, self._facing, self._walk_frame,
+            p.char_class, getattr(p, 'char_name', 'Hero'),
+            getattr(p, 'appearance', None), p.hp, p.max_hp)
+
+    def start_net_session(self, transport, mode='town'):
+        """전송 계층을 받아 멀티플레이 세션을 시작한다.
+
+        transport는 LoopbackTransport(테스트) 또는 SteamTransport(프로덕션).
+        인터페이스가 같으므로 게임 코드는 어느 쪽이든 동일하게 동작한다.
+        """
+        from net import Session
+        p = self.player
+        self.net = Session(
+            transport,
+            char_class=(p.char_class if p else 'warrior'),
+            name=(getattr(p, 'char_name', 'Hero') if p else 'Hero'),
+            appearance=(getattr(p, 'appearance', None) if p else None),
+            mode=mode,
+            local_player_state=self._net_local_state,
+        )
+        self.net.start()
+        return self.net
+
+    def stop_net_session(self):
+        if self.net is not None:
+            try:
+                self.net.tp.close()
+            except Exception:
+                pass
+            self.net = None
+
     # ------------------------------------------------------------------ #
     @staticmethod
     def _scale_fit(surf: pygame.Surface, size: int) -> pygame.Surface:
@@ -609,6 +652,9 @@ class Game:
                     self._update_collapse(world_dt)  # 붕괴 추격
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
+                # 멀티플레이: 마을에서 내 상태 브로드캐스트 + 원격 플레이어 동기화
+                if self.net is not None and self._in_town:
+                    self.net.tick(dt)
             elif self.state == 'fishing':
                 self._update_fishing(dt)
             self._update_bgm()
@@ -6937,6 +6983,11 @@ class Game:
             self._fortify_effect.draw_below(self._game_surf, px, py)
 
         self._draw_player_sprite(px, py)
+
+        # 멀티플레이: 원격 플레이어(다른 접속자) — 마을 co-op
+        if self.net is not None and self._in_town:
+            for rp in self.net.remote_players.values():
+                rp.draw(self._game_surf, cx, cy)
 
         # 펫 (플레이어 근처, 카메라 오프셋 적용)
         if self._pet and not self._in_town:
