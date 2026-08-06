@@ -494,6 +494,7 @@ class Game:
             apply_world=self._net_apply_world,          # 클라: 받은 월드 반영
             on_remote_action=self._net_apply_world_action,  # 호스트: 클라 액션 적용
             on_event=self._net_on_event,                # co-op 던전 입장 등
+            world_interval=6,                           # 적 상태 ~10/s 브로드캐스트
         )
         self.net.start()
         return self.net
@@ -560,22 +561,54 @@ class Game:
                 self.dungeon.update_visibility(rp.x, rp.y)
 
     # ── 공유 월드(밭 등) 동기화 훅 ────────────────────────────────────
+    def _coop_is_client(self):
+        return (self.net is not None and not self.net.is_host
+                and self._coop_dungeon and not self._in_town)
+
     def _net_world_state(self):
-        """호스트: 현재 공유 월드 상태 dict. 마을 밖이면 None."""
-        if not self._in_town or self._town is None:
-            return None
-        return {'farm': self._town.farm, 'ranch': self._town.ranch}
+        """호스트: 현재 공유 월드 상태 dict. 마을=밭/목장, co-op던전=적 상태."""
+        if self._in_town and self._town is not None:
+            return {'farm': self._town.farm, 'ranch': self._town.ranch}
+        if self._coop_dungeon and self.dungeon is not None:
+            # 적 상태(권위): [net_id, x, y, hp] — 살아있는 적만
+            en = [[e.net_id, e.x, e.y, e.hp]
+                  for e in self.dungeon.enemies
+                  if getattr(e, 'net_id', None) is not None and e.is_alive()]
+            return {'en': en}
+        return None
 
     def _net_apply_world(self, state):
         """클라: 호스트가 보낸 공유 월드 상태를 반영(렌더용, 권위는 호스트)."""
-        if self._town is None:
-            return
         farm = state.get('farm')
-        if isinstance(farm, list):
+        if isinstance(farm, list) and self._town is not None:
             self._town.farm = farm
         ranch = state.get('ranch')
-        if isinstance(ranch, list):
+        if isinstance(ranch, list) and self._town is not None:
             self._town.ranch = ranch
+        en = state.get('en')
+        if en is not None and self.dungeon is not None:
+            self._net_apply_enemies(en)
+
+    def _net_apply_enemies(self, en):
+        """클라: 호스트 권위 적 상태를 로컬 적에 반영. 없는 적은 처치된 것으로 제거."""
+        by_id = {e.net_id: e for e in self.dungeon.enemies
+                 if getattr(e, 'net_id', None) is not None}
+        seen = set()
+        for nid, x, y, hp in en:
+            seen.add(nid)
+            e = by_id.get(nid)
+            if e is None:
+                continue
+            e.x, e.y = x, y          # 위치 스냅(그리드) — 부드러움은 추후
+            e.anim_ox = e.anim_oy = 0
+            e.hp = hp
+        # 스냅샷에 없는(=호스트에서 죽은) 적 제거 + 사망 연출
+        for e in list(self.dungeon.enemies):
+            nid = getattr(e, 'net_id', None)
+            if nid is not None and nid not in seen and e.is_alive():
+                self.animator.particles.emit_death(e.x, e.y, e.color)
+                if e in self.dungeon.enemies:
+                    self.dungeon.enemies.remove(e)
 
     def _net_apply_world_action(self, peer_id, action):
         """호스트: 클라의 월드 변경 액션을 밭/목장 상태에만 적용(보상은 클라 로컬)."""
@@ -1830,15 +1863,13 @@ class Game:
             self.floor = min(self.floor, MAX_FLOOR)
         self._quest_on_floor(min(self.floor, MAX_FLOOR))   # reach_floor 퀘스트 추적
         self.vfx_loot.clear()          # 이전 층 전리품 연출 정리
-        # co-op: 공유 시드로 결정론적 생성(양쪽 동일 맵) → 생성 후 엔트로피 복귀
+        # co-op: 공유 시드로 결정론적 생성. 프롭·적까지 양쪽 동일하도록 이 층 동안
+        # 시드를 유지(엔트로피 복귀는 co-op 종료 시). net_id 인덱스 매칭에 필수.
         if self._coop_seed is not None:
             import random as _r
             _r.seed(self._coop_seed)
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
-        if self._coop_seed is not None:
-            import random as _r
-            _r.seed()
         self.dungeon  = dungeon
         self._apply_coop_difficulty(dungeon)   # co-op이면 적 강화(싱글보다 어렵게)
         self._theme   = get_theme(self.floor)
@@ -1890,6 +1921,11 @@ class Game:
 
         # 파괴 가능 프롭 + 보물 고블린 (리스폰 카운트 산정 전에 스폰)
         self._spawn_floor_props()
+
+        # co-op: 결정론적 생성이라 양쪽 적 목록이 동일 → 인덱스로 안정적 net_id 부여
+        if self._coop_dungeon:
+            for i, e in enumerate(self.dungeon.enemies):
+                e.net_id = i
 
         # 리스폰 설정: 보스·프롭·고블린 제외 초기 몬스터 수를 최대치로 고정
         self._respawn_max      = sum(1 for e in self.dungeon.enemies
@@ -7110,6 +7146,9 @@ class Game:
                 return
 
     def _update_enemies(self, dt):
+        # co-op 클라: 적 AI는 호스트 권위 → 로컬 시뮬 정지(스냅샷으로 갱신)
+        if self._coop_is_client():
+            return
         for enemy in list(self.dungeon.enemies):
             if not (enemy.is_alive() and self.player.is_alive()):
                 continue
@@ -7179,6 +7218,7 @@ class Game:
         # ── 몬스터 리스폰 ────────────────────────────────────────────
         if (not self._burning_active and
                 not self._in_town and
+                not self._coop_dungeon and       # co-op: net_id 안정성 위해 리스폰 정지
                 not self.dungeon.is_boss_floor and
                 self._respawn_max > 0):
             live_normal = sum(1 for e in self.dungeon.enemies
