@@ -475,6 +475,8 @@ class Game:
         self._mp_connect_result = None  # ('ok', tp) | ('err', msg) — 스레드가 채움
         self._mp_mode_banner = None   # 메인 카드 화면 배너: 'host' | 'join'
         self._mp_code        = None   # 호스트가 생성한 초대 코드(친구에게 공유)
+        self._mp_forward     = None   # UPnP 포트포워딩 핸들(정리용)
+        self._mp_upnp        = None   # UPnP 상태: 'wait'|'ok'|'lan'
         # 던전 co-op (P3)
         self._coop_dungeon = False    # co-op 던전 탐험 중
         self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
@@ -1024,6 +1026,7 @@ class Game:
             except Exception:
                 pass
             self.net = None
+        self._close_upnp_forward()   # 포트포워딩 매핑 제거
 
     # ------------------------------------------------------------------ #
     @staticmethod
@@ -2580,13 +2583,45 @@ class Game:
             # 바인드 실패 = 포트 점유(다른 게임 창이 이미 호스트 중 등)
             self._mp_status = t('menu_mp_port_busy')
             return
-        # 접속 정보를 담은 초대 코드 생성(친구에게 공유용)
-        self._mp_code = make_code(local_ip(), DEFAULT_PORT)
+        # 접속 정보를 담은 초대 코드 생성(우선 LAN IP — 같은 공유기 즉시 가능)
+        lan = local_ip()
+        self._mp_code = make_code(lan, DEFAULT_PORT)
         self.audio.play('menu_confirm')
         self._pending_net    = ('host', tp)
         self._mp_mode_banner = 'host'
         self._mp_status      = None
         self._menu_page      = 'main'
+        # 백그라운드로 UPnP 포트포워딩 시도 → 성공하면 공인 IP로 코드 업그레이드
+        self._mp_upnp = 'wait'
+        self._start_upnp_forward(lan, DEFAULT_PORT)
+
+    def _start_upnp_forward(self, lan_ip, port):
+        import threading
+        from net.upnp import PortForward
+        from net.invite import make_code
+
+        def worker():
+            pf = PortForward(port)
+            try:
+                ext = pf.setup(lan_ip)     # 공인 IP면 반환, 아니면 None
+            except Exception:
+                ext = None
+            self._mp_forward = pf
+            if ext:                        # 인터넷 어디서든 가능 → 코드에 공인 IP
+                self._mp_code = make_code(ext, port)
+                self._mp_upnp = 'ok'
+            else:                          # CGNAT/미지원 → LAN 코드 유지
+                self._mp_upnp = 'lan'
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _close_upnp_forward(self):
+        pf = self._mp_forward
+        self._mp_forward = None
+        self._mp_upnp = None
+        if pf is not None:
+            import threading
+            threading.Thread(target=pf.close, daemon=True).start()
 
     def _begin_join(self):
         """초대 코드 또는 IP로 접속을 백그라운드 스레드에서 시도(UI 프리즈 방지)."""
@@ -2644,6 +2679,7 @@ class Game:
         self._mp_mode_banner = None
         self._mp_status      = None
         self._mp_code        = None
+        self._close_upnp_forward()   # 포트포워딩 정리(취소 시)
         if role_tp is not None:
             try:
                 role_tp[1].close()
@@ -7570,6 +7606,7 @@ class Game:
                 mp_status=self._mp_status,
                 mp_banner=self._mp_mode_banner,
                 mp_code=self._mp_code,
+                mp_upnp=self._mp_upnp,
             )
             pygame.display.flip()
             return
