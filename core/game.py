@@ -542,6 +542,9 @@ class Game:
         elif kind == 'grant':
             # 호스트가 승인한 아이템 획득
             self._coop_receive_grant(data)
+        elif kind == 'walls':
+            # 호스트가 부순 균열 벽 반영(맵 일관성)
+            self._coop_break_walls(data.get('t', []))
 
     def _coop_take_hit(self, dmg):
         """클라: 호스트가 알린 피격을 내 플레이어에 적용 + 연출."""
@@ -705,6 +708,34 @@ class Game:
             if nid is not None and nid not in seen:
                 self.dungeon.remove_item(it)
 
+    def _net_apply_bomb(self, action):
+        """호스트: 클라가 던진 폭탄을 권위 시뮬(도화선 후 벽 파괴·피해)."""
+        if self.dungeon is None:
+            return
+        x, y = action.get('x'), action.get('y')
+        if x is None or y is None:
+            return
+        r = int(action.get('r', self._BOMB_RADIUS))
+        self._bombs.append({'x': int(x), 'y': int(y),
+                            'fuse': float(self._BOMB_FUSE), 'r': r})
+
+    def _coop_break_walls(self, tiles):
+        """클라: 호스트가 알린 균열 벽 파괴를 로컬 타일에 반영(맵 일관성)."""
+        if self.dungeon is None:
+            return
+        for pos in tiles:
+            wx, wy = pos[0], pos[1]
+            if not self.dungeon.in_bounds(wx, wy):
+                continue
+            tl = self.dungeon.tiles[wy][wx]
+            nt = Tile.floor()
+            nt.explored = True
+            nt.visible = tl.visible
+            self.dungeon.tiles[wy][wx] = nt
+            self.animator.particles.emit_death(wx, wy, (120, 110, 96))
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(self.player.x, self.player.y)
+
     def _net_apply_pick(self, peer_id, item_id):
         """호스트: 클라의 획득 요청 — 아이템 있으면 바닥에서 제거하고 그 클라에 지급."""
         if self.dungeon is None or item_id is None:
@@ -771,6 +802,9 @@ class Game:
             return
         if kind == 'pick':
             self._net_apply_pick(peer_id, action.get('id'))
+            return
+        if kind == 'bomb':
+            self._net_apply_bomb(action)
             return
         if self._town is None:
             return
@@ -1497,6 +1531,10 @@ class Game:
         self.animator.add(MagicBoltAnim(self.player.x, self.player.y, bx, by,
                                         self._facing, (200, 90, 40)))
         self.audio.play('use_item')
+        # co-op 클라: 실제 폭발(벽 파괴·피해)은 호스트가 처리하도록 인텐트 전송
+        if self._coop_is_client():
+            self.net.send_world_action({'kind': 'bomb', 'x': bx, 'y': by,
+                                        'r': self._BOMB_RADIUS})
 
     def _update_bombs(self, dt):
         for b in self._bombs:
@@ -1508,6 +1546,10 @@ class Game:
 
     def _explode_bomb(self, x, y, r):
         """폭발 — 반경 내 균열 벽 파괴 + 적/플레이어 피해 + 강한 연출."""
+        # co-op 클라: 벽 파괴·피해는 호스트 권위 → 여기선 시각 연출만
+        if self._coop_is_client():
+            self._bomb_explosion_fx(x, y, r)
+            return
         broke = self._break_cracked_walls_near(x, y, r)
         # 광역 피해 (깊이 비례 고정 피해)
         dmg = 30 + self.floor * 3
@@ -1533,9 +1575,21 @@ class Game:
         else:
             self.messages.append((t('bomb_boom'), 'warn'))
 
+    def _bomb_explosion_fx(self, x, y, r):
+        """폭발 시각 연출(피해·파괴 없음) — co-op 클라 로컬 폭탄용."""
+        self.animator.particles.emit_fireball_hit(x, y)
+        for ox, oy in ((r, 0), (-r, 0), (0, r), (0, -r), (r, r), (-r, -r)):
+            if self.dungeon.in_bounds(x + ox, y + oy):
+                self.animator.particles.emit_fireball_hit(x + ox, y + oy)
+        self._white_flash_ms = 60
+        self._hitstop_ms = max(self._hitstop_ms, 90)
+        self._start_shake(9, 460)
+        self._start_punch_zoom(0.06, 150)
+        self.audio.play('levelup_big')
+
     def _break_cracked_walls_near(self, x, y, r) -> int:
         """반경 내 균열 벽을 바닥으로 — 파괴 개수 반환 (폭탄·강타 공용)."""
-        n = 0
+        broken = []
         for oy in range(-r, r + 1):
             for ox in range(-r, r + 1):
                 wx, wy = x + ox, y + oy
@@ -1548,10 +1602,15 @@ class Game:
                     nt.visible = tl.visible          # 부서지기 전 밝기 유지
                     self.dungeon.tiles[wy][wx] = nt
                     self.animator.particles.emit_death(wx, wy, (120, 110, 96))
-                    n += 1
+                    broken.append([wx, wy])
+        n = len(broken)
         # 새로 열린 공간을 즉시 밝힌다 — 단, 테스트/마을은 전체 공개(reveal_all)라 건너뜀
         if n and not self._is_test_mode and not self._in_town:
             self.dungeon.update_visibility(self.player.x, self.player.y)
+        # co-op 호스트: 부서진 벽을 브로드캐스트(맵 일관성) — 런타임 타일 변경 동기화
+        if (broken and self.net is not None and self.net.is_host
+                and self._coop_dungeon):
+            self.net.send_event('walls', {'t': broken})
         return n
 
     # ─────────────── 붕괴 추격 세트피스 ─────────────────────────────────
