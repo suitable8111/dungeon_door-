@@ -491,7 +491,7 @@ class Game:
         """호스트: 현재 공유 월드 상태 dict. 마을 밖이면 None."""
         if not self._in_town or self._town is None:
             return None
-        return {'farm': self._town.farm}
+        return {'farm': self._town.farm, 'ranch': self._town.ranch}
 
     def _net_apply_world(self, state):
         """클라: 호스트가 보낸 공유 월드 상태를 반영(렌더용, 권위는 호스트)."""
@@ -500,11 +500,21 @@ class Game:
         farm = state.get('farm')
         if isinstance(farm, list):
             self._town.farm = farm
+        ranch = state.get('ranch')
+        if isinstance(ranch, list):
+            self._town.ranch = ranch
 
     def _net_apply_world_action(self, peer_id, action):
-        """호스트: 클라의 월드 변경 액션을 밭 상태에만 적용(보상은 클라 로컬)."""
-        if action.get('kind') != 'farm' or self._town is None:
+        """호스트: 클라의 월드 변경 액션을 밭/목장 상태에만 적용(보상은 클라 로컬)."""
+        if self._town is None:
             return
+        kind = action.get('kind')
+        if kind == 'farm':
+            self._net_apply_farm(action)
+        elif kind == 'ranch':
+            self._net_apply_ranch(action)
+
+    def _net_apply_farm(self, action):
         farm = self._town.farm
         idx = action.get('plot')
         if not isinstance(idx, int) or not (0 <= idx < len(farm)):
@@ -524,6 +534,33 @@ class Game:
             plot['watered'] = False
         farm[idx] = plot
         self._records['farm'] = farm
+
+    def _net_apply_ranch(self, action):
+        ranch = self._town.ranch
+        idx = action.get('pen')
+        if not isinstance(idx, int) or not (0 <= idx < len(ranch)):
+            return
+        act = action.get('act')
+        pen = ranch[idx]
+        if act == 'buy':
+            from core.town import RANCH_FEED_MAX
+            pen['animal'] = action.get('animal')
+            pen['fed'] = False
+            pen['stage'] = RANCH_FEED_MAX if self._is_test_mode else 0
+        elif act == 'feed':
+            from core.town import RANCH_FEED_MAX
+            pen['fed'] = True
+            if self._is_test_mode:
+                pen['stage'] = RANCH_FEED_MAX
+        elif act == 'collect':
+            pen['fed'] = False
+            pen['stage'] = 0          # 가축은 남고 재생산 위해 먹이 필요
+        elif act == 'sell':
+            pen['animal'] = None
+            pen['fed'] = False
+            pen['stage'] = 0
+        ranch[idx] = pen
+        self._records['ranch'] = ranch
 
     def stop_net_session(self):
         if self.net is not None:
@@ -4066,6 +4103,16 @@ class Game:
         self._records['ranch'] = ranch
         if not self._is_test_mode:
             save_records(self._records)
+        # 멀티플레이: 목장 변경 동기화 (호스트=브로드캐스트, 클라=인텐트)
+        if self.net is not None and self._in_town:
+            if self.net.is_host:
+                self.net.push_world()
+            else:
+                self.net.send_world_action({
+                    'kind': 'ranch', 'act': act,
+                    'pen': self._ranch_menu_pen,
+                    'animal': pen.get('animal'),
+                })
         self.state = 'playing'
 
     def _livestock_cost(self, animal):

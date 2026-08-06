@@ -65,6 +65,24 @@ def run() -> bool:
     assert client._town.farm[1].get('crop') is not None, "클라가 두번째 심기 못 봄"
     print("[3] 두번째 밭도 동기 OK")
 
+    # ── 4) 목장: 호스트가 닭 구매 → 클라 동기 ──
+    host._ranch_menu_pen = 0
+    host._ranch_do({'act': 'buy', 'animal': 'chicken', 'cost': 60})
+    assert host._town.ranch[0].get('animal') == 'chicken', "호스트 구매 실패"
+    pump(host, client)
+    assert client._town.ranch[0].get('animal') == 'chicken', \
+        f"클라 목장 미동기: {client._town.ranch[0]}"
+    print("[4] 호스트 가축 구매 → 클라 동기 OK  (chicken)")
+
+    # ── 5) 클라가 판매 → 호스트 펜 비워짐 ──
+    client._ranch_menu_pen = 0
+    client._ranch_do({'act': 'sell'})
+    assert client._town.ranch[0].get('animal') is None, "클라 로컬 판매 반영 안됨"
+    pump(client, host)
+    assert host._town.ranch[0].get('animal') is None, \
+        f"호스트 펜 미동기(판매): {host._town.ranch[0]}"
+    print("[5] 클라 판매 → 호스트 동기 OK")
+
     host_tp.close(); client_tp.close()
     return True
 
