@@ -41,7 +41,8 @@ class Dungeon:
         return None
 
     def remove_item(self, item):
-        self.items.remove(item)
+        if item in self.items:
+            self.items.remove(item)
 
     def reveal_all(self):
         """테스트 모드: 전체 맵과 몬스터를 즉시 공개."""

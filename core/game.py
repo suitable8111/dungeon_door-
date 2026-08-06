@@ -476,6 +476,8 @@ class Game:
         self._coop_dungeon = False    # co-op 던전 탐험 중
         self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
         self._coop_diff    = None     # 난이도 배수 {'hp','atk'} — 싱글보다 강함
+        self._coop_item_next = 0      # 드랍 아이템 net_id 카운터(호스트)
+        self._coop_granting  = False  # 호스트 승인 획득 처리 중(_pickup 게이트 우회)
         # 마을 co-op 채팅
         self._chat_open    = False
         self._chat_text    = ''
@@ -537,6 +539,9 @@ class Game:
         elif kind == 'hit':
             # 호스트: "네가 적에게 맞았다" — 이미 내 방어/회피 반영된 피해를 적용
             self._coop_take_hit(int(data.get('dmg', 0)))
+        elif kind == 'grant':
+            # 호스트가 승인한 아이템 획득
+            self._coop_receive_grant(data)
 
     def _coop_take_hit(self, dmg):
         """클라: 호스트가 알린 피격을 내 플레이어에 적용 + 연출."""
@@ -628,7 +633,14 @@ class Game:
             en = [[e.net_id, e.x, e.y, e.hp]
                   for e in self.dungeon.enemies
                   if getattr(e, 'net_id', None) is not None and e.is_alive()]
-            return {'en': en}
+            # 바닥 아이템(권위): 킬 시점 랜덤 생성 → 전송 필요. net_id 지연 부여
+            for it in self.dungeon.items:
+                if getattr(it, 'net_id', None) is None:
+                    it.net_id = self._coop_item_next
+                    self._coop_item_next += 1
+            items = [[it.net_id, it.x, it.y, it.key, it.enhance_level]
+                     for it in self.dungeon.items]
+            return {'en': en, 'it': items}
         return None
 
     def _net_apply_world(self, state):
@@ -642,6 +654,9 @@ class Game:
         en = state.get('en')
         if en is not None and self.dungeon is not None:
             self._net_apply_enemies(en)
+        it = state.get('it')
+        if it is not None and self.dungeon is not None:
+            self._net_apply_items(it)
 
     def _wrap_client_enemy_damage(self, enemy):
         """클라 전용: 적 take_damage를 가로채 로컬 HP를 바꾸지 않고 호스트에
@@ -667,6 +682,65 @@ class Game:
                   if getattr(x, 'net_id', None) == nid), None)
         if e is not None and e.is_alive():
             self._hurt_enemy(e, dmg)   # 호스트 권위: 피해+사망 라우팅
+
+    def _net_apply_items(self, it_list):
+        """클라: 호스트 권위 바닥 아이템을 로컬에 반영(렌더·획득 감지용)."""
+        from entities.item import Item
+        have = {getattr(it, 'net_id', None): it for it in self.dungeon.items}
+        seen = set()
+        for nid, x, y, key, enh in it_list:
+            seen.add(nid)
+            o = have.get(nid)
+            if o is not None:
+                o.x, o.y = x, y
+                continue
+            data = self._item_data.get(key)
+            if not data:
+                continue
+            d = dict(data); d['key'] = key; d['enhance_level'] = enh
+            o = Item(x, y, d); o.net_id = nid
+            self.dungeon.items.append(o)
+        for it in list(self.dungeon.items):
+            nid = getattr(it, 'net_id', None)
+            if nid is not None and nid not in seen:
+                self.dungeon.remove_item(it)
+
+    def _net_apply_pick(self, peer_id, item_id):
+        """호스트: 클라의 획득 요청 — 아이템 있으면 바닥에서 제거하고 그 클라에 지급."""
+        if self.dungeon is None or item_id is None:
+            return
+        it = next((x for x in self.dungeon.items
+                   if getattr(x, 'net_id', None) == item_id), None)
+        if it is None:
+            return   # 이미 누군가 주웠음(중복 방지)
+        self.dungeon.remove_item(it)
+        self.net.send_event_to(peer_id, 'grant',
+                               {'id': getattr(it, 'net_id', None),
+                                'k': it.key, 'e': it.enhance_level,
+                                'd': it.durability})
+
+    def _coop_receive_grant(self, data):
+        """클라: 호스트가 승인한 아이템을 실제로 획득(획득 로직 로컬 실행)."""
+        from entities.item import Item
+        key = data.get('k')
+        if key is None or key not in self._item_data:
+            return
+        d = dict(self._item_data[key]); d['key'] = key
+        d['enhance_level'] = data.get('e', 0)
+        if data.get('d') is not None:
+            d['durability'] = data.get('d')
+        # 로컬 바닥에 남아있는 동일 아이템 즉시 제거(브로드캐스트 전 시각 중복 방지)
+        gid = data.get('id')
+        if gid is not None:
+            for gi in [x for x in self.dungeon.items
+                       if getattr(x, 'net_id', None) == gid]:
+                self.dungeon.remove_item(gi)
+        it = Item(self.player.x, self.player.y, d)
+        self._coop_granting = True
+        try:
+            self._pickup(it)   # 인벤 추가/열쇠·강화석·콤보 효과 — 소유자에 적용
+        finally:
+            self._coop_granting = False
 
     def _net_apply_enemies(self, en):
         """클라: 호스트 권위 적 상태를 로컬 적에 반영. 없는 적은 처치된 것으로 제거."""
@@ -694,6 +768,9 @@ class Game:
         kind = action.get('kind')
         if kind == 'dmg':
             self._net_apply_dmg(action)   # co-op 던전(마을 아님)
+            return
+        if kind == 'pick':
+            self._net_apply_pick(peer_id, action.get('id'))
             return
         if self._town is None:
             return
@@ -3679,6 +3756,12 @@ class Game:
         self.dungeon.enemies.remove(prop)
 
     def _pickup(self, item):
+        # co-op 클라: 획득은 호스트 권위 → 요청만 보내고(중복 방지) 승인 대기
+        if self._coop_is_client() and not self._coop_granting:
+            nid = getattr(item, 'net_id', None)
+            if nid is not None:
+                self.net.send_world_action({'kind': 'pick', 'id': nid})
+            return
         if item.effect == 'vault_key':
             self._keys += 1
             self.dungeon.remove_item(item)
