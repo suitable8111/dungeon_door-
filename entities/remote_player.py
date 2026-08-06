@@ -27,6 +27,8 @@ class RemotePlayer:
         self.hp = 30
         self.max_hp = 30
         self.floor = 0
+        self.defense = 0
+        self.evasion = 0
         self._initialized = False
 
     # ── 상태 수신 ────────────────────────────────────────────────────
@@ -42,6 +44,8 @@ class RemotePlayer:
         self.hp = st.get("hp", self.hp)
         self.max_hp = st.get("mhp", self.max_hp)
         self.floor = st.get("fl", self.floor)
+        self.defense = st.get("de", self.defense)
+        self.evasion = st.get("ev", self.evasion)
         if not self._initialized:
             # 첫 상태 수신: 보간 없이 즉시 스냅
             self.render_px = self.x * TILE_SIZE

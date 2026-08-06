@@ -140,6 +140,10 @@ class Session:
         """일회성 이벤트를 모든 피어에 브로드캐스트 (예: co-op 던전 입장)."""
         self.tp.broadcast(P.CH_CONTROL, P.encode(P.event(kind, data or {})))
 
+    def send_event_to(self, pid: int, kind: str, data: Optional[dict] = None) -> None:
+        """특정 피어에게만 이벤트 전송 (예: 그 클라가 적에게 맞음)."""
+        self.tp.send(pid, P.CH_CONTROL, P.encode(P.event(kind, data or {})))
+
     def send_chat(self, text: str) -> None:
         msg = P.chat(self.tp.local_id(), text)
         self.chat_log.append((self.tp.local_id(), text))

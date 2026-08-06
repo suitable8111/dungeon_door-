@@ -164,6 +164,28 @@ def _make_icon():
     return surf
 
 
+class _CoopTarget:
+    """co-op 던전: 호스트가 클라 파티원을 적 AI 타겟으로 세우기 위한 경량 프록시.
+    적 AI가 참조하는 위치·방어·회피만 갖고, 적이 가한 피해를 누적한다(→ 그 클라에
+    'hit' 이벤트로 통보). 디버프(저주/슬로우/공포)는 MVP에선 흡수(무시)."""
+    __slots__ = ('x', 'y', 'total_defense', 'total_evasion',
+                 'cursed_ms', 'slowed_ms', 'feared_ms', 'dmg_taken')
+
+    def __init__(self, rp):
+        self.x = rp.x
+        self.y = rp.y
+        self.total_defense = int(getattr(rp, 'defense', 0))
+        self.total_evasion = int(getattr(rp, 'evasion', 0))
+        self.cursed_ms = 0
+        self.slowed_ms = 0
+        self.feared_ms = 0
+        self.dmg_taken = 0
+
+    def take_damage(self, amount):
+        if amount and amount > 0:
+            self.dmg_taken += int(amount)
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  Game class
 # ═════════════════════════════════════════════════════════════════════════════
@@ -473,7 +495,8 @@ class Game:
             pid, p.x, p.y, self._facing, self._walk_frame,
             p.char_class, getattr(p, 'char_name', 'Hero'),
             getattr(p, 'appearance', None), p.hp, p.max_hp,
-            floor=int(self.floor))
+            floor=int(self.floor),
+            defense=int(p.total_defense), evasion=int(p.total_evasion))
 
     def start_net_session(self, transport, mode='town'):
         """전송 계층을 받아 멀티플레이 세션을 시작한다.
@@ -511,6 +534,20 @@ class Game:
             self._coop_start(int(data.get('floor', 1)),
                              int(data.get('seed', 0)),
                              data.get('diff') or None)
+        elif kind == 'hit':
+            # 호스트: "네가 적에게 맞았다" — 이미 내 방어/회피 반영된 피해를 적용
+            self._coop_take_hit(int(data.get('dmg', 0)))
+
+    def _coop_take_hit(self, dmg):
+        """클라: 호스트가 알린 피격을 내 플레이어에 적용 + 연출."""
+        if dmg <= 0 or self.player is None or not self.player.is_alive():
+            return
+        self.player.take_damage(dmg)
+        self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255, 50, 50)))
+        self.audio.play('player_hit')
+        ratio = dmg / max(1, self.player.max_hp)
+        self._start_shake(min(8, 2 + int(ratio * 20)), 200)
+        self._hurt_flash_ms = 260
 
     def _coop_party_size(self):
         return 1 + (len(self.net.remote_players) if self.net else 0)
@@ -556,6 +593,17 @@ class Game:
             e.max_hp = max(1, int(round(e.max_hp * mh)))
             e.hp     = e.max_hp
             e.attack = max(1, int(round(e.attack * ma)))
+
+    def _nearest_party_target(self, enemy):
+        """적에게 가장 가까운 '원격' 파티원 반환. 호스트 자신이 더 가까우면 None."""
+        best_rp = None
+        bestd = abs(enemy.x - self.player.x) + abs(enemy.y - self.player.y)
+        for rp in self.net.remote_players.values():
+            d = abs(enemy.x - rp.x) + abs(enemy.y - rp.y)
+            if d < bestd:
+                bestd = d
+                best_rp = rp
+        return best_rp
 
     def _coop_reveal(self):
         """시야 공유: 원격 파티원 위치 주변도 밝힌다(미니맵 포함)."""
@@ -7211,22 +7259,38 @@ class Game:
                 if (dt > 0 and random.random() < dt / 150.0
                         and self.dungeon.tiles[enemy.y][enemy.x].visible):
                     self._emit_goblin_sparkle(enemy)
-            prev_hp = self.player.hp
-            result  = enemy.update(dt, self.dungeon, self.player, self.messages)
-            if self.player.hp < prev_hp:
-                dmg = prev_hp - self.player.hp
-                self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255,50,50)))
-                self.audio.play('player_hit')
-                # 피해 비중에 비례한 흔들림 + 붉은 비네트
-                ratio = dmg / max(1, self.player.max_hp)
-                self._start_shake(min(8, 2 + int(ratio * 20)), 200)
-                self._hurt_flash_ms = 260
-                # 원거리 공격 볼트 연출
-                dist = abs(enemy.x - self.player.x) + abs(enemy.y - self.player.y)
-                if dist > 1:
-                    self.animator.add(BoltAnim(enemy.x, enemy.y,
-                                               self.player.x, self.player.y,
-                                               (100,180,255) if enemy.key=='wizard' else (255,140,0)))
+            # co-op 호스트: 적은 가장 가까운 파티원을 노린다.
+            target_rp = (self._nearest_party_target(enemy)
+                         if (self._coop_dungeon and self.net is not None
+                             and self.net.is_host) else None)
+            if target_rp is not None:
+                # 클라를 노림 — 프록시로 AI 구동 후 피해를 그 클라에 통보
+                proxy = _CoopTarget(target_rp)
+                result = enemy.update(dt, self.dungeon, proxy, self.messages)
+                if proxy.dmg_taken > 0:
+                    self.net.send_event_to(target_rp.pid, 'hit',
+                                           {'dmg': int(proxy.dmg_taken)})
+                    if abs(enemy.x - proxy.x) + abs(enemy.y - proxy.y) > 1:
+                        self.animator.add(BoltAnim(
+                            enemy.x, enemy.y, proxy.x, proxy.y,
+                            (100,180,255) if enemy.key == 'wizard' else (255,140,0)))
+            else:
+                prev_hp = self.player.hp
+                result  = enemy.update(dt, self.dungeon, self.player, self.messages)
+                if self.player.hp < prev_hp:
+                    dmg = prev_hp - self.player.hp
+                    self.animator.add(HitFlashAnim(self.player.x, self.player.y, dmg, (255,50,50)))
+                    self.audio.play('player_hit')
+                    # 피해 비중에 비례한 흔들림 + 붉은 비네트
+                    ratio = dmg / max(1, self.player.max_hp)
+                    self._start_shake(min(8, 2 + int(ratio * 20)), 200)
+                    self._hurt_flash_ms = 260
+                    # 원거리 공격 볼트 연출
+                    dist = abs(enemy.x - self.player.x) + abs(enemy.y - self.player.y)
+                    if dist > 1:
+                        self.animator.add(BoltAnim(enemy.x, enemy.y,
+                                                   self.player.x, self.player.y,
+                                                   (100,180,255) if enemy.key=='wizard' else (255,140,0)))
             # 보스 스킬 시각 효과
             if result:
                 skill = result.get('skill')
