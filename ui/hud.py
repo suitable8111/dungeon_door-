@@ -241,7 +241,7 @@ class HUD:
     # ------------------------------------------------------------------ #
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
                     page='main', settings=None, settings_sel=0,
-                    mp_ip=None, mp_status=None, mp_banner=None):
+                    mp_ip=None, mp_status=None, mp_banner=None, mp_code=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -280,6 +280,8 @@ class HUD:
         if page == 'main':
             p_w = 470
             p_h = 82 + len(cards) * 62 + 16 + 54 + 50 + 52
+            if mp_banner == 'host' and mp_code:
+                p_h += 28    # 초대 코드 2줄 표시 공간
         elif page == 'multiplayer':
             p_w = 440
             p_h = 336
@@ -415,11 +417,19 @@ class HUD:
             fy = p_y + p_h - 32
             pygame.draw.line(screen, (42, 40, 64),
                              (p_x+20, fy-10), (p_x+p_w-20, fy-10))
-            if mp_banner:
+            if mp_banner == 'host' and mp_code:
+                # 호스트: 초대 코드를 크게 보여줘 친구에게 공유하게 한다
+                lbl = self.font_sm.render(t('menu_mp_your_code'), True, (150, 200, 250))
+                screen.blit(lbl, (cx - lbl.get_width()//2, fy - 4))
+                cf = self.font_pixel_go or self.font_md
+                cv = cf.render(mp_code, True, (255, 226, 120))
+                screen.blit(cv, (cx - cv.get_width()//2, fy + 12))
+            elif mp_banner:
                 hint = self.font_sm.render(t('menu_mp_pick'), True, (150, 200, 250))
+                screen.blit(hint, (cx - hint.get_width()//2, fy))
             else:
                 hint = self.font_sm.render(t('menu_hint'), True, (60, 58, 90))
-            screen.blit(hint, (cx - hint.get_width()//2, fy))
+                screen.blit(hint, (cx - hint.get_width()//2, fy))
             # 테두리를 마지막에 그려 내용에 가리지 않게
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)

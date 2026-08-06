@@ -57,9 +57,13 @@ elif arg1 == 'town':
     game.start_town_test(TEST_FLOOR, char_class=char_class)
 elif arg1 == 'mp-host':
     from net.socket_transport import SocketTransport, DEFAULT_PORT
+    from net.invite import make_code, local_ip
     # 리슨을 먼저 열어 로딩 중에도 클라 접속을 받는다(수신은 백그라운드 스레드).
     tp = SocketTransport.host(port=DEFAULT_PORT)
+    _code = make_code(local_ip(), DEFAULT_PORT)
     print(f"[MP] 호스트 리슨 시작 — 포트 {DEFAULT_PORT} (로딩 중에도 접속 가능)")
+    print(f"[MP] 초대 코드(친구에게 공유): {_code}")
+    print(f"[MP] 친구는  python3 test_main.py mp-join {_code}  로 접속")
     game.start_town_test(1, char_class=char_class)
     game.start_net_session(tp, mode='town')
     print(f"[MP] 호스트 준비 완료 — 포트 {DEFAULT_PORT}")
@@ -67,12 +71,18 @@ elif arg1 == 'mp-host':
     print(f"[MP] 다른 PC(같은 공유기): 참가 측이 이 PC의 LAN IP를 넣으세요")
 elif arg1 == 'mp-join':
     from net.socket_transport import SocketTransport, DEFAULT_PORT
-    ip = args[1] if len(args) > 1 else '127.0.0.1'
+    from net.invite import parse_code, looks_like_code
+    arg = args[1] if len(args) > 1 else '127.0.0.1'
+    if looks_like_code(arg):
+        parsed = parse_code(arg)
+        ip, port = parsed if parsed else (arg, DEFAULT_PORT)
+    else:
+        ip, port = arg, DEFAULT_PORT
     game.start_town_test(1, char_class=char_class)
     try:
-        tp = SocketTransport.connect(ip, DEFAULT_PORT, timeout=10.0)
+        tp = SocketTransport.connect(ip, port, timeout=10.0)
     except OSError as e:
-        print(f"[MP] 접속 실패({ip}:{DEFAULT_PORT}) — 호스트를 먼저 실행했는지 확인: {e}")
+        print(f"[MP] 접속 실패({ip}:{port}) — 호스트를 먼저 실행했는지 확인: {e}")
         sys.exit(1)
     game.start_net_session(tp, mode='town')
     print(f"[MP] {ip} 접속 완료 — 같은 마을에서 만나요")

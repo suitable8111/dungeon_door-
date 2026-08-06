@@ -474,6 +474,7 @@ class Game:
         self._mp_connecting  = False
         self._mp_connect_result = None  # ('ok', tp) | ('err', msg) — 스레드가 채움
         self._mp_mode_banner = None   # 메인 카드 화면 배너: 'host' | 'join'
+        self._mp_code        = None   # 호스트가 생성한 초대 코드(친구에게 공유)
         # 던전 co-op (P3)
         self._coop_dungeon = False    # co-op 던전 탐험 중
         self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
@@ -2351,7 +2352,8 @@ class Game:
                 elif self.state == 'char_create':
                     self._handle_char_create_key(event.key, event.unicode)
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
-                        and (event.unicode in '0123456789.'
+                        and ((event.unicode and (event.unicode.isalnum()
+                                                 or event.unicode == '.'))
                              or event.key == pygame.K_BACKSPACE)):
                     self._handle_mp_key(event.key, event.unicode)
                 elif (self.state == 'menu' and self._menu_page == 'main'
@@ -2560,15 +2562,16 @@ class Game:
             self._menu_page = 'main'
 
     def _handle_mp_key(self, key, uni):
-        """멀티 페이지 IP 필드 편집 (숫자·점·백스페이스)."""
+        """멀티 페이지 입력 필드 편집 (초대 코드=영숫자, 또는 IP=숫자·점)."""
         if key == pygame.K_BACKSPACE:
             self._mp_ip = self._mp_ip[:-1]
-        elif uni in '0123456789.' and len(self._mp_ip) < 21:
+        elif uni and (uni.isalnum() or uni == '.') and len(self._mp_ip) < 21:
             self._mp_ip += uni
 
     def _begin_host(self):
-        """소켓 호스트를 열고 캐릭터 선택 화면으로. 접속 배관은 백그라운드."""
+        """소켓 호스트를 열고 초대 코드 생성 후 캐릭터 선택 화면으로."""
         from net.socket_transport import SocketTransport, DEFAULT_PORT
+        from net.invite import make_code, local_ip
         if self._mp_connecting:
             return
         try:
@@ -2577,6 +2580,8 @@ class Game:
             # 바인드 실패 = 포트 점유(다른 게임 창이 이미 호스트 중 등)
             self._mp_status = t('menu_mp_port_busy')
             return
+        # 접속 정보를 담은 초대 코드 생성(친구에게 공유용)
+        self._mp_code = make_code(local_ip(), DEFAULT_PORT)
         self.audio.play('menu_confirm')
         self._pending_net    = ('host', tp)
         self._mp_mode_banner = 'host'
@@ -2584,20 +2589,31 @@ class Game:
         self._menu_page      = 'main'
 
     def _begin_join(self):
-        """입력한 IP로 접속을 백그라운드 스레드에서 시도한다(UI 프리즈 방지)."""
+        """초대 코드 또는 IP로 접속을 백그라운드 스레드에서 시도(UI 프리즈 방지)."""
         import threading
+        from net.socket_transport import DEFAULT_PORT
+        from net.invite import parse_code, looks_like_code
         if self._mp_connecting:
             return
-        ip = (self._mp_ip.strip() or '127.0.0.1')
+        raw = (self._mp_ip.strip() or '127.0.0.1')
+        if looks_like_code(raw):
+            parsed = parse_code(raw)
+            if parsed is None:
+                self._mp_status = t('menu_mp_badcode')
+                self.audio.play('no_gold')
+                return
+            ip, port = parsed
+        else:
+            ip, port = raw, DEFAULT_PORT
         self._mp_connecting     = True
         self._mp_connect_result = None
         self._mp_status         = t('menu_mp_connecting')
         self.audio.play('menu_select')
 
         def worker():
-            from net.socket_transport import SocketTransport, DEFAULT_PORT
+            from net.socket_transport import SocketTransport
             try:
-                tp = SocketTransport.connect(ip, DEFAULT_PORT, timeout=12.0)
+                tp = SocketTransport.connect(ip, port, timeout=12.0)
                 self._mp_connect_result = ('ok', tp)
             except Exception as e:  # noqa: BLE001
                 self._mp_connect_result = ('err', str(e))
@@ -2627,6 +2643,7 @@ class Game:
         self._pending_net    = None
         self._mp_mode_banner = None
         self._mp_status      = None
+        self._mp_code        = None
         if role_tp is not None:
             try:
                 role_tp[1].close()
@@ -7552,6 +7569,7 @@ class Game:
                 mp_ip=self._mp_ip,
                 mp_status=self._mp_status,
                 mp_banner=self._mp_mode_banner,
+                mp_code=self._mp_code,
             )
             pygame.display.flip()
             return
