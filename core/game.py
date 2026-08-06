@@ -502,6 +502,8 @@ class Game:
     # ── 던전 co-op (P3): 입장·난이도·시야 공유 ────────────────────────
     _COOP_HP_PER  = 0.6    # 인원 +1마다 적 체력 배수 가산
     _COOP_ATK_PER = 0.3    # 인원 +1마다 적 공격력 배수 가산
+    _COOP_BOSS_HP  = 1.5   # 보스는 추가로 더 단단하게(멀티에서 더 어렵게)
+    _COOP_BOSS_ATK = 1.25  # 보스는 추가로 더 아프게
 
     def _net_on_event(self, from_id, kind, data):
         if kind == 'coop_enter':
@@ -547,9 +549,13 @@ class Game:
         hp_m = float(d.get('hp', 1.0))
         atk_m = float(d.get('atk', 1.0))
         for e in dungeon.enemies:
-            e.max_hp = max(1, int(round(e.max_hp * hp_m)))
+            mh, ma = hp_m, atk_m
+            if getattr(e, 'is_boss', False):   # 보스는 추가 배수로 더 강하게
+                mh *= self._COOP_BOSS_HP
+                ma *= self._COOP_BOSS_ATK
+            e.max_hp = max(1, int(round(e.max_hp * mh)))
             e.hp     = e.max_hp
-            e.attack = max(1, int(round(e.attack * atk_m)))
+            e.attack = max(1, int(round(e.attack * ma)))
 
     def _coop_reveal(self):
         """시야 공유: 원격 파티원 위치 주변도 밝힌다(미니맵 포함)."""
@@ -589,6 +595,31 @@ class Game:
         if en is not None and self.dungeon is not None:
             self._net_apply_enemies(en)
 
+    def _wrap_client_enemy_damage(self, enemy):
+        """클라 전용: 적 take_damage를 가로채 로컬 HP를 바꾸지 않고 호스트에
+        피해 인텐트만 보낸다. 모든 공격 경로가 자동으로 인텐트를 태운다."""
+        nid = getattr(enemy, 'net_id', None)
+        net = self.net
+
+        def _td(amount):
+            if net is not None and nid is not None and amount and amount > 0:
+                net.send_world_action({'kind': 'dmg', 'id': nid, 'dmg': int(amount)})
+            # HP는 호스트 스냅샷이 권위 — 로컬에서 변경하지 않음
+        enemy.take_damage = _td
+
+    def _net_apply_dmg(self, action):
+        """호스트: 클라가 보낸 피해를 권위 적용(사망 시 처치 처리·전리품)."""
+        if self.dungeon is None:
+            return
+        nid = action.get('id')
+        dmg = int(action.get('dmg', 0))
+        if dmg <= 0:
+            return
+        e = next((x for x in self.dungeon.enemies
+                  if getattr(x, 'net_id', None) == nid), None)
+        if e is not None and e.is_alive():
+            self._hurt_enemy(e, dmg)   # 호스트 권위: 피해+사망 라우팅
+
     def _net_apply_enemies(self, en):
         """클라: 호스트 권위 적 상태를 로컬 적에 반영. 없는 적은 처치된 것으로 제거."""
         by_id = {e.net_id: e for e in self.dungeon.enemies
@@ -611,10 +642,13 @@ class Game:
                     self.dungeon.enemies.remove(e)
 
     def _net_apply_world_action(self, peer_id, action):
-        """호스트: 클라의 월드 변경 액션을 밭/목장 상태에만 적용(보상은 클라 로컬)."""
+        """호스트: 클라의 월드 변경 액션 적용(밭/목장 상태, 또는 co-op 던전 피해)."""
+        kind = action.get('kind')
+        if kind == 'dmg':
+            self._net_apply_dmg(action)   # co-op 던전(마을 아님)
+            return
         if self._town is None:
             return
-        kind = action.get('kind')
         if kind == 'farm':
             self._net_apply_farm(action)
         elif kind == 'ranch':
@@ -1253,6 +1287,14 @@ class Game:
     def _hurt_enemy(self, enemy, dmg: int, col=(255, 140, 60), flash=True):
         """DoT/장판/소환수 공용 피해 — 사망 시 중앙 처치 처리로 라우팅."""
         if enemy is None or not enemy.is_alive() or dmg <= 0:
+            return
+        # co-op 클라: HP는 호스트 권위 → 로컬 적용 대신 인텐트 전송 + 타격연출만
+        if self._coop_is_client():
+            nid = getattr(enemy, 'net_id', None)
+            if nid is not None:
+                self.net.send_world_action({'kind': 'dmg', 'id': nid, 'dmg': int(dmg)})
+            if flash:
+                self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, col))
             return
         enemy.hp = max(0, enemy.hp - dmg)
         enemy.hurt_ms = max(enemy.hurt_ms, 70)
@@ -1926,6 +1968,10 @@ class Game:
         if self._coop_dungeon:
             for i, e in enumerate(self.dungeon.enemies):
                 e.net_id = i
+            # 클라: 적 피해를 로컬 적용하지 않고 호스트에 인텐트로 전달(권위=호스트)
+            if self.net is not None and not self.net.is_host:
+                for e in self.dungeon.enemies:
+                    self._wrap_client_enemy_damage(e)
 
         # 리스폰 설정: 보스·프롭·고블린 제외 초기 몬스터 수를 최대치로 고정
         self._respawn_max      = sum(1 for e in self.dungeon.enemies
