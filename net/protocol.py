@@ -19,6 +19,8 @@ T_HELLO    = "hello"
 T_INPUT    = "input"
 T_SNAPSHOT = "snap"
 T_STATE    = "state"   # 마을 모델: 각 피어가 '자기' 상태를 스스로 알림(소유자 권위)
+T_WORLD    = "world"   # 호스트 → 클라: 공유 월드 상태(밭·목장 등, 호스트 권위)
+T_ACTION   = "wact"    # 클라 → 호스트: 월드 변경 액션 인텐트(심기·수확 등)
 T_CHAT     = "chat"
 T_EVENT    = "evt"
 
@@ -58,6 +60,16 @@ def snapshot(tick: int, players: list[dict]) -> dict:
 def state_msg(player: dict) -> dict:
     """마을 모델: 한 피어가 자기 자신의 player_state를 브로드캐스트."""
     return {"t": T_STATE, "p": player}
+
+
+def world_msg(state: dict) -> dict:
+    """호스트 → 클라: 공유 월드 상태(밭·목장 등)."""
+    return {"t": T_WORLD, "w": state}
+
+
+def action_msg(action: dict) -> dict:
+    """클라 → 호스트: 월드 변경 액션 인텐트."""
+    return {"t": T_ACTION, "a": action}
 
 
 def chat(sender_id: int, text: str) -> dict:

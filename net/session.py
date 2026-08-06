@@ -39,6 +39,10 @@ class Session:
         spawn: tuple[int, int] = (0, 0),
         snapshot_interval: int = 3,
         state_interval: int = 3,
+        world_provider: Optional[Callable[[], Optional[dict]]] = None,
+        apply_world: Optional[Callable[[dict], None]] = None,
+        on_remote_action: Optional[Callable[[int, dict], None]] = None,
+        world_interval: int = 12,
     ):
         # mode:
         #   'town'    — 각 피어가 자기 상태를 브로드캐스트(소유자 권위). 플레이어
@@ -56,6 +60,12 @@ class Session:
         self._walkable = walkable or (lambda x, y: True)
         self._snapshot_interval = max(1, snapshot_interval)
         self._state_interval = max(1, state_interval)
+
+        # 공유 월드(밭·목장 등) 훅 — 호스트 권위.
+        self._world_provider = world_provider     # 호스트: 현재 월드 상태 dict
+        self._apply_world = apply_world           # 클라: 받은 월드 상태 반영
+        self._on_remote_action = on_remote_action  # 호스트: 클라 액션 적용
+        self._world_interval = max(1, world_interval)
 
         # 로컬 플레이어의 권위 상태 (호스트 기준). provider가 있으면 매 틱 덮어씀.
         self._local = P.player_state(
@@ -110,6 +120,20 @@ class Session:
         self._authoritative[self.tp.local_id()] = state
         self.tp.broadcast(P.CH_SNAPSHOT, P.encode(P.state_msg(state)))
 
+    def push_world(self) -> None:
+        """호스트: 현재 공유 월드 상태를 즉시 모든 클라에 브로드캐스트."""
+        if not self.is_host or self._world_provider is None:
+            return
+        state = self._world_provider()
+        if state is not None:
+            self.tp.broadcast(P.CH_SNAPSHOT, P.encode(P.world_msg(state)))
+
+    def send_world_action(self, action: dict) -> None:
+        """클라: 월드 변경 액션을 호스트에 보낸다. 호스트면 무시(로컬 적용됨)."""
+        if self.is_host:
+            return
+        self._send(P.CH_INPUT, P.action_msg(action))
+
     def send_chat(self, text: str) -> None:
         msg = P.chat(self.tp.local_id(), text)
         self.chat_log.append((self.tp.local_id(), text))
@@ -127,6 +151,10 @@ class Session:
             # 마을: 양쪽 피어가 주기적으로 자기 상태를 알린다.
             if self._provider is not None and self._tick % self._state_interval == 0:
                 self.broadcast_local_state()
+            # 호스트: 공유 월드 상태를 주기적으로 브로드캐스트.
+            if (self.is_host and self._world_provider is not None
+                    and self._tick % self._world_interval == 0):
+                self.push_world()
             for from_id, channel, data in self.tp.poll():
                 self._handle(from_id, channel, P.decode(data))
         else:
@@ -167,6 +195,12 @@ class Session:
                 rp = RemotePlayer(from_id)
                 self.remote_players[from_id] = rp
             rp.apply_state(st)
+        elif t == P.T_WORLD and not self.is_host:
+            if self._apply_world is not None:
+                self._apply_world(msg.get("w", {}))
+        elif t == P.T_ACTION and self.is_host:
+            if self._on_remote_action is not None:
+                self._on_remote_action(from_id, msg.get("a", {}))
         elif t == P.T_SNAPSHOT and not self.is_host:
             self._apply_snapshot(msg)
         elif t == P.T_CHAT:

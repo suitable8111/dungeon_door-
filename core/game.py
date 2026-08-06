@@ -479,9 +479,51 @@ class Game:
             appearance=(getattr(p, 'appearance', None) if p else None),
             mode=mode,
             local_player_state=self._net_local_state,
+            world_provider=self._net_world_state,       # 호스트: 밭·목장 상태
+            apply_world=self._net_apply_world,          # 클라: 받은 월드 반영
+            on_remote_action=self._net_apply_world_action,  # 호스트: 클라 액션 적용
         )
         self.net.start()
         return self.net
+
+    # ── 공유 월드(밭 등) 동기화 훅 ────────────────────────────────────
+    def _net_world_state(self):
+        """호스트: 현재 공유 월드 상태 dict. 마을 밖이면 None."""
+        if not self._in_town or self._town is None:
+            return None
+        return {'farm': self._town.farm}
+
+    def _net_apply_world(self, state):
+        """클라: 호스트가 보낸 공유 월드 상태를 반영(렌더용, 권위는 호스트)."""
+        if self._town is None:
+            return
+        farm = state.get('farm')
+        if isinstance(farm, list):
+            self._town.farm = farm
+
+    def _net_apply_world_action(self, peer_id, action):
+        """호스트: 클라의 월드 변경 액션을 밭 상태에만 적용(보상은 클라 로컬)."""
+        if action.get('kind') != 'farm' or self._town is None:
+            return
+        farm = self._town.farm
+        idx = action.get('plot')
+        if not isinstance(idx, int) or not (0 <= idx < len(farm)):
+            return
+        act = action.get('act')
+        plot = farm[idx]
+        if act == 'plant':
+            from core.town import FARM_GROW_MAX
+            plot['crop'] = action.get('crop')
+            plot['watered'] = False
+            plot['stage'] = FARM_GROW_MAX if self._is_test_mode else 0
+        elif act == 'water':
+            plot['watered'] = True
+        elif act in ('harvest', 'uproot'):
+            plot['crop'] = None
+            plot['stage'] = 0
+            plot['watered'] = False
+        farm[idx] = plot
+        self._records['farm'] = farm
 
     def stop_net_session(self):
         if self.net is not None:
@@ -4209,6 +4251,16 @@ class Game:
         self._records['farm'] = farm
         if not self._is_test_mode:
             save_records(self._records)
+        # 멀티플레이: 밭 변경을 동기화 (호스트=즉시 브로드캐스트, 클라=인텐트 전송)
+        if self.net is not None and self._in_town:
+            if self.net.is_host:
+                self.net.push_world()
+            else:
+                self.net.send_world_action({
+                    'kind': 'farm', 'act': act,
+                    'plot': self._farm_menu_plot,
+                    'crop': plot.get('crop'),
+                })
         self.state = 'playing'                              # 액션 후 메뉴 닫기
 
     def _farm_harvest(self, plot, crop):
