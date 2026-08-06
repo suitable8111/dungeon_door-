@@ -450,6 +450,12 @@ class Game:
         self._mp_connecting  = False
         self._mp_connect_result = None  # ('ok', tp) | ('err', msg) — 스레드가 채움
         self._mp_mode_banner = None   # 메인 카드 화면 배너: 'host' | 'join'
+        # 마을 co-op 채팅
+        self._chat_open    = False
+        self._chat_text    = ''
+        self._chat_seen    = 0        # net.chat_log 소비 인덱스
+        self._chat_bubbles = {}       # pid → {'text','ms'} 머리 위 말풍선
+        self._chat_feed    = []       # [[name, text, ms]] 하단 최근 로그
 
     # ─────────────── 멀티플레이 (P1: 마을 co-op) ──────────────────────
     def _net_local_state(self):
@@ -561,6 +567,117 @@ class Game:
             pen['stage'] = 0
         ranch[idx] = pen
         self._records['ranch'] = ranch
+
+    # ── 마을 co-op 채팅 ───────────────────────────────────────────────
+    _CHAT_BUBBLE_MS = 4500
+    _CHAT_FEED_MS   = 6500
+
+    def _handle_chat_key(self, key, uni):
+        if key == pygame.K_RETURN:
+            text = self._chat_text.strip()
+            if text and self.net is not None:
+                self.net.send_chat(text[:80])
+            self._chat_open = False
+            self._chat_text = ''
+        elif key == pygame.K_ESCAPE:
+            self._chat_open = False
+            self._chat_text = ''
+        elif key == pygame.K_BACKSPACE:
+            self._chat_text = self._chat_text[:-1]
+        elif uni and uni.isprintable() and len(self._chat_text) < 80:
+            self._chat_text += uni
+
+    def _pump_chat(self):
+        """net.chat_log의 새 메시지를 말풍선 + 하단 피드로 반영."""
+        if self.net is None:
+            return
+        log = self.net.chat_log
+        while self._chat_seen < len(log):
+            sender_id, text = log[self._chat_seen]
+            self._chat_seen += 1
+            name = self._chat_sender_name(sender_id)
+            self._chat_bubbles[sender_id] = {'text': text, 'ms': self._CHAT_BUBBLE_MS}
+            self._chat_feed.append([name, text, self._CHAT_FEED_MS])
+        if len(self._chat_feed) > 5:
+            self._chat_feed = self._chat_feed[-5:]
+
+    def _chat_sender_name(self, sender_id):
+        if self.net is not None and sender_id == self.net.tp.local_id():
+            return getattr(self.player, 'char_name', '나')
+        rp = self.net.remote_players.get(sender_id) if self.net else None
+        return rp.char_name if rp is not None else '?'
+
+    def _update_chat_timers(self, dt):
+        for pid in list(self._chat_bubbles):
+            self._chat_bubbles[pid]['ms'] -= dt
+            if self._chat_bubbles[pid]['ms'] <= 0:
+                del self._chat_bubbles[pid]
+        for row in self._chat_feed:
+            row[2] -= dt
+        self._chat_feed = [r for r in self._chat_feed if r[2] > 0]
+
+    def _draw_chat_bubbles(self, cx, cy, my_px, my_py):
+        """머리 위 말풍선 — 내 플레이어(my_px,my_py) + 원격 플레이어."""
+        if not self._chat_bubbles or self.net is None:
+            return
+        me = self.net.tp.local_id()
+        for pid, b in self._chat_bubbles.items():
+            if pid == me:
+                ax, ay = my_px, my_py
+            else:
+                rp = self.net.remote_players.get(pid)
+                if rp is None:
+                    continue
+                ax = int(round(rp.render_px - cx * TILE_SIZE))
+                ay = int(round(rp.render_py - cy * TILE_SIZE))
+            self._draw_bubble(ax + TILE_SIZE // 2, ay - 8, b['text'], b['ms'])
+
+    def _draw_bubble(self, cx_px, top_y, text, ms):
+        font = self.hud.font_sm
+        surf = font.render(text, True, (30, 30, 40))
+        pad = 6
+        w = surf.get_width() + pad * 2
+        h = surf.get_height() + pad
+        alpha = 255 if ms > 700 else max(0, int(255 * ms / 700))
+        bx = cx_px - w // 2
+        by = top_y - h - 4
+        bub = pygame.Surface((w, h + 5), pygame.SRCALPHA)
+        pygame.draw.rect(bub, (245, 245, 250, alpha), (0, 0, w, h), border_radius=6)
+        pygame.draw.polygon(bub, (245, 245, 250, alpha),
+                            [(w // 2 - 5, h - 1), (w // 2 + 5, h - 1), (w // 2, h + 4)])
+        surf.set_alpha(alpha)
+        bub.blit(surf, (pad, pad // 2))
+        self._game_surf.blit(bub, (bx, by))
+
+    def _draw_chat_overlay(self):
+        """하단 최근 채팅 피드 + (입력 중) 입력줄. self.screen에 직접 그린다."""
+        if self.net is None or not self._in_town:
+            return
+        font = self.hud.font_sm
+        base_y = GAME_Y + GAME_H - 24
+        # 최근 피드 (입력줄 위로 쌓기)
+        y = base_y - (28 if self._chat_open else 0)
+        for name, text, ms in reversed(self._chat_feed):
+            a = 255 if ms > 900 else max(0, int(255 * ms / 900))
+            line = font.render(f"{name}: {text}", True, (225, 230, 245))
+            line.set_alpha(a)
+            shadow = font.render(f"{name}: {text}", True, (0, 0, 0))
+            shadow.set_alpha(a)
+            self.screen.blit(shadow, (GAME_X + 13, y + 1))
+            self.screen.blit(line, (GAME_X + 12, y))
+            y -= 20
+        # 입력줄
+        if self._chat_open:
+            bar = pygame.Surface((GAME_W, 26), pygame.SRCALPHA)
+            bar.fill((10, 12, 24, 210))
+            self.screen.blit(bar, (GAME_X, base_y - 2))
+            caret = '_' if (pygame.time.get_ticks() // 400) % 2 == 0 else ' '
+            prompt = font.render(f"{t('chat_prompt')}: {self._chat_text}{caret}",
+                                 True, (200, 224, 255))
+            self.screen.blit(prompt, (GAME_X + 12, base_y + 3))
+        elif not self._chat_feed:
+            hint = font.render(t('chat_hint'), True, (120, 130, 155))
+            self.screen.blit(hint, (GAME_X + 12, base_y + 3))
 
     def stop_net_session(self):
         if self.net is not None:
@@ -741,6 +858,8 @@ class Game:
                 # 멀티플레이: 마을에서 내 상태 브로드캐스트 + 원격 플레이어 동기화
                 if self.net is not None and self._in_town:
                     self.net.tick(dt)
+                    self._pump_chat()
+                    self._update_chat_timers(dt)
                     if os.environ.get('DD_MP_DEBUG'):
                         self._mp_dbg = getattr(self, '_mp_dbg', 0) + 1
                         if self._mp_dbg % 60 == 0:
@@ -1816,7 +1935,14 @@ class Game:
                     self._inv_drag_pos = event.pos
 
             elif event.type == pygame.KEYDOWN:
-                if self._skillbook_open:
+                if self._chat_open:
+                    self._handle_chat_key(event.key, event.unicode)
+                elif (event.key == pygame.K_t and self.net is not None
+                        and self._in_town and self.state == 'playing'
+                        and not self._skillbook_open and not self._enhance_open):
+                    self._chat_open = True
+                    self._chat_text = ''
+                elif self._skillbook_open:
                     self._handle_skillbook_key(event.key)
                 elif self._enhance_open:
                     self._handle_enhance_key(event.key)
@@ -1883,6 +2009,11 @@ class Game:
 
         # 캐릭터 생성 화면은 raw 키 입력 전용 — 액션 처리 건너뜀
         if self.state == 'char_create':
+            return
+
+        # 채팅 입력 중에는 이동/행동 억제 (WASD가 글자로 들어가게)
+        if self._chat_open:
+            self.input.update(dt)   # 내부 타이머 유지용으로 소비만
             return
 
         for action in self.input.update(dt):
@@ -7024,6 +7155,10 @@ class Game:
                         minimap_npcs=(self._town.visible_npcs()
                                       if self._in_town and self._town else None))
 
+        # 마을 co-op 채팅 오버레이 (최근 피드 + 입력줄)
+        if self.net is not None and self._in_town:
+            self._draw_chat_overlay()
+
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
 
@@ -7199,6 +7334,7 @@ class Game:
         if self.net is not None and self._in_town:
             for rp in self.net.remote_players.values():
                 rp.draw(self._game_surf, cx, cy)
+            self._draw_chat_bubbles(cx, cy, px, py)
 
         # 펫 (플레이어 근처, 카메라 오프셋 적용)
         if self._pet and not self._in_town:
