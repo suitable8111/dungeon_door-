@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.9.0 — Multiplayer (beta): Dungeon Co-op
+
+Take the fight downstairs together. The dungeon is now a two-player hunt.
+
+### Descend as a party ⚔️
+- From the shared town, the **host steps through the portal** and the whole party drops into the dungeon — at the **lowest floor** anyone in the party has reached, so no one is left behind.
+- **Host leads the descent** — step through the door and everyone travels to the next floor together, on the exact same map.
+- **Shared vision** — the fog of war lifts around every party member, on the map and the minimap.
+
+### Hunt together 🩸
+- **Enemies are in sync** — you both see the same monsters in the same place, and you both chip them down. Whoever lands the blow, the kill counts for the party.
+- **Enemies fight back on both fronts** — monsters chase the nearest hero, so split up at your own risk.
+- **Tougher by design** — dungeon monsters hit harder and take more punishment in co-op, and **bosses are extra beefy**.
+
+### Share the spoils 💰
+- **Loot drops for everyone to see** — walk over an item to grab it; no double-picks, first one there keeps it.
+- **Gold and XP are shared** — every kill pays out to the whole party, so you both level up together.
+- **Destructible cracked walls stay in sync** — bomb one open and the passage appears for both of you.
+
+> Dungeon co-op is beta and runs over LAN / direct connect (`mp-host` / `mp-join`). Steam friend-invites are still on the way.
+
 ## v2.8.0 — Multiplayer (beta): Town Co-op
 
 Bring a friend into town. The homestead is better with two.
