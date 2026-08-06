@@ -2186,7 +2186,8 @@ class Game:
         try:
             tp = SocketTransport.host(port=DEFAULT_PORT)
         except OSError:
-            self._mp_status = t('menu_mp_failed')
+            # 바인드 실패 = 포트 점유(다른 게임 창이 이미 호스트 중 등)
+            self._mp_status = t('menu_mp_port_busy')
             return
         self.audio.play('menu_confirm')
         self._pending_net    = ('host', tp)
