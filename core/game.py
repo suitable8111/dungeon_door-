@@ -545,6 +545,36 @@ class Game:
         elif kind == 'walls':
             # 호스트가 부순 균열 벽 반영(맵 일관성)
             self._coop_break_walls(data.get('t', []))
+        elif kind == 'reward':
+            # 처치 보상 공유 — 골드·경험치를 내 플레이어에 적용
+            self._coop_receive_reward(int(data.get('g', 0)), int(data.get('xp', 0)))
+
+    def _coop_receive_reward(self, gold, xp):
+        """클라: 공유된 처치 보상(골드·경험치)을 내 플레이어에 적용 + 레벨업 처리."""
+        if self.player is None:
+            return
+        if gold > 0:
+            self.player.gold += gold
+            self.animator.add(GoldPopAnim(self.player.x, self.player.y, gold))
+        if xp > 0 and self.player.gain_xp(xp):
+            self._skill_points += 3
+            self.messages.append((t('levelup', self.player.level), 'good'))
+            self.messages.append((t('sp_gained', self._skill_points), 'info'))
+            self.animator.add(BannerAnim(f"LEVEL UP!  Lv.{self.player.level}",
+                                         (255, 226, 110), y=104, size=30))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self.juice.levelup()
+            self.audio.play('levelup_big')
+            # 레벨업으로 콤보 해금(호스트와 동일 조건)
+            for cid, cdef in COMBO_SKILL_DEFS.items():
+                slv_req = cdef.get('skill_level_req', 1)
+                if (cid in self._skill_books and cid not in self._unlocked_combos
+                        and self.player.level >= cdef['level_req']
+                        and all(self._skill_levels.get(self._equipped_skills.get(k, ''), 1) >= slv_req
+                                for k in cid)):
+                    self._unlocked_combos.add(cid)
+                    _nm = combo_def(cid, self.player.char_class)['name']
+                    self.messages.append((t('combo_unlock', _nm), 'good'))
 
     def _coop_take_hit(self, dmg):
         """클라: 호스트가 알린 피격을 내 플레이어에 적용 + 연출."""
@@ -3750,6 +3780,10 @@ class Game:
                     self._unlocked_combos.add(cid)
                     _nm = combo_def(cid, self.player.char_class)['name']
                     self.messages.append((t('combo_unlock', _nm), 'good'))
+        # co-op: 처치 보상(골드·경험치)을 파티원 전원에게 공유(각자 전액)
+        if (self._coop_dungeon and self.net is not None and self.net.is_host):
+            self.net.send_event('reward', {'g': int(gold or 0),
+                                           'xp': int(enemy.xp_value)})
         self.dungeon.enemies.remove(enemy)
         # 드라마틱 마무리 슬로모션: 보스 막타 / 층의 마지막 몬스터
         if enemy.is_boss:
