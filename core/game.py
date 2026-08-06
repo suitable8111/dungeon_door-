@@ -128,7 +128,9 @@ def draw_player(surf, x, y, facing='down', walk_frame=0):
         _player_down(surf, x, y, walk_frame)
 
 def draw_hp_bar(s, x, y, hp, max_hp):
-    bw = TILE_SIZE - 4; ratio = max(0.0, hp / max_hp)
+    bw = TILE_SIZE - 4
+    # 클램프 [0,1]: hp>max_hp(동기 과도기)에도 색 성분이 범위를 벗어나지 않게
+    ratio = 0.0 if max_hp <= 0 else max(0.0, min(1.0, hp / max_hp))
     _r(s,(70,20,20),x+2,y+2,bw,4)
     if ratio > 0:
         _r(s,(200+int(55*(1-ratio)),int(210*ratio),40),x+2,y+2,max(1,int(bw*ratio)),4)
@@ -604,6 +606,18 @@ class Game:
                 'atk': round(1 + self._COOP_ATK_PER * (n - 1), 2)}
         self.net.send_event('coop_enter', {'floor': target, 'seed': seed, 'diff': diff})
         self._coop_start(target, seed, diff)
+
+    def _coop_descend(self):
+        """호스트: co-op 다음 층 하강 — 새 시드로 파티 전원 동시 생성."""
+        import random as _r
+        self.audio.play('stairs')
+        nxt = int(self.floor) + 1
+        seed = _r.randrange(1, 2 ** 31)
+        n = self._coop_party_size()
+        diff = {'hp': round(1 + self._COOP_HP_PER * (n - 1), 2),
+                'atk': round(1 + self._COOP_ATK_PER * (n - 1), 2)}
+        self.net.send_event('coop_enter', {'floor': nxt, 'seed': seed, 'diff': diff})
+        self._coop_start(nxt, seed, diff)
 
     def _coop_start(self, floor, seed, diff):
         """양쪽 공통: co-op 던전 상태 설정 후 결정론적으로 층 생성."""
@@ -3198,6 +3212,13 @@ class Game:
 
         # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
         if target_tile.tile_type == TileType.DOOR:
+            # co-op: 다음 층 하강도 호스트 주도(같은 시드로 동시 생성). 클라는 대기.
+            if self._coop_dungeon and self.net is not None:
+                if self.net.is_host:
+                    self._coop_descend()
+                else:
+                    self.messages.append((t('coop_host_only'), 'info'))
+                return True
             self.audio.play('stairs')
             if self._collapse_active:
                 self._resolve_collapse_escape()
