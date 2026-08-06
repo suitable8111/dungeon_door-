@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.8.0 — Multiplayer (beta): Town Co-op
+
+Bring a friend into town. The homestead is better with two.
+
+### Play together 🤝
+- **Multiplayer (beta)** button on the main menu — **Host a game** or **Join a friend** by IP, then pick your save character and drop into a shared town.
+- **LAN / direct connect** — no dedicated server needed. Host and join over the same network (TCP), with your friend appearing right beside you, nameplate and all.
+- Also launchable from the terminal: `mp-host` / `mp-join <ip>`.
+
+### Shared homestead 🌱🐄
+- **One farm, tended together** — plant, water, and harvest the same plots. Whoever harvests keeps the crop; the field stays in sync for both of you.
+- **Shared ranch** — buy, feed, and sell livestock together; pens update live for everyone.
+- The host owns the world state, so crops and animals never desync.
+
+### Town chat 💬
+- Press **T** to chat — messages pop as **speech bubbles** over each hero's head and scroll in a feed at the bottom.
+
+> Multiplayer is an early beta focused on the town. Dungeon co-op and Steam friend-invites are on the way.
+
 ## v2.7.0 — Homestead: Farm, Fish & Ranch
 
 The town becomes a life of its own — grow crops, cast a line, and raise a barnyard of your own.
