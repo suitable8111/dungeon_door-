@@ -83,8 +83,8 @@ def event(kind: str, data: dict | None = None) -> dict:
 
 def player_state(pid: int, x: int, y: int, facing: str, walk: int,
                  char_class: str, name: str, appearance: dict | None,
-                 hp: int, max_hp: int) -> dict:
+                 hp: int, max_hp: int, floor: int = 0) -> dict:
     """스냅샷에 담기는 한 플레이어의 최소 상태."""
     return {"id": pid, "x": x, "y": y, "f": facing, "w": walk,
             "c": char_class, "n": name, "a": appearance or {},
-            "hp": hp, "mhp": max_hp}
+            "hp": hp, "mhp": max_hp, "fl": floor}

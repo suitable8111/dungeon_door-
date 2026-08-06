@@ -26,6 +26,7 @@ class RemotePlayer:
         self.appearance: dict = {}
         self.hp = 30
         self.max_hp = 30
+        self.floor = 0
         self._initialized = False
 
     # ── 상태 수신 ────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ class RemotePlayer:
         self.appearance = st.get("a", self.appearance) or {}
         self.hp = st.get("hp", self.hp)
         self.max_hp = st.get("mhp", self.max_hp)
+        self.floor = st.get("fl", self.floor)
         if not self._initialized:
             # 첫 상태 수신: 보간 없이 즉시 스냅
             self.render_px = self.x * TILE_SIZE

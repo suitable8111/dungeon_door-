@@ -450,6 +450,10 @@ class Game:
         self._mp_connecting  = False
         self._mp_connect_result = None  # ('ok', tp) | ('err', msg) — 스레드가 채움
         self._mp_mode_banner = None   # 메인 카드 화면 배너: 'host' | 'join'
+        # 던전 co-op (P3)
+        self._coop_dungeon = False    # co-op 던전 탐험 중
+        self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
+        self._coop_diff    = None     # 난이도 배수 {'hp','atk'} — 싱글보다 강함
         # 마을 co-op 채팅
         self._chat_open    = False
         self._chat_text    = ''
@@ -468,7 +472,8 @@ class Game:
         return P.player_state(
             pid, p.x, p.y, self._facing, self._walk_frame,
             p.char_class, getattr(p, 'char_name', 'Hero'),
-            getattr(p, 'appearance', None), p.hp, p.max_hp)
+            getattr(p, 'appearance', None), p.hp, p.max_hp,
+            floor=int(self.floor))
 
     def start_net_session(self, transport, mode='town'):
         """전송 계층을 받아 멀티플레이 세션을 시작한다.
@@ -488,9 +493,71 @@ class Game:
             world_provider=self._net_world_state,       # 호스트: 밭·목장 상태
             apply_world=self._net_apply_world,          # 클라: 받은 월드 반영
             on_remote_action=self._net_apply_world_action,  # 호스트: 클라 액션 적용
+            on_event=self._net_on_event,                # co-op 던전 입장 등
         )
         self.net.start()
         return self.net
+
+    # ── 던전 co-op (P3): 입장·난이도·시야 공유 ────────────────────────
+    _COOP_HP_PER  = 0.6    # 인원 +1마다 적 체력 배수 가산
+    _COOP_ATK_PER = 0.3    # 인원 +1마다 적 공격력 배수 가산
+
+    def _net_on_event(self, from_id, kind, data):
+        if kind == 'coop_enter':
+            # 호스트가 co-op 던전 입장을 알림 — 같은 시드/층/난이도로 생성
+            self._coop_start(int(data.get('floor', 1)),
+                             int(data.get('seed', 0)),
+                             data.get('diff') or None)
+
+    def _coop_party_size(self):
+        return 1 + (len(self.net.remote_players) if self.net else 0)
+
+    def _coop_begin_dungeon(self):
+        """호스트: 파티 최저 층 + 공유 시드 + 난이도로 co-op 던전 시작."""
+        import random as _r
+        floors = [int(self.floor)]
+        for rp in self.net.remote_players.values():
+            if rp.floor:
+                floors.append(int(rp.floor))
+        target = max(1, min(floors))
+        seed = _r.randrange(1, 2 ** 31)
+        n = self._coop_party_size()
+        diff = {'hp': round(1 + self._COOP_HP_PER * (n - 1), 2),
+                'atk': round(1 + self._COOP_ATK_PER * (n - 1), 2)}
+        self.net.send_event('coop_enter', {'floor': target, 'seed': seed, 'diff': diff})
+        self._coop_start(target, seed, diff)
+
+    def _coop_start(self, floor, seed, diff):
+        """양쪽 공통: co-op 던전 상태 설정 후 결정론적으로 층 생성."""
+        self._coop_dungeon = True
+        self._coop_seed    = seed
+        self._coop_diff    = diff
+        self.floor         = floor
+        self._in_town      = False
+        self._saved_camera = None
+        self.messages.append((t('coop_enter_msg', floor), 'good'))
+        self._load_floor()
+
+    def _apply_coop_difficulty(self, dungeon):
+        """co-op 난이도: 적 체력·공격력을 배수로 강화 (싱글보다 어렵게)."""
+        d = self._coop_diff
+        if not d:
+            return
+        hp_m = float(d.get('hp', 1.0))
+        atk_m = float(d.get('atk', 1.0))
+        for e in dungeon.enemies:
+            e.max_hp = max(1, int(round(e.max_hp * hp_m)))
+            e.hp     = e.max_hp
+            e.attack = max(1, int(round(e.attack * atk_m)))
+
+    def _coop_reveal(self):
+        """시야 공유: 원격 파티원 위치 주변도 밝힌다(미니맵 포함)."""
+        if (self.net is None or self._is_test_mode or self._in_town
+                or self.dungeon is None):
+            return
+        for rp in self.net.remote_players.values():
+            if self.dungeon.in_bounds(rp.x, rp.y):
+                self.dungeon.update_visibility(rp.x, rp.y)
 
     # ── 공유 월드(밭 등) 동기화 훅 ────────────────────────────────────
     def _net_world_state(self):
@@ -651,7 +718,7 @@ class Game:
 
     def _draw_chat_overlay(self):
         """하단 최근 채팅 피드 + (입력 중) 입력줄. self.screen에 직접 그린다."""
-        if self.net is None or not self._in_town:
+        if self.net is None or not (self._in_town or self._coop_dungeon):
             return
         font = self.hud.font_sm
         base_y = GAME_Y + GAME_H - 24
@@ -855,11 +922,13 @@ class Game:
                     self._update_collapse(world_dt)  # 붕괴 추격
                 if self._in_town and self._town:
                     self._town.update(dt, self.player.x, self.player.y)
-                # 멀티플레이: 마을에서 내 상태 브로드캐스트 + 원격 플레이어 동기화
-                if self.net is not None and self._in_town:
+                # 멀티플레이: 마을·co-op던전에서 상태 브로드캐스트 + 원격 동기화
+                if self.net is not None and (self._in_town or self._coop_dungeon):
                     self.net.tick(dt)
                     self._pump_chat()
                     self._update_chat_timers(dt)
+                    if self._coop_dungeon and not self._in_town:
+                        self._coop_reveal()   # 시야 공유(원격 파티원 주변)
                     if os.environ.get('DD_MP_DEBUG'):
                         self._mp_dbg = getattr(self, '_mp_dbg', 0) + 1
                         if self._mp_dbg % 60 == 0:
@@ -1761,9 +1830,17 @@ class Game:
             self.floor = min(self.floor, MAX_FLOOR)
         self._quest_on_floor(min(self.floor, MAX_FLOOR))   # reach_floor 퀘스트 추적
         self.vfx_loot.clear()          # 이전 층 전리품 연출 정리
+        # co-op: 공유 시드로 결정론적 생성(양쪽 동일 맵) → 생성 후 엔트로피 복귀
+        if self._coop_seed is not None:
+            import random as _r
+            _r.seed(self._coop_seed)
         dungeon, start = generate_dungeon(MAP_WIDTH, MAP_HEIGHT, self.floor,
                                           self._enemy_data, self._item_data)
+        if self._coop_seed is not None:
+            import random as _r
+            _r.seed()
         self.dungeon  = dungeon
+        self._apply_coop_difficulty(dungeon)   # co-op이면 적 강화(싱글보다 어렵게)
         self._theme   = get_theme(self.floor)
         if is_new_game:
             self.player = Player(*start,
@@ -1788,7 +1865,7 @@ class Game:
                 self.audio.play('boss_appear')
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
-            if not self._is_test_mode:
+            if not self._is_test_mode and not self._coop_dungeon:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                               self._skill_levels, self._skill_xp, self._skill_points,
                               self._equipped_skills, self._skill_enchants, self._quests,
@@ -1938,7 +2015,8 @@ class Game:
                 if self._chat_open:
                     self._handle_chat_key(event.key, event.unicode)
                 elif (event.key == pygame.K_t and self.net is not None
-                        and self._in_town and self.state == 'playing'
+                        and (self._in_town or self._coop_dungeon)
+                        and self.state == 'playing'
                         and not self._skillbook_open and not self._enhance_open):
                     self._chat_open = True
                     self._chat_text = ''
@@ -2878,6 +2956,13 @@ class Game:
         # ── 포탈 밟기: 마을 ↔ 던전 ──────────────────────────────────
         if self._in_town:
             if self._town and (nx, ny) == self._town.portal_pos:
+                if self.net is not None:
+                    # co-op: 호스트만 던전 입장을 개시(파티 최저 층). 클라는 대기.
+                    if self.net.is_host:
+                        self._coop_begin_dungeon()
+                    else:
+                        self.messages.append((t('coop_host_only'), 'info'))
+                    return True
                 self._start_fade(self._return_from_town)
                 return True
         elif (nx, ny) == getattr(self.dungeon, 'town_portal_pos', None):
@@ -7156,8 +7241,8 @@ class Game:
                         minimap_npcs=(self._town.visible_npcs()
                                       if self._in_town and self._town else None))
 
-        # 마을 co-op 채팅 오버레이 (최근 피드 + 입력줄)
-        if self.net is not None and self._in_town:
+        # 마을·co-op던전 채팅 오버레이 (최근 피드 + 입력줄)
+        if self.net is not None and (self._in_town or self._coop_dungeon):
             self._draw_chat_overlay()
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
@@ -7331,8 +7416,8 @@ class Game:
 
         self._draw_player_sprite(px, py)
 
-        # 멀티플레이: 원격 플레이어(다른 접속자) — 마을 co-op
-        if self.net is not None and self._in_town:
+        # 멀티플레이: 원격 플레이어(다른 접속자) — 마을·co-op던전
+        if self.net is not None and (self._in_town or self._coop_dungeon):
             for rp in self.net.remote_players.values():
                 rp.draw(self._game_surf, cx, cy)
             self._draw_chat_bubbles(cx, cy, px, py)

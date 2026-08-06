@@ -42,6 +42,7 @@ class Session:
         world_provider: Optional[Callable[[], Optional[dict]]] = None,
         apply_world: Optional[Callable[[dict], None]] = None,
         on_remote_action: Optional[Callable[[int, dict], None]] = None,
+        on_event: Optional[Callable[[int, str, dict], None]] = None,
         world_interval: int = 12,
     ):
         # mode:
@@ -65,6 +66,7 @@ class Session:
         self._world_provider = world_provider     # 호스트: 현재 월드 상태 dict
         self._apply_world = apply_world           # 클라: 받은 월드 상태 반영
         self._on_remote_action = on_remote_action  # 호스트: 클라 액션 적용
+        self._on_event = on_event                  # 양쪽: 일회성 이벤트 수신
         self._world_interval = max(1, world_interval)
 
         # 로컬 플레이어의 권위 상태 (호스트 기준). provider가 있으면 매 틱 덮어씀.
@@ -134,6 +136,10 @@ class Session:
             return
         self._send(P.CH_INPUT, P.action_msg(action))
 
+    def send_event(self, kind: str, data: Optional[dict] = None) -> None:
+        """일회성 이벤트를 모든 피어에 브로드캐스트 (예: co-op 던전 입장)."""
+        self.tp.broadcast(P.CH_CONTROL, P.encode(P.event(kind, data or {})))
+
     def send_chat(self, text: str) -> None:
         msg = P.chat(self.tp.local_id(), text)
         self.chat_log.append((self.tp.local_id(), text))
@@ -201,6 +207,9 @@ class Session:
         elif t == P.T_ACTION and self.is_host:
             if self._on_remote_action is not None:
                 self._on_remote_action(from_id, msg.get("a", {}))
+        elif t == P.T_EVENT:
+            if self._on_event is not None:
+                self._on_event(from_id, msg.get("e", ""), msg.get("d", {}))
         elif t == P.T_SNAPSHOT and not self.is_host:
             self._apply_snapshot(msg)
         elif t == P.T_CHAT:
