@@ -1974,6 +1974,9 @@ class Game:
         self._combo_ms    = 0.0
         # 마을 세션 초기화 (사망 시 던전 소지품만 소실 — 창고는 파일로 유지)
         self._in_town         = False
+        self._coop_dungeon    = False
+        self._coop_seed       = None
+        self._coop_diff       = None
         self._dungeon_session = None
         from core.quests import fresh_states
         self._quests = fresh_states()
@@ -2091,6 +2094,13 @@ class Game:
         data = self._save_data
         if not data:
             self._new_game(); return
+        # 씬 상태 초기화 — 이전 세션이 마을/co-op던전이었어도 스테일 상태를 남기지 않는다
+        # (안 하면 _maybe_begin_coop이 _enter_town을 건너뛰어 던전+마을 겹침·좌표 어긋남)
+        self._in_town         = False
+        self._coop_dungeon    = False
+        self._coop_seed       = None
+        self._coop_diff       = None
+        self._dungeon_session = None
         self._char_class = data.get('char_class', 'warrior')
         self._char_name  = data.get('name', 'Hero')
         self._char_appearance = dict(
@@ -2731,6 +2741,10 @@ class Game:
         self._pending_net    = None
         self._mp_mode_banner = None
         self._mp_status      = None
+        # co-op은 항상 마을에서 시작 — 스테일 co-op던전 상태 제거
+        self._coop_dungeon   = False
+        self._coop_seed      = None
+        self._coop_diff      = None
         if not self._in_town:
             self._enter_town()
         self.start_net_session(tp, mode='town')
