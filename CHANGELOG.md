@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.3 — Multiplayer (beta): Friendlier join
+
+- **Character-select popup** after hosting or joining — pick your hero from a focused window. No characters yet? It tells you to create one first (and lets you).
+- **Invite codes auto-uppercase** as you type, so they're easier to enter.
+
 ## v2.9.2 — Multiplayer (beta): Co-op join fix
 
 - **Fixed** co-op joining via **Continue** (an existing character): the town and dungeon could render on top of each other and players couldn't see one another. Continuing a save now resets the scene cleanly before entering the shared town.
