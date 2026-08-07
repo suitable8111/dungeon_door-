@@ -818,12 +818,15 @@ class HUD:
         screen.blit(label, (bx, by + bh + 3))
 
     # ------------------------------------------------------------------ #
-    def render_paused(self, screen, settings, pause_sel, mouse_pos=(0, 0)):
+    def render_paused(self, screen, settings, pause_sel, mouse_pos=(0, 0),
+                      tags=None, mp_code=None):
         overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 200))
         screen.blit(overlay, (0, 0))
 
-        bw = 370; bh = 490
+        bw = 370
+        _tags = tags or ['resume', 'save', 'bgm', 'sfx', 'fs', 'lang', 'title', 'quit']
+        bh = 90 + len(_tags) * 46 + 30
         bx = WINDOW_WIDTH  // 2 - bw // 2
         by = WINDOW_HEIGHT // 2 - bh // 2
 
@@ -838,19 +841,25 @@ class HUD:
         lang_val = LANG_NAMES.get(settings.get('language', 'en'), 'English')
         fs_val   = t('pause_fs_on') if settings['fullscreen'] else t('pause_fs_off')
 
-        ITEMS = [
-            (t('pause_resume'),                              None),
-            (t('pause_save'),                                'save'),
-            (f"{t('pause_bgm')}    {int(settings['bgm_vol']*100):3d}%", 'bgm'),
-            (f"{t('pause_sfx')}    {int(settings['sfx_vol']*100):3d}%", 'sfx'),
-            (f"{t('pause_fs')}    {fs_val}",                'fs'),
-            (f"{t('pause_lang')}    {lang_val}",            'lang'),
-            (t('pause_title_'),                              'title'),
-            (t('pause_quit'),                                'quit'),
-        ]
+        def _label(tag):
+            return {
+                'resume': t('pause_resume'),
+                'save':   t('pause_save'),
+                'mp_copy': f"{t('pause_mp_copy')}  {mp_code or ''}",
+                'mp_join': t('pause_mp_join'),
+                'bgm':  f"{t('pause_bgm')}    {int(settings['bgm_vol']*100):3d}%",
+                'sfx':  f"{t('pause_sfx')}    {int(settings['sfx_vol']*100):3d}%",
+                'fs':   f"{t('pause_fs')}    {fs_val}",
+                'lang': f"{t('pause_lang')}    {lang_val}",
+                'title': t('pause_title_'),
+                'quit': t('pause_quit'),
+            }.get(tag, tag)
+
+        ITEMS = [(_label(tg), (None if tg == 'resume' else tg)) for tg in _tags]
 
         item_colors = {
             None: WHITE, 'save': (100, 220, 130),
+            'mp_copy': (255, 226, 120), 'mp_join': (140, 200, 255),
             'bgm': LIGHT_GRAY, 'sfx': LIGHT_GRAY, 'fs': LIGHT_GRAY,
             'lang': (120, 200, 255), 'title': LIGHT_GRAY, 'quit': (200, 80, 80),
         }

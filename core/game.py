@@ -477,6 +477,8 @@ class Game:
         self._mp_code        = None   # 호스트가 생성한 초대 코드(친구에게 공유)
         self._mp_forward     = None   # UPnP 포트포워딩 핸들(정리용)
         self._mp_upnp        = None   # UPnP 상태: 'wait'|'ok'|'lan'
+        self._mp_join_open   = False  # 게임 중 '친구 참가' 코드 입력 오버레이
+        self._mp_join_ingame = False  # 접속 완료 시 메뉴 대신 즉시 세션 부착
         # 던전 co-op (P3)
         self._coop_dungeon = False    # co-op 던전 탐험 중
         self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
@@ -988,6 +990,28 @@ class Game:
         surf.set_alpha(alpha)
         bub.blit(surf, (pad, pad // 2))
         self._game_surf.blit(bub, (bx, by))
+
+    def _draw_join_overlay(self):
+        """게임 중 '친구 참가' — 중앙 코드 입력 박스."""
+        bw, bh = 470, 104
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        panel.fill((10, 14, 28, 236))
+        self.screen.blit(panel, (bx, by))
+        pygame.draw.rect(self.screen, (88, 148, 230), (bx, by, bw, bh), 2, border_radius=6)
+        font = self.hud.font_md
+        title = font.render(t('mp_join_prompt'), True, (200, 224, 255))
+        self.screen.blit(title, (bx + 16, by + 12))
+        ib = pygame.Rect(bx + 16, by + 42, bw - 32, 30)
+        pygame.draw.rect(self.screen, (6, 10, 20), ib, border_radius=4)
+        pygame.draw.rect(self.screen, (70, 104, 160), ib, 1, border_radius=4)
+        caret = '_' if (pygame.time.get_ticks() // 400) % 2 == 0 else ' '
+        val = font.render(self._mp_ip + caret, True, (255, 226, 120))
+        self.screen.blit(val, (ib.left + 8, ib.centery - val.get_height() // 2))
+        hint = self.hud.font_sm.render(t('menu_mp_ip_hint') + "   (Enter · ESC)",
+                                       True, (120, 140, 175))
+        self.screen.blit(hint, (bx + 16, by + bh - 22))
 
     def _draw_chat_overlay(self):
         """하단 최근 채팅 피드 + (입력 중) 입력줄. self.screen에 직접 그린다."""
@@ -2326,7 +2350,9 @@ class Game:
                     self._inv_drag_pos = event.pos
 
             elif event.type == pygame.KEYDOWN:
-                if self._chat_open:
+                if self._mp_join_open:
+                    self._handle_join_key(event.key, event.unicode)
+                elif self._chat_open:
                     self._handle_chat_key(event.key, event.unicode)
                 elif (event.key == pygame.K_t and self.net is not None
                         and (self._in_town or self._coop_dungeon)
@@ -2404,8 +2430,8 @@ class Game:
         if self.state == 'char_create':
             return
 
-        # 채팅 입력 중에는 이동/행동 억제 (WASD가 글자로 들어가게)
-        if self._chat_open:
+        # 채팅/코드입력 중에는 이동/행동 억제 (WASD가 글자로 들어가게)
+        if self._chat_open or self._mp_join_open:
             self.input.update(dt)   # 내부 타이머 유지용으로 소비만
             return
 
@@ -2663,6 +2689,16 @@ class Game:
         self._mp_connect_result = None
         self._mp_connecting     = False
         kind, val = res
+        # 게임 중(마을) 참가: 캐릭터 선택 없이 즉시 세션 부착
+        if self._mp_join_ingame:
+            self._mp_join_ingame = False
+            if kind == 'ok':
+                self.start_net_session(val, mode='town')
+                self.messages.append((t('mp_joined'), 'good'))
+                self.audio.play('menu_confirm')
+            else:
+                self.messages.append((t('menu_mp_failed'), 'warn'))
+            return
         if kind == 'ok':
             self._pending_net    = ('join', val)
             self._mp_mode_banner = 'join'
@@ -2890,7 +2926,7 @@ class Game:
         bw = 370; bh = 490
         bx = WINDOW_WIDTH  // 2 - bw // 2
         by = WINDOW_HEIGHT // 2 - bh // 2
-        for i in range(8):
+        for i in range(len(self._pause_tags())):
             iy = by + 56 + i * 46
             if pygame.Rect(bx+8, iy-3, bw-16, 32).collidepoint(pos):
                 self._pause_sel = i
@@ -3042,13 +3078,24 @@ class Game:
                     self._equip_sel = i
                 break
 
+    def _pause_tags(self):
+        """일시정지 메뉴 항목(태그) — 멀티 상황에 따라 동적으로 삽입."""
+        tags = ['resume', 'save']
+        if self.net is not None and self.net.is_host and self._mp_code:
+            tags.append('mp_copy')          # 호스트: 초대 코드 복사
+        if self._in_town and self.net is None:
+            tags.append('mp_join')          # 마을 싱글: 친구 참가(코드)
+        tags += ['bgm', 'sfx', 'fs', 'lang', 'title', 'quit']
+        return tags
+
     def _handle_pause_action(self, action):
         act = action['type']
+        tags = self._pause_tags()
         if act == 'move':
             dy = action.get('dy', 0)
             dx = action.get('dx', 0)
             if dy != 0:
-                self._pause_sel = (self._pause_sel + dy) % 8
+                self._pause_sel = (self._pause_sel + dy) % len(tags)
             elif dx != 0:
                 self._adjust_pause_setting(dx)
         elif act in ('wait', 'confirm'):
@@ -3056,24 +3103,26 @@ class Game:
 
     def _adjust_pause_setting(self, dx):
         step = 0.1
-        if self._pause_sel == 2:   # BGM
+        tag = self._pause_tags()[self._pause_sel]
+        if tag == 'bgm':
             self._settings['bgm_vol'] = max(0.0, min(1.0, self._settings['bgm_vol'] + dx*step))
             if self.audio.bgm:
                 self.audio.bgm.set_volume(self._settings['bgm_vol'])
             save_settings(self._settings)
-        elif self._pause_sel == 3:  # SFX
+        elif tag == 'sfx':
             self._settings['sfx_vol'] = max(0.0, min(1.0, self._settings['sfx_vol'] + dx*step))
             self.audio.set_sfx_volume(self._settings['sfx_vol'])
             save_settings(self._settings)
-        elif self._pause_sel == 4:  # 전체화면
+        elif tag == 'fs':
             self._toggle_fullscreen()
-        elif self._pause_sel == 5:  # 언어
+        elif tag == 'lang':
             self._toggle_language()
 
     def _confirm_pause(self):
-        if self._pause_sel == 0:
+        tag = self._pause_tags()[self._pause_sel]
+        if tag == 'resume':
             self.state = 'playing'
-        elif self._pause_sel == 1:   # 저장하기
+        elif tag == 'save':
             if self.player and not self._is_test_mode:
                 save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
                           self._skill_levels, self._skill_xp, self._skill_points,
@@ -3084,18 +3133,103 @@ class Game:
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
-        elif self._pause_sel == 4:
+        elif tag == 'mp_copy':
+            self._copy_invite_code()
+        elif tag == 'mp_join':
+            self._open_ingame_join()
+        elif tag == 'fs':
             self._toggle_fullscreen()
-        elif self._pause_sel == 5:
+        elif tag == 'lang':
             self._toggle_language()
-        elif self._pause_sel == 6:
+        elif tag == 'title':
             self.state           = 'menu'
             self._menu_sel       = 0
             self._menu_page      = 'main'
             self._cards          = list_cards()
             self._save_data      = load_game(self._save_slot)
-        elif self._pause_sel == 7:
+        elif tag == 'quit':
             pygame.quit(); sys.exit()
+
+    # ── 클립보드 / 초대 코드 복사 ─────────────────────────────────────
+    def _copy_to_clipboard(self, text):
+        try:
+            import pygame.scrap as _scrap
+            if not _scrap.get_init():
+                _scrap.init()
+            _scrap.put_text(text)
+            return True
+        except Exception:
+            pass
+        import shutil, subprocess
+        for cmd in ('pbcopy', 'clip', 'xclip'):
+            if shutil.which(cmd):
+                try:
+                    p = subprocess.Popen([cmd] if cmd != 'xclip'
+                                         else ['xclip', '-selection', 'clipboard'],
+                                         stdin=subprocess.PIPE)
+                    p.communicate(text.encode('utf-8'))
+                    return True
+                except Exception:
+                    continue
+        return False
+
+    def _copy_invite_code(self):
+        if self._mp_code and self._copy_to_clipboard(self._mp_code):
+            self.messages.append((t('mp_copied'), 'good'))
+        else:
+            self.messages.append((self._mp_code or '', 'info'))
+        self.audio.play('menu_select')
+        self.state = 'playing'
+
+    def _open_ingame_join(self):
+        """마을에서 코드로 친구 참가 — 입력 오버레이 열기."""
+        self._mp_join_open = True
+        self._mp_ip = ''
+        self.state = 'playing'
+
+    def _handle_join_key(self, key, uni):
+        if key == pygame.K_RETURN:
+            self._mp_join_start()
+        elif key == pygame.K_ESCAPE:
+            self._mp_join_open = False
+        elif key == pygame.K_BACKSPACE:
+            self._mp_ip = self._mp_ip[:-1]
+        elif uni and (uni.isalnum() or uni == '.') and len(self._mp_ip) < 21:
+            self._mp_ip += uni
+
+    def _mp_join_start(self):
+        """입력한 코드/IP로 접속(백그라운드) — 성공 시 즉시 마을 co-op 세션 부착."""
+        import threading
+        from net.socket_transport import DEFAULT_PORT
+        from net.invite import parse_code, looks_like_code
+        raw = self._mp_ip.strip()
+        self._mp_join_open = False
+        if not raw:
+            return
+        if looks_like_code(raw):
+            parsed = parse_code(raw)
+            if parsed is None:
+                self.messages.append((t('menu_mp_badcode'), 'warn'))
+                self.audio.play('no_gold')
+                return
+            ip, port = parsed
+        else:
+            ip, port = raw, DEFAULT_PORT
+        self._mp_connecting     = True
+        self._mp_connect_result = None
+        self._mp_join_ingame    = True
+        self.messages.append((t('menu_mp_connecting'), 'info'))
+        self.audio.play('menu_select')
+
+        def worker():
+            from net.socket_transport import SocketTransport
+            try:
+                tp = SocketTransport.connect(ip, port, timeout=12.0)
+                self._mp_connect_result = ('ok', tp)
+            except Exception as e:  # noqa: BLE001
+                self._mp_connect_result = ('err', str(e))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def _toggle_language(self):
         from core.lang import next_lang
@@ -7646,6 +7780,9 @@ class Game:
         # 마을·co-op던전 채팅 오버레이 (최근 피드 + 입력줄)
         if self.net is not None and (self._in_town or self._coop_dungeon):
             self._draw_chat_overlay()
+        # 게임 중 '친구 참가' 코드 입력 오버레이
+        if self._mp_join_open:
+            self._draw_join_overlay()
 
         if self.dungeon.is_boss_floor and self.dungeon.boss and self.dungeon.boss.is_alive():
             self.hud.render_boss_bar(self.screen, self.dungeon.boss)
@@ -7690,7 +7827,8 @@ class Game:
             self.hud.render_pet_status(self.screen, self.player, self._pet)
         elif self.state == 'paused':
             self.hud.render_paused(self.screen, self._settings, self._pause_sel,
-                                   mouse_pos=pygame.mouse.get_pos())
+                                   mouse_pos=pygame.mouse.get_pos(),
+                                   tags=self._pause_tags(), mp_code=self._mp_code)
         elif self.state == 'dead':
             self.hud.render_game_over(self.screen, self.floor, self._records)
         elif self.state == 'inventory':
