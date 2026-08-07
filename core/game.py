@@ -2582,10 +2582,26 @@ class Game:
                 pygame.quit(); sys.exit()
 
     def _open_multiplayer(self):
-        """멀티플레이(beta) 페이지 진입. 실제 로비 연결은 P1에서."""
+        """멀티플레이(beta) 페이지 진입 — 최근 접속 코드를 미리 채운다."""
         self.audio.play('menu_select')
         self._menu_page = 'multiplayer'
         self._menu_settings_sel = 0
+        recent = self._settings.get('mp_recent') or []
+        if recent and not self._mp_ip:
+            self._mp_ip = recent[0]
+
+    def _remember_code(self, raw):
+        """성공적으로 접속한 코드/IP를 최근 목록에 저장(중복 제거, 최대 5개)."""
+        raw = (raw or '').strip()
+        if not raw:
+            return
+        from net.invite import looks_like_code
+        if looks_like_code(raw):
+            raw = raw.upper()
+        recent = [c for c in (self._settings.get('mp_recent') or []) if c != raw]
+        recent.insert(0, raw)
+        self._settings['mp_recent'] = recent[:5]
+        save_settings(self._settings)
 
     def _handle_menu_mp_action(self, action):
         typ = action['type']
@@ -2719,6 +2735,7 @@ class Game:
             ip, port = parsed
         else:
             ip, port = raw, DEFAULT_PORT
+        self._mp_last_target    = raw
         self._mp_connecting     = True
         self._mp_connect_result = None
         self._mp_status         = t('menu_mp_connecting')
@@ -2746,6 +2763,7 @@ class Game:
         if self._mp_join_ingame:
             self._mp_join_ingame = False
             if kind == 'ok':
+                self._remember_code(getattr(self, '_mp_last_target', ''))
                 self.start_net_session(val, mode='town')
                 self.messages.append((t('mp_joined'), 'good'))
                 self.audio.play('menu_confirm')
@@ -2753,6 +2771,7 @@ class Game:
                 self.messages.append((t('menu_mp_failed'), 'warn'))
             return
         if kind == 'ok':
+            self._remember_code(getattr(self, '_mp_last_target', ''))
             self._pending_net    = ('join', val)
             self._mp_mode_banner = 'join'
             self._mp_status      = None
@@ -2947,6 +2966,9 @@ class Game:
                 if rect.collidepoint(pos):
                     if tag in _tag_idx:
                         self._activate_mp_item(_tag_idx[tag])
+                    elif tag.startswith('recent:'):
+                        self._mp_ip = tag.split(':', 1)[1]   # 입력창에 채움
+                        self.audio.play('menu_select')
                     break
             return
         if self._menu_page == 'coop_select':
@@ -3291,6 +3313,7 @@ class Game:
             ip, port = parsed
         else:
             ip, port = raw, DEFAULT_PORT
+        self._mp_last_target    = raw
         self._mp_connecting     = True
         self._mp_connect_result = None
         self._mp_join_ingame    = True
@@ -7817,6 +7840,7 @@ class Game:
                 mp_banner=self._mp_mode_banner,
                 mp_code=self._mp_code,
                 mp_upnp=self._mp_upnp,
+                mp_recent=self._settings.get('mp_recent'),
             )
             pygame.display.flip()
             return

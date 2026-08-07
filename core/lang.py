@@ -185,6 +185,8 @@ _T: dict[str, dict[str, str]] = {
                           'ja': '招待コード (共有):',
                           'zh': '你的邀请码 (分享):',
                           'ru': 'Ваш код (поделитесь):'},
+    'menu_mp_recent': {'ko': '최근:', 'en': 'Recent:', 'ja': '最近:',
+                       'zh': '最近:', 'ru': 'Недавние:'},
     'menu_mp_badcode': {'ko': '잘못된 초대 코드',
                         'en': 'Invalid invite code',
                         'ja': '無効な招待コード',

@@ -242,7 +242,7 @@ class HUD:
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
                     page='main', settings=None, settings_sel=0,
                     mp_ip=None, mp_status=None, mp_banner=None, mp_code=None,
-                    mp_upnp=None):
+                    mp_upnp=None, mp_recent=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -556,8 +556,26 @@ class HUD:
             pygame.draw.rect(screen, (70, 104, 160), ip_box, 1, border_radius=4)
             ipv = self.font_sm.render((mp_ip or ''), True, (215, 230, 250))
             screen.blit(ipv, (ip_box.left + 8, ip_box.centery - ipv.get_height()//2))
-            iphint = self.font_sm.render(t('menu_mp_ip_hint'), True, (92, 108, 140))
-            screen.blit(iphint, (mb_x, p_y + 118))
+            if mp_recent:
+                # 최근 접속 코드 칩 — 클릭하면 입력창에 채워짐
+                rl = self.font_sm.render(t('menu_mp_recent'), True, (110, 130, 160))
+                screen.blit(rl, (mb_x, p_y + 120))
+                _rx = mb_x + rl.get_width() + 8
+                for rc in mp_recent[:3]:
+                    chip = self.font_sm.render(rc, True, (200, 210, 235))
+                    rr = pygame.Rect(_rx, p_y + 116, chip.get_width() + 10, 19)
+                    if rr.right > p_x + p_w - 16:
+                        break
+                    hov = rr.collidepoint(mouse_pos)
+                    pygame.draw.rect(screen, (30, 40, 62) if hov else (18, 24, 40),
+                                     rr, border_radius=3)
+                    pygame.draw.rect(screen, (74, 110, 168), rr, 1, border_radius=3)
+                    screen.blit(chip, (rr.left + 5, rr.top + 3))
+                    buttons.append((rr, f"recent:{rc}"))
+                    _rx += rr.width + 6
+            else:
+                iphint = self.font_sm.render(t('menu_mp_ip_hint'), True, (92, 108, 140))
+                screen.blit(iphint, (mb_x, p_y + 118))
 
             # ── 방 만들기 / 친구 참가 ──────────────────────────────
             mb_h = 46
