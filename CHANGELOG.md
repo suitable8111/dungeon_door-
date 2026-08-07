@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.9.4 — Multiplayer (beta): Recent codes & help
+
+- **Remembers your recent invite codes** — they're saved between sessions, pre-filled on the multiplayer screen, and one click re-enters one.
+- **How-to-play window** — tap the ⓘ on the multiplayer screen for a quick guide to hosting, joining, and playing together.
+
 ## v2.9.3 — Multiplayer (beta): Friendlier join
 
 - **Character-select popup** after hosting or joining — pick your hero from a focused window. No characters yet? It tells you to create one first (and lets you).
