@@ -2481,7 +2481,9 @@ class Game:
                     self._pause_sel = 0
                     self.state = 'paused'
                 elif self.state == 'menu':
-                    if self._menu_page in ('settings', 'multiplayer'):
+                    if self._menu_page == 'mp_help':
+                        self._menu_page = 'multiplayer'
+                    elif self._menu_page in ('settings', 'multiplayer'):
                         self._menu_page = 'main'
                     elif self._menu_page == 'coop_select':
                         self._cancel_pending_net()   # co-op 캐릭터 선택 취소
@@ -2560,6 +2562,10 @@ class Game:
             return
         if self._menu_page == 'coop_select':
             self._handle_coop_select_action(action)
+            return
+        if self._menu_page == 'mp_help':
+            if action['type'] in ('wait', 'confirm', 'load'):
+                self._menu_page = 'multiplayer'
             return
         typ = action['type']
         n = len(self._cards)
@@ -2966,9 +2972,18 @@ class Game:
                 if rect.collidepoint(pos):
                     if tag in _tag_idx:
                         self._activate_mp_item(_tag_idx[tag])
+                    elif tag == 'mp_help':
+                        self.audio.play('menu_select')
+                        self._menu_page = 'mp_help'
                     elif tag.startswith('recent:'):
                         self._mp_ip = tag.split(':', 1)[1]   # 입력창에 채움
                         self.audio.play('menu_select')
+                    break
+            return
+        if self._menu_page == 'mp_help':
+            for rect, tag in self._menu_buttons:
+                if rect.collidepoint(pos) and tag == 'mp_back':
+                    self._menu_page = 'multiplayer'
                     break
             return
         if self._menu_page == 'coop_select':

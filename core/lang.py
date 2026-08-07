@@ -187,6 +187,46 @@ _T: dict[str, dict[str, str]] = {
                           'ru': 'Ваш код (поделитесь):'},
     'menu_mp_recent': {'ko': '최근:', 'en': 'Recent:', 'ja': '最近:',
                        'zh': '最近:', 'ru': 'Недавние:'},
+    'mp_help_title': {'ko': '멀티플레이 사용법', 'en': 'How to play together',
+                      'ja': 'マルチプレイの遊び方', 'zh': '多人游戏玩法',
+                      'ru': 'Как играть вдвоём'},
+    'mp_help_body': {
+        'ko': ("· 방 만들기 → 캐릭터 선택 → 뜬 초대 코드를 친구에게 공유\n"
+               "· 참가: 코드 입력 → 친구 참가 → 캐릭터 선택\n"
+               "· 같은 공유기면 바로 접속, 인터넷은 자동 개방(UPnP) 시도\n"
+               "· '인터넷 어디서든'(초록)이면 다른 지역 친구도 접속 가능\n"
+               "· 게임 중에도 참가: ESC → 친구 참가 (코드)\n"
+               "· 채팅: T 키   ·   같은 마을에서 함께 농사·낚시·목장\n"
+               "· 던전: 마을에서 호스트가 포탈을 밟으면 함께 입장(파티 최저 층)"),
+        'en': ("- Host → pick a hero → share the invite code that appears\n"
+               "- Join: enter the code → Join a friend → pick a hero\n"
+               "- Same network connects instantly; internet uses auto-open (UPnP)\n"
+               "- If it says 'over the internet' (green), far-away friends can join\n"
+               "- Join mid-game too: ESC -> Join a friend (code)\n"
+               "- Chat: T key   -   farm, fish & ranch together in town\n"
+               "- Dungeon: in town, the host steps through the portal to descend together"),
+        'ja': ("・ホスト → キャラ選択 → 表示された招待コードを共有\n"
+               "・参加: コード入力 → 参加 → キャラ選択\n"
+               "・同じLANは即接続、インターネットは自動開放(UPnP)\n"
+               "・「インターネット可」(緑)なら遠くの友達も参加可\n"
+               "・ゲーム中も参加: ESC → 参加 (コード)\n"
+               "・チャット: Tキー\n"
+               "・ダンジョン: 村でホストがポータルを踏むと一緒に入場"),
+        'zh': ("· 创建房间 → 选择角色 → 分享出现的邀请码\n"
+               "· 加入: 输入邀请码 → 加入好友 → 选择角色\n"
+               "· 同一网络即时连接，互联网自动开放(UPnP)\n"
+               "· 显示'可通过互联网'(绿色)时，异地好友也能加入\n"
+               "· 游戏中也可加入: ESC → 加入好友 (代码)\n"
+               "· 聊天: T 键\n"
+               "· 地下城: 在村庄由主机踩传送门一起下层"),
+        'ru': ("- Хост -> выбор героя -> поделитесь кодом приглашения\n"
+               "- Вход: код -> Присоединиться -> выбор героя\n"
+               "- В одной сети — сразу; интернет через авто-открытие (UPnP)\n"
+               "- Если 'через интернет' (зелёный) — друзья издалека тоже\n"
+               "- Вход и в игре: ESC -> Присоединиться (код)\n"
+               "- Чат: T   -   ферма, рыбалка и ранчо вместе\n"
+               "- Подземелье: хост входит в портал — спускаетесь вместе"),
+    },
     'menu_mp_badcode': {'ko': '잘못된 초대 코드',
                         'en': 'Invalid invite code',
                         'ja': '無効な招待コード',

@@ -293,6 +293,10 @@ class HUD:
         elif page == 'multiplayer':
             p_w = 440
             p_h = 336
+        elif page == 'mp_help':
+            p_w = 500
+            _hl = len(t('mp_help_body').split('\n'))
+            p_h = 66 + _hl * 22 + 14 + 40 + 16
         else:
             p_w = 440
             p_h = 350
@@ -450,6 +454,33 @@ class HUD:
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         # ════════════════════════════════════════════════════════════
+        elif page == 'mp_help':
+        # ════════════════════════════════════════════════════════════
+
+            pygame.draw.rect(screen, (12, 14, 30), (p_x, p_y, p_w, 54))
+            pygame.draw.line(screen, (70, 110, 160),
+                             (p_x+20, p_y+54), (p_x+p_w-20, p_y+54))
+            _draw_network_icon(screen, p_x + 32, p_y + 27, (150, 190, 245))
+            ts = self.font_lg.render(t('mp_help_title'), True, (190, 218, 255))
+            screen.blit(ts, (p_x + 52, p_y + 27 - ts.get_height()//2))
+            yy = p_y + 66
+            for line in t('mp_help_body').split('\n'):
+                ln = self.font_sm.render(line, True, (198, 208, 228))
+                screen.blit(ln, (p_x + 20, yy))
+                yy += 22
+            back_rect = pygame.Rect(p_x + 20, p_y + p_h - 52, p_w - 40, 40)
+            act = (settings_sel == 0); hov = back_rect.collidepoint(mouse_pos)
+            bg_c, bd_c, tc = _btn_colors(act, hov)
+            pygame.draw.rect(screen, bg_c, back_rect, border_radius=4)
+            pygame.draw.rect(screen, bd_c, back_rect, 1, border_radius=4)
+            bl = self.font_md.render(t('menu_back'), True, tc)
+            screen.blit(bl, (back_rect.centerx - bl.get_width()//2,
+                             back_rect.centery - bl.get_height()//2))
+            buttons.append((back_rect, 'mp_back'))
+            pygame.draw.rect(screen, (62, 78, 112), (p_x, p_y, p_w, p_h), 2)
+            pygame.draw.rect(screen, (38, 48, 72), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
+
+        # ════════════════════════════════════════════════════════════
         elif page == 'coop_select':
         # ════════════════════════════════════════════════════════════
 
@@ -540,6 +571,15 @@ class HUD:
             _draw_network_icon(screen, p_x + 34, p_y + 27, (150, 190, 245))
             ts = self.font_lg.render(t('menu_multiplayer'), True, (190, 218, 255))
             screen.blit(ts, (p_x + 54, p_y + 27 - ts.get_height()//2))
+
+            # ── ⓘ 도움말 버튼 (우상단) ─────────────────────────────
+            info_c = (p_x + p_w - 30, p_y + 27)
+            ihov = (abs(mouse_pos[0]-info_c[0]) <= 14 and abs(mouse_pos[1]-info_c[1]) <= 14)
+            pygame.draw.circle(screen, (44, 74, 122) if ihov else (26, 42, 72), info_c, 13)
+            pygame.draw.circle(screen, (120, 180, 240), info_c, 13, 2)
+            ii = self.font_md.render("i", True, (205, 226, 255))
+            screen.blit(ii, (info_c[0]-ii.get_width()//2, info_c[1]-ii.get_height()//2))
+            buttons.append((pygame.Rect(info_c[0]-14, info_c[1]-14, 28, 28), 'mp_help'))
 
             # ── 안내 문구 ──────────────────────────────────────────
             notice = self.font_sm.render(t('menu_mp_notice'), True, (150, 165, 200))
