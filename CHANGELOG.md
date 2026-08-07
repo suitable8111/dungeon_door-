@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.9.1 — Multiplayer (beta): Invite Codes & Easy Join
+
+Joining a friend just got a lot friendlier.
+
+### Invite codes 🎟️
+- **Share a 13-character code instead of an IP.** Host a game and your invite code appears on screen — hand it to a friend, they paste it in, done.
+- **Auto internet access (UPnP).** When you host, the game asks your router to open the door automatically. If it works, your code is reachable **over the internet**; if not, you'll see it's same-network only. No manual port forwarding.
+
+### Join anytime 🚪
+- **Join from inside the town** — no need to be on the title screen. Open the pause menu (**ESC**) → **Join a friend** → paste the code, and you're pulled straight into co-op.
+- **Copy your code from the pause menu** — hosts can grab their invite code again mid-game with one click.
+
+> Still LAN / direct-connect under the hood; UPnP extends it to the internet on supported routers. True everywhere-play (CGNAT, no port-forward) arrives with Steam networking.
+
 ## v2.9.0 — Multiplayer (beta): Dungeon Co-op
 
 Take the fight downstairs together. The dungeon is now a two-player hunt.
