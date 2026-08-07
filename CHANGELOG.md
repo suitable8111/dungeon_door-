@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.9.2 — Multiplayer (beta): Co-op join fix
+
+- **Fixed** co-op joining via **Continue** (an existing character): the town and dungeon could render on top of each other and players couldn't see one another. Continuing a save now resets the scene cleanly before entering the shared town.
+
 ## v2.9.1 — Multiplayer (beta): Invite Codes & Easy Join
 
 Joining a friend just got a lot friendlier.
