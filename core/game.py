@@ -2483,8 +2483,11 @@ class Game:
                 elif self.state == 'menu':
                     if self._menu_page in ('settings', 'multiplayer'):
                         self._menu_page = 'main'
-                    elif self._pending_net is not None:
+                    elif self._menu_page == 'coop_select':
                         self._cancel_pending_net()   # co-op 캐릭터 선택 취소
+                        self._menu_page = 'main'
+                    elif self._pending_net is not None:
+                        self._cancel_pending_net()
                     else:
                         pygame.quit(); sys.exit()
                 elif self.state == 'dead':
@@ -2555,6 +2558,9 @@ class Game:
         if self._menu_page == 'multiplayer':
             self._handle_menu_mp_action(action)
             return
+        if self._menu_page == 'coop_select':
+            self._handle_coop_select_action(action)
+            return
         typ = action['type']
         n = len(self._cards)
         total = n + 3  # + multiplayer + settings + quit
@@ -2600,12 +2606,48 @@ class Game:
             self.audio.play('menu_select')
             self._menu_page = 'main'
 
+    def _coop_select_items(self):
+        """co-op 캐릭터 선택 팝업 항목: 기존 캐릭터들 + (빈 슬롯 있으면)새 캐릭터 + 뒤로."""
+        items = [('slot', c['slot']) for c in self._cards if c.get('exists')]
+        empty = next((c['slot'] for c in self._cards if not c.get('exists')), None)
+        if empty is not None:
+            items.append(('newchar', empty))
+        items.append(('back', None))
+        return items
+
+    def _handle_coop_select_action(self, action):
+        items = self._coop_select_items()
+        typ = action['type']
+        if typ == 'move':
+            dy = action.get('dy', 0)
+            if dy != 0:
+                self._menu_settings_sel = (self._menu_settings_sel + dy) % len(items)
+                self.audio.play('menu_select')
+        elif typ in ('wait', 'confirm', 'load'):
+            self._activate_coop_select(self._menu_settings_sel)
+
+    def _activate_coop_select(self, idx):
+        items = self._coop_select_items()
+        if not (0 <= idx < len(items)):
+            return
+        kind, val = items[idx]
+        if kind == 'slot':
+            card = next((c for c in self._cards if c['slot'] == val), None)
+            if card:
+                self._select_card(card)       # 기존 → 이어하기 → _maybe_begin_coop
+        elif kind == 'newchar':
+            self._open_char_create(val)       # 새 캐릭터 → 생성 후 co-op
+        elif kind == 'back':
+            self._cancel_pending_net()
+            self._menu_page = 'main'
+
     def _handle_mp_key(self, key, uni):
-        """멀티 페이지 입력 필드 편집 (초대 코드=영숫자, 또는 IP=숫자·점)."""
+        """멀티 페이지 입력 필드 편집 (초대 코드=영숫자, 또는 IP=숫자·점).
+        코드는 대문자라 입력을 자동 대문자화(IP의 숫자·점은 그대로)."""
         if key == pygame.K_BACKSPACE:
             self._mp_ip = self._mp_ip[:-1]
         elif uni and (uni.isalnum() or uni == '.') and len(self._mp_ip) < 21:
-            self._mp_ip += uni
+            self._mp_ip += uni.upper()
 
     def _begin_host(self):
         """소켓 호스트를 열고 초대 코드 생성 후 캐릭터 선택 화면으로."""
@@ -2626,7 +2668,8 @@ class Game:
         self._pending_net    = ('host', tp)
         self._mp_mode_banner = 'host'
         self._mp_status      = None
-        self._menu_page      = 'main'
+        self._menu_page      = 'coop_select'   # 캐릭터 선택 팝업
+        self._menu_settings_sel = 0
         # 백그라운드로 UPnP 포트포워딩 시도 → 성공하면 공인 IP로 코드 업그레이드
         self._mp_upnp = 'wait'
         self._start_upnp_forward(lan, DEFAULT_PORT)
@@ -2713,7 +2756,8 @@ class Game:
             self._pending_net    = ('join', val)
             self._mp_mode_banner = 'join'
             self._mp_status      = None
-            self._menu_page      = 'main'
+            self._menu_page      = 'coop_select'   # 캐릭터 선택 팝업
+            self._menu_settings_sel = 0
             self.audio.play('menu_confirm')
         else:
             self._mp_status = t('menu_mp_failed')
@@ -2903,6 +2947,24 @@ class Game:
                 if rect.collidepoint(pos):
                     if tag in _tag_idx:
                         self._activate_mp_item(_tag_idx[tag])
+                    break
+            return
+        if self._menu_page == 'coop_select':
+            for rect, tag in self._menu_buttons:
+                if rect.collidepoint(pos):
+                    if tag.startswith('slot:'):
+                        slot = int(tag.split(':')[1])
+                        card = next((c for c in self._cards if c['slot'] == slot), None)
+                        if card:
+                            self._select_card(card)
+                    elif tag == 'newchar':
+                        empty = next((c['slot'] for c in self._cards
+                                      if not c.get('exists')), None)
+                        if empty is not None:
+                            self._open_char_create(empty)
+                    elif tag == 'mp_back':
+                        self._cancel_pending_net()
+                        self._menu_page = 'main'
                     break
             return
         for rect, action in self._menu_buttons:
@@ -3209,7 +3271,7 @@ class Game:
         elif key == pygame.K_BACKSPACE:
             self._mp_ip = self._mp_ip[:-1]
         elif uni and (uni.isalnum() or uni == '.') and len(self._mp_ip) < 21:
-            self._mp_ip += uni
+            self._mp_ip += uni.upper()
 
     def _mp_join_start(self):
         """입력한 코드/IP로 접속(백그라운드) — 성공 시 즉시 마을 co-op 세션 부착."""

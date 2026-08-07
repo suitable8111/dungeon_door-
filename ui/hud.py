@@ -283,6 +283,13 @@ class HUD:
             p_h = 82 + len(cards) * 62 + 16 + 54 + 50 + 52
             if mp_banner == 'host' and mp_code:
                 p_h += 52    # 초대 코드 2줄 + UPnP 상태 표시 공간
+        elif page == 'coop_select':
+            p_w = 470
+            _ne = len([c for c in cards if c.get('exists')])
+            _emp = any(not c.get('exists') for c in cards)
+            _rows = _ne + (1 if _emp else 0) + 1     # +뒤로
+            _codeh = 30 if (mp_banner == 'host' and mp_code) else 0
+            p_h = 64 + 26 + _codeh + _rows * 56 + 18
         elif page == 'multiplayer':
             p_w = 440
             p_h = 336
@@ -441,6 +448,86 @@ class HUD:
             # 테두리를 마지막에 그려 내용에 가리지 않게
             pygame.draw.rect(screen, (62, 58, 92), (p_x,   p_y,   p_w,   p_h  ), 2)
             pygame.draw.rect(screen, (38, 34, 62), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
+
+        # ════════════════════════════════════════════════════════════
+        elif page == 'coop_select':
+        # ════════════════════════════════════════════════════════════
+
+            # ── 타이틀 ─────────────────────────────────────────────
+            pygame.draw.rect(screen, (12, 14, 30), (p_x, p_y, p_w, 54))
+            pygame.draw.line(screen, (70, 110, 160),
+                             (p_x+20, p_y+54), (p_x+p_w-20, p_y+54))
+            _draw_network_icon(screen, p_x + 32, p_y + 27, (150, 190, 245))
+            ts = self.font_lg.render(t('coop_pick_title'), True, (190, 218, 255))
+            screen.blit(ts, (p_x + 52, p_y + 27 - ts.get_height()//2))
+
+            yy = p_y + 62
+            # ── 호스트: 초대 코드(공유용) ──────────────────────────
+            if mp_banner == 'host' and mp_code:
+                cl = self.font_sm.render(t('menu_mp_your_code'), True, (150, 200, 250))
+                screen.blit(cl, (p_x + 20, yy))
+                cv = self.font_md.render(mp_code, True, (255, 226, 120))
+                screen.blit(cv, (p_x + p_w - cv.get_width() - 20, yy - 2))
+                yy += 26
+
+            _CLASS_COL = {'warrior': (235, 185, 60), 'archer': (120, 205, 150),
+                          'mage': (170, 130, 245), 'axeman': (222, 120, 58)}
+            existing = [c for c in cards if c.get('exists')]
+            bw = p_w - 40; bh = 48; bx = p_x + 20
+
+            if not existing:
+                # 캐릭터 없음 → 생성 안내
+                note = self.font_md.render(t('coop_pick_none'), True, (255, 180, 120))
+                screen.blit(note, (cx - note.get_width()//2, yy + 6))
+                yy += 34
+
+            idx = 0
+            # 기존 캐릭터 행
+            for c in existing:
+                rect = pygame.Rect(bx, yy, bw, bh)
+                act = (idx == settings_sel); hov = rect.collidepoint(mouse_pos)
+                bg_c, bd_c, tc = _btn_colors(act, hov)
+                pygame.draw.rect(screen, bg_c, rect, border_radius=5)
+                pygame.draw.rect(screen, bd_c, rect, 2 if act else 1, border_radius=5)
+                av = avatar_surface(bh - 8, c.get('appearance'), c['char_class'], scale=2)
+                screen.blit(av, (rect.left + 10, rect.centery - (bh - 8)//2))
+                nm = self.font_lg.render(c['name'][:12], True, tc)
+                screen.blit(nm, (rect.left + 52, rect.top + 4))
+                ccol = _CLASS_COL.get(c['char_class'], (200, 200, 210))
+                sub = self.font_sm.render(
+                    f"{t('class_'+c['char_class'])}  ·  "
+                    f"{t('card_floor_lv', c['floor'], c['level'])}", True, ccol)
+                screen.blit(sub, (rect.left + 52, rect.top + 27))
+                buttons.append((rect, f"slot:{c['slot']}"))
+                yy += 56; idx += 1
+
+            # 새 캐릭터 만들기
+            if any(not c.get('exists') for c in cards):
+                rect = pygame.Rect(bx, yy, bw, bh)
+                act = (idx == settings_sel); hov = rect.collidepoint(mouse_pos)
+                bg_c, bd_c, tc = _btn_colors(act, hov)
+                pygame.draw.rect(screen, bg_c, rect, border_radius=5)
+                pygame.draw.rect(screen, bd_c, rect, 2 if act else 1, border_radius=5)
+                nc = self.font_lg.render(t('coop_pick_new'), True,
+                                         (120, 200, 130) if (act or hov) else (90, 150, 100))
+                screen.blit(nc, (rect.centerx - nc.get_width()//2,
+                                 rect.centery - nc.get_height()//2))
+                buttons.append((rect, 'newchar'))
+                yy += 56; idx += 1
+
+            # 뒤로
+            back_rect = pygame.Rect(bx, yy, bw, 40)
+            act = (idx == settings_sel); hov = back_rect.collidepoint(mouse_pos)
+            bg_c, bd_c, tc = _btn_colors(act, hov)
+            pygame.draw.rect(screen, bg_c, back_rect, border_radius=4)
+            pygame.draw.rect(screen, bd_c, back_rect, 1, border_radius=4)
+            bl = self.font_md.render(t('menu_back'), True, tc)
+            screen.blit(bl, (back_rect.centerx - bl.get_width()//2,
+                             back_rect.centery - bl.get_height()//2))
+            buttons.append((back_rect, 'mp_back'))
+
+            pygame.draw.rect(screen, (62, 78, 112), (p_x, p_y, p_w, p_h), 2)
+            pygame.draw.rect(screen, (38, 48, 72), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         # ════════════════════════════════════════════════════════════
         elif page == 'multiplayer':
