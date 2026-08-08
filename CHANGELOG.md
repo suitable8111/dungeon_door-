@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.9.5 — Multiplayer (beta): See your ally fight
+
+- **Party combat effects are now shared** — when your co-op partner swings, shoots, or casts, you see their attack pose and the swing/bolt effect, not just a standing avatar. Makes fighting side by side feel alive.
+
 ## v2.9.4 — Multiplayer (beta): Recent codes & help
 
 - **Remembers your recent invite codes** — they're saved between sessions, pre-filled on the multiplayer screen, and one click re-enters one.
