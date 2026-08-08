@@ -21,6 +21,8 @@ class RemotePlayer:
         self.render_py = 0.0
         self.facing = "down"
         self.walk_frame = 0
+        self.atk_ms = 0.0          # >0이면 공격 포즈로 렌더 (이펙트 공유)
+        self.atk_facing = "down"
         self.char_class = "warrior"
         self.char_name = "Hero"
         self.appearance: dict = {}
@@ -62,6 +64,8 @@ class RemotePlayer:
         factor = max(0.0, min(1.0, factor))
         self.render_px += (tx - self.render_px) * factor
         self.render_py += (ty - self.render_py) * factor
+        if self.atk_ms > 0:
+            self.atk_ms = max(0.0, self.atk_ms - dt)
         if abs(tx - self.render_px) < 0.5:
             self.render_px = tx
         if abs(ty - self.render_py) < 0.5:
@@ -76,7 +80,11 @@ class RemotePlayer:
         from entities.avatar import draw_avatar_tile
         sx = int(round(self.render_px - cx * TILE_SIZE))
         sy = int(round(self.render_py - cy * TILE_SIZE))
-        draw_avatar_tile(surf, sx, sy, self.facing, self.walk_frame, 0,
+        # 공격 중이면 공격 포즈(phase 2) + 공격 방향으로 렌더
+        atk = self.atk_ms > 0
+        face = self.atk_facing if atk else self.facing
+        phase = 2 if atk else 0
+        draw_avatar_tile(surf, sx, sy, face, self.walk_frame, phase,
                          self.appearance, self.char_class)
         # 클라 이름표 (원격 플레이어 식별)
         self._draw_nameplate(surf, sx, sy)

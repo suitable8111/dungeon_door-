@@ -555,6 +555,29 @@ class Game:
         elif kind == 'reward':
             # 처치 보상 공유 — 골드·경험치를 내 플레이어에 적용
             self._coop_receive_reward(int(data.get('g', 0)), int(data.get('xp', 0)))
+        elif kind == 'fx':
+            # 파티원의 공격/스킬 이펙트 재생
+            self._play_remote_fx(from_id, data)
+
+    _FX_DIR = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
+
+    def _play_remote_fx(self, pid, data):
+        """파티원의 공격/스킬 이펙트 재생 — 원격 아바타 공격 포즈 + 스윙/볼트 VFX."""
+        if self.net is None:
+            return
+        rp = self.net.remote_players.get(pid)
+        if rp is None:
+            return
+        x = int(data.get('x', rp.x)); y = int(data.get('y', rp.y))
+        f = data.get('f', 'down')
+        variant = data.get('v', 'slash1'); cls = data.get('c', 'warrior')
+        rp.atk_ms = 260.0; rp.atk_facing = f          # 원격 공격 포즈
+        if variant in ('shoot', 'cast'):              # 원거리 → 볼트
+            dx, dy = self._FX_DIR.get(f, (0, 1))
+            col = (120, 220, 140) if cls == 'archer' else (156, 132, 255)
+            self.animator.add(BoltAnim(x, y, x + dx * 5, y + dy * 5, col))
+        else:                                          # 근접 → 검/도끼 스윙
+            self.animator.add(AttackSwingAnim(x, y, f, hit=True))
 
     def _coop_receive_reward(self, gold, xp):
         """클라: 공유된 처치 보상(골드·경험치)을 내 플레이어에 적용 + 레벨업 처리."""
@@ -1288,6 +1311,17 @@ class Game:
     def _trigger_atk_anim(self):
         self._atk_phase = 1
         self._atk_timer = self._ATK_READY_MS
+        self._broadcast_attack_fx()
+
+    def _broadcast_attack_fx(self):
+        """멀티: 내 공격/스킬 순간을 이펙트 큐로 브로드캐스트(파티원이 재생)."""
+        if self.net is None or not (self._in_town or self._coop_dungeon):
+            return
+        p = self.player
+        if p is None:
+            return
+        self.net.send_event('fx', {'x': p.x, 'y': p.y, 'f': self._facing,
+                                   'v': self._atk_variant, 'c': p.char_class})
 
     def _update_move_anim(self, dt):
         if self._move_anim_offset[0] == 0.0 and self._move_anim_offset[1] == 0.0:
