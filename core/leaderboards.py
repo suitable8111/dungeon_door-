@@ -32,13 +32,19 @@ LEADERBOARDS = {
 # 모든 리더보드는 '높을수록 좋음'(내림차순, 최고기록 유지).
 
 
+_UNSET = object()
+
+
 class LeaderboardManager:
-    def __init__(self, player_name='Hero'):
+    def __init__(self, player_name='Hero', steam=_UNSET):
+        """steam: 기존 Steam 인스턴스를 넘기면 재사용(중복 initialize 방지).
+        업적 매니저가 이미 STEAMWORKS().initialize() 했으므로 그 인스턴스를 공유한다.
+        미지정 시 자체 초기화(단독 사용/테스트)."""
         self.player_name = player_name or 'Hero'
         self.local: dict = {}     # name -> 내 최고 점수(int)
         self.cache: dict = {}     # name -> [{'rank','name','score','me'}]  (Steam 조회 결과)
         self._load()
-        self._steam = self._init_steam()
+        self._steam = self._init_steam() if steam is _UNSET else steam
         self._handles: dict = {}  # name -> Steam leaderboard handle
         if self._steam:
             for name in LEADERBOARDS:
@@ -85,6 +91,16 @@ class LeaderboardManager:
 
     def best(self, name: str) -> int:
         return int(self.local.get(name, 0))
+
+    def pump(self):
+        """Steam 콜백 디스패치 — 리더보드 조회/업로드 결과가 비동기로 도착.
+        업적과 인스턴스를 공유하므로 여기서 한 번만 돌리면 된다."""
+        if not self._steam:
+            return
+        try:
+            self._steam.run_callbacks()
+        except Exception:
+            pass
 
     def get_entries(self, name: str, mode: str = 'global', count: int = 20) -> list:
         """리더보드 항목 리스트. Steam 캐시가 있으면 그것을, 없으면 로컬 폴백(내 기록).

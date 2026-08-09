@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.12.2 — Ranking polish & Steam fix
+
+- **Ranking arrows** now draw as real ◀▶ / ▲▼ icons (previously showed as boxes in the pixel font). ◀▶ changes the leaderboard, ▲▼ toggles Global/Friends.
+- **Steam leaderboards** now reuse the achievements' Steam connection instead of initializing a second time (which likely caused the "offline" state), and Steam callbacks are pumped each frame so global results can arrive.
+
 ## v2.12.1 — Fix
 
 - **Fixed** the Hall of Fame monument rendering as a long stretched pillar down the screen (a draw-height bug). It's now a compact marble stand.

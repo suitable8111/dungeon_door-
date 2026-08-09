@@ -235,8 +235,10 @@ class Game:
         from core.achievements import AchievementManager
         self.achievements = AchievementManager(on_unlock=self._on_achievement_unlocked)
         # 리더보드 (로컬 최고기록 + 스팀 리더보드 동기화)
+        # 업적이 이미 만든 Steam 인스턴스를 공유 — 중복 initialize()로 인한 offline 방지
         from core.leaderboards import LeaderboardManager
-        self.leaderboards = LeaderboardManager(player_name='Hero')
+        self.leaderboards = LeaderboardManager(
+            player_name='Hero', steam=getattr(self.achievements, '_steam', None))
         self._facing     = 'down'
         self._walk_frame = 0
 
@@ -1428,6 +1430,7 @@ class Game:
                 self._update_fishing(dt)
             if self._mp_connecting:
                 self._mp_poll_connect()
+            self.leaderboards.pump()   # Steam 리더보드 콜백 디스패치
             self._update_bgm()
             self._render()
 
@@ -6154,20 +6157,31 @@ class Game:
         title = self.hud.font_lg.render(t('lb_title'), True, (235, 226, 150)) \
             if hasattr(self.hud, 'font_lg') else self.hud.font_md.render(t('lb_title'), True, (235, 226, 150))
         s.blit(title, (bx + (bw - title.get_width()) // 2, by + 12))
-        # 리더보드 탭 (◀ 이름 ▶)
+        cxp = bx + bw // 2
+        AR = (150, 170, 210)   # 화살표 색
+        # 리더보드 탭 (◀ 이름 ▶) — 좌우 화살표로 리더보드 변경
         lb_label = t(meta['label'])
-        tab = self.hud.font_md.render(f"◀  {lb_label}  ▶", True, (200, 224, 255))
-        s.blit(tab, (bx + (bw - tab.get_width()) // 2, by + 48))
-        # 모드 (전세계/친구)
+        lab = self.hud.font_md.render(lb_label, True, (200, 224, 255))
+        ly = by + 46
+        s.blit(lab, (cxp - lab.get_width() // 2, ly))
+        lcy = ly + lab.get_height() // 2
+        self._draw_tri(s, cxp - lab.get_width() // 2 - 20, lcy, 7, 'left', AR)
+        self._draw_tri(s, cxp + lab.get_width() // 2 + 20, lcy, 7, 'right', AR)
+        # 모드 (전세계/친구) — 상하 화살표로 전환
         mg = (255, 226, 120) if self._rank_mode == 'global' else (110, 120, 140)
         mf = (255, 226, 120) if self._rank_mode == 'friends' else (110, 120, 140)
         g = self.hud.font_sm.render(t('lb_tab_global'), True, mg)
         sep = self.hud.font_sm.render(" · ", True, (110, 120, 140))
         fr = self.hud.font_sm.render(t('lb_tab_friends'), True, mf)
-        tw = g.get_width() + sep.get_width() + fr.get_width()
-        mx = bx + (bw - tw) // 2
-        s.blit(g, (mx, by + 76)); s.blit(sep, (mx + g.get_width(), by + 76))
-        s.blit(fr, (mx + g.get_width() + sep.get_width(), by + 76))
+        parts = [g, sep, fr]
+        tw = sum(p.get_width() for p in parts)
+        my = by + 78
+        mx = cxp - tw // 2
+        mcy = my + g.get_height() // 2
+        self._draw_tri(s, mx - 16, mcy, 6, 'up', AR)
+        self._draw_tri(s, mx + tw + 16, mcy, 6, 'down', AR)
+        for p in parts:
+            s.blit(p, (mx, my)); mx += p.get_width()
         # 항목 리스트
         is_level = name == 'best_level'
         y = by + 108
@@ -6197,9 +6211,40 @@ class Game:
         if self.leaderboards._steam is None:
             off = self.hud.font_sm.render(t('lb_offline'), True, (150, 155, 175))
             s.blit(off, (bx + (bw - off.get_width()) // 2, by + bh - 44))
-        # 조작 힌트
-        hint = self.hud.font_sm.render("◀▶ 리더보드   ▲▼ 전세계·친구   ESC", True, (130, 140, 170))
-        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 22))
+        # 조작 힌트 — 좌우/상하 화살표는 삼각형으로 직접 그림
+        HC = (130, 140, 170)
+        f = self.hud.font_sm
+        t1 = f.render(" 리더보드    ", True, HC)
+        t2 = f.render(" 전세계·친구    ", True, HC)
+        t3 = f.render("ESC", True, HC)
+        seg_lr = 26          # ◀▶ 쌍 폭
+        seg_ud = 26          # ▲▼ 쌍 폭
+        total = seg_lr + t1.get_width() + seg_ud + t2.get_width() + t3.get_width()
+        hx = cxp - total // 2
+        hy = by + bh - 22
+        cyh = hy + f.get_height() // 2
+        self._draw_tri(s, hx + 5, cyh, 5, 'left', HC)
+        self._draw_tri(s, hx + 17, cyh, 5, 'right', HC)
+        hx += seg_lr
+        s.blit(t1, (hx, hy)); hx += t1.get_width()
+        self._draw_tri(s, hx + 5, cyh, 5, 'up', HC)
+        self._draw_tri(s, hx + 17, cyh, 5, 'down', HC)
+        hx += seg_ud
+        s.blit(t2, (hx, hy)); hx += t2.get_width()
+        s.blit(t3, (hx, hy))
+
+    @staticmethod
+    def _draw_tri(surf, cx, cy, r, d, col):
+        """작은 방향 삼각형 (폰트에 없는 ◀▶▲▼ 대체)."""
+        if d == 'left':
+            pts = [(cx + r, cy - r), (cx + r, cy + r), (cx - r, cy)]
+        elif d == 'right':
+            pts = [(cx - r, cy - r), (cx - r, cy + r), (cx + r, cy)]
+        elif d == 'up':
+            pts = [(cx - r, cy + r), (cx + r, cy + r), (cx, cy - r)]
+        else:
+            pts = [(cx - r, cy - r), (cx + r, cy - r), (cx, cy + r)]
+        pygame.draw.polygon(surf, col, pts)
 
     # ── 협동 퀘스트 추적 훅 ───────────────────────────────────────────
     def _coop_quest_on_kill(self, enemy):
