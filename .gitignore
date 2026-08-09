@@ -56,3 +56,6 @@ build/
 
 # ── 로그 ────────────────────────────────────────────────────────────────────
 *.log
+
+# local leaderboard best scores (per user)
+leaderboards.json

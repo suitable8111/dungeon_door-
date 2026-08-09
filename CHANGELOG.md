@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.12.0 — Global rankings (Hall of Fame)
+
+Compare your runs with the whole world.
+
+### Hall of Fame 🏆 (in town)
+- A new **Hall of Fame** monument in town — press **E** to open the global rankings.
+- **Leaderboards**: Deepest Floor (overall), Deepest Floor per class (Warrior / Archer / Mage), and Highest Level. Switch with **◀▶**, toggle **Global / Friends** with **▲▼**.
+- Your best run is submitted automatically as you descend; your row is highlighted in the list.
+- Powered by **Steam Leaderboards** — works offline too (shows your own record).
+
 ## v2.11.0 — More achievements & full localization
 
 Lots more to chase, in every language.

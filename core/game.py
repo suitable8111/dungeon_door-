@@ -234,6 +234,9 @@ class Game:
         # 도전과제 (로컬 저장 + 스팀 자동 동기화)
         from core.achievements import AchievementManager
         self.achievements = AchievementManager(on_unlock=self._on_achievement_unlocked)
+        # 리더보드 (로컬 최고기록 + 스팀 리더보드 동기화)
+        from core.leaderboards import LeaderboardManager
+        self.leaderboards = LeaderboardManager(player_name='Hero')
         self._facing     = 'down'
         self._walk_frame = 0
 
@@ -461,6 +464,8 @@ class Game:
         self._farm_menu_idx = 0      # 농사 팝업 커서
         self._altar_idx = 0          # 고대 제단 메뉴 커서
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
+        self._rank_lb_idx = 0        # 랭킹: 현재 리더보드 탭
+        self._rank_mode = 'global'   # 랭킹: 전세계/친구
         self._fish = None            # 낚시 미니게임 상태
         self._ranch_menu_pen = None  # 목장 팝업 대상 우리
         self._ranch_menu_idx = 0     # 목장 팝업 커서
@@ -2676,7 +2681,8 @@ class Game:
                 elif self.state == 'shop':
                     self.state = 'playing'
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
-                                    'altar', 'angler', 'fishing', 'ranch_menu'):
+                                    'altar', 'angler', 'fishing', 'ranch_menu',
+                                    'ranking'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -2725,6 +2731,8 @@ class Game:
                 self._handle_ranch_menu_action(action)
             elif self.state == 'inn':
                 self._handle_inn_action(action)
+            elif self.state == 'ranking':
+                self._handle_ranking_action(action)
             elif self.state == 'dialog':
                 if t in ('confirm', 'attack', 'interact'):
                     self._dialog_confirm()
@@ -5025,7 +5033,8 @@ class Game:
         """마을에서 E: 인접 NPC 상호작용."""
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
-                         'home_chest', 'altar', 'angler', 'party_board')
+                         'home_chest', 'altar', 'angler', 'party_board',
+                         'ranking_board')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
             # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
@@ -5074,6 +5083,8 @@ class Game:
             self._open_angler()
         elif npc['id'] == 'party_board':
             self._open_coop_board()
+        elif npc['id'] == 'ranking_board':
+            self._open_ranking()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -6089,6 +6100,101 @@ class Game:
         self.audio.play('tier_up')
         self._ach_unlock('ACH_COOP_QUEST')
 
+    # ── 랭킹(리더보드) 화면 ───────────────────────────────────────────
+    def _lb_names(self):
+        from core.leaderboards import LEADERBOARDS
+        return list(LEADERBOARDS.keys())
+
+    def _open_ranking(self):
+        self._rank_lb_idx = 0
+        self._rank_mode = 'global'
+        self.state = 'ranking'
+        self._lb_submit()   # 내 최신 기록 반영 후 조회
+        self.leaderboards.refresh(self._lb_names()[0], self._rank_mode)
+        self.audio.play('shop_open')
+
+    def _handle_ranking_action(self, action):
+        ty = action['type']
+        names = self._lb_names()
+        if ty == 'move':
+            dx = action.get('dx') or 0
+            dy = action.get('dy') or 0
+            if dx:
+                self._rank_lb_idx = (self._rank_lb_idx + dx) % len(names)
+                self.audio.play('menu_select')
+            elif dy:
+                self._rank_mode = 'friends' if self._rank_mode == 'global' else 'global'
+                self.audio.play('menu_select')
+            self.leaderboards.refresh(names[self._rank_lb_idx], self._rank_mode)
+        elif ty in ('confirm', 'attack', 'interact'):
+            self.leaderboards.refresh(names[self._rank_lb_idx], self._rank_mode)
+            self.audio.play('menu_select')
+
+    def _render_ranking(self):
+        from core.leaderboards import LEADERBOARDS
+        names = self._lb_names()
+        name = names[self._rank_lb_idx]
+        meta = LEADERBOARDS[name]
+        rows = self.leaderboards.get_entries(name, self._rank_mode, count=12)
+        bw, bh = 460, 384
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        s = self.screen
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        panel.fill((14, 16, 30, 240))
+        s.blit(panel, (bx, by))
+        pygame.draw.rect(s, (120, 170, 235), (bx, by, bw, bh), 2, border_radius=8)
+        # 제목
+        title = self.hud.font_lg.render(t('lb_title'), True, (235, 226, 150)) \
+            if hasattr(self.hud, 'font_lg') else self.hud.font_md.render(t('lb_title'), True, (235, 226, 150))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 12))
+        # 리더보드 탭 (◀ 이름 ▶)
+        lb_label = t(meta['label'])
+        tab = self.hud.font_md.render(f"◀  {lb_label}  ▶", True, (200, 224, 255))
+        s.blit(tab, (bx + (bw - tab.get_width()) // 2, by + 48))
+        # 모드 (전세계/친구)
+        mg = (255, 226, 120) if self._rank_mode == 'global' else (110, 120, 140)
+        mf = (255, 226, 120) if self._rank_mode == 'friends' else (110, 120, 140)
+        g = self.hud.font_sm.render(t('lb_tab_global'), True, mg)
+        sep = self.hud.font_sm.render(" · ", True, (110, 120, 140))
+        fr = self.hud.font_sm.render(t('lb_tab_friends'), True, mf)
+        tw = g.get_width() + sep.get_width() + fr.get_width()
+        mx = bx + (bw - tw) // 2
+        s.blit(g, (mx, by + 76)); s.blit(sep, (mx + g.get_width(), by + 76))
+        s.blit(fr, (mx + g.get_width() + sep.get_width(), by + 76))
+        # 항목 리스트
+        is_level = name == 'best_level'
+        y = by + 108
+        if not rows:
+            empty = self.hud.font_sm.render(t('lb_empty'), True, (170, 175, 195))
+            s.blit(empty, (bx + (bw - empty.get_width()) // 2, y + 40))
+        for i, e in enumerate(rows):
+            rank = e.get('rank') or (i + 1)
+            me = e.get('me')
+            rowbg = (40, 60, 100, 180) if me else (24, 28, 44, 120)
+            rp = pygame.Surface((bw - 32, 22), pygame.SRCALPHA); rp.fill(rowbg)
+            s.blit(rp, (bx + 16, y - 2))
+            col = (255, 236, 150) if me else (222, 228, 242)
+            rk = self.hud.font_sm.render(f"{rank:>3}", True, col)
+            s.blit(rk, (bx + 22, y))
+            disp = e.get('name', '?')
+            if me:
+                disp = f"{disp} ({t('lb_you')})"
+            nm = self.hud.font_sm.render(disp[:22], True, col)
+            s.blit(nm, (bx + 62, y))
+            sc = e.get('score', 0)
+            score_txt = t('lb_lvl_unit', sc) if is_level else t('lb_floor_unit', sc)
+            sv = self.hud.font_sm.render(score_txt, True, col)
+            s.blit(sv, (bx + bw - 24 - sv.get_width(), y))
+            y += 24
+        # 오프라인 안내
+        if self.leaderboards._steam is None:
+            off = self.hud.font_sm.render(t('lb_offline'), True, (150, 155, 175))
+            s.blit(off, (bx + (bw - off.get_width()) // 2, by + bh - 44))
+        # 조작 힌트
+        hint = self.hud.font_sm.render("◀▶ 리더보드   ▲▼ 전세계·친구   ESC", True, (130, 140, 170))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 22))
+
     # ── 협동 퀘스트 추적 훅 ───────────────────────────────────────────
     def _coop_quest_on_kill(self, enemy):
         from core.coop_quests import COOP_QUESTS
@@ -6199,10 +6305,19 @@ class Game:
                 if qs['progress'] >= QUESTS[qid]['count']:
                     self._quest_complete_toast(qid)
 
+    def _lb_submit(self):
+        """현재 진행 상태를 리더보드에 반영(테스트 모드 제외)."""
+        if self._is_test_mode or self.player is None:
+            return
+        self.leaderboards.player_name = getattr(self.player, 'char_name', 'Hero')
+        self.leaderboards.submit_run(int(self.floor), int(self.player.level),
+                                     self.player.char_class)
+
     def _quest_on_floor(self, floor):
         """층 도달 추적 — 최고 층 갱신 + reach_floor 퀘스트 진행."""
         from core.quests import QUESTS
         self._max_floor_reached = max(self._max_floor_reached, floor)
+        self._lb_submit()   # 리더보드: 최고 도달 층/레벨(직업별) 갱신
         for qid, qs in self._quests.items():
             if qs['state'] != 'active':
                 continue
@@ -8326,6 +8441,8 @@ class Game:
             self._render_ranch_menu()
         elif self.state == 'inn':
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
+        elif self.state == 'ranking':
+            self._render_ranking()
         elif self.state == 'dialog' and self._dialog:
             self.hud.render_dialog(self.screen, self._dialog)
         elif self.state == 'questlog':

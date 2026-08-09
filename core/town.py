@@ -142,6 +142,16 @@ class TownScene:
                                   'tx': bx, 'ty': by, 'wait': 0.0, 'radius': 0,
                                   'facing': 1, 'moving': False})
                 break
+        # 명예의 전당(랭킹 게시판) — 광장 근처 상주 (E로 전세계 랭킹)
+        for (rx, ry) in ((59, 44), (59, 46), (62, 46), (52, 46), (55, 42)):
+            if self.dungeon.is_walkable(rx, ry) and (rx, ry) not in (self.portal_pos, self.spawn_pos) \
+                    and not any(n['x'] == rx and n['y'] == ry for n in self.npcs):
+                self.npcs.append({'id': 'ranking_board', 'x': rx, 'y': ry,
+                                  'name_key': 'ranking_board',
+                                  'home': (rx, ry), 'fx': rx * ts, 'fy': ry * ts,
+                                  'tx': rx, 'ty': ry, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
         # 배회 엑스트라 시민 — 도시 북적임 (비상호작용)
         import random as _r
         _r.seed(7788)
@@ -545,6 +555,8 @@ class TownScene:
                 self._draw_angler(surf, sx, sy + walk, npc.get('facing', 1), ticks)
             elif npc['id'] == 'party_board':             # 용병 길드 게시판
                 self._draw_party_board(surf, sx, sy + walk, ticks)
+            elif npc['id'] == 'ranking_board':           # 명예의 전당(랭킹)
+                self._draw_ranking_board(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'home_chest':              # 내 집 보관함
                 mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
@@ -798,6 +810,34 @@ class TownScene:
             pygame.draw.line(s, (230, 140, 150), (cx - 8, cy + 4), (cx - 11, cy + 2), 2)
             for lx in (cx - 5, cx, cx + 6):
                 pygame.draw.line(s, (210, 130, 140), (lx, cy + 8), (lx, cy + 13), 2)
+
+    @staticmethod
+    def _draw_ranking_board(surf, x, y, tk):
+        """명예의 전당 — 대리석 비석 + 금 트로피/별 + 순위 표식."""
+        import math as _m
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        base = y + ts - 2
+        # 대리석 받침 + 기둥
+        pygame.draw.rect(surf, (206, 210, 224), (cx - 16, base - 6, 32, 6))
+        pygame.draw.rect(surf, (170, 176, 194), (cx - 13, y + 8, 26, base - 14))
+        pygame.draw.rect(surf, (120, 126, 146), (cx - 13, y + 8, 26, base - 14), 1)
+        # 순위 막대 3개 (1·2·3위)
+        for i, (h, c) in enumerate(((16, (255, 215, 90)), (11, (208, 214, 224)), (7, (205, 150, 96)))):
+            bxr = cx - 9 + i * 8
+            pygame.draw.rect(surf, c, (bxr, base - 8 - h, 6, h))
+            pygame.draw.rect(surf, (60, 60, 70), (bxr, base - 8 - h, 6, h), 1)
+        # 상단 금별 (반짝임)
+        gy = y + 4
+        pts = []
+        for i in range(10):
+            a = _m.radians(-90 + i * 36)
+            r = 8 if i % 2 == 0 else 3.4
+            pts.append((cx + _m.cos(a) * r, gy + _m.sin(a) * r))
+        pygame.draw.polygon(surf, (255, 224, 120), pts)
+        pygame.draw.polygon(surf, (150, 110, 30), pts, 1)
+        if (tk // 300) % 2 == 0:
+            pygame.draw.circle(surf, (255, 250, 210), (cx + 6, gy - 4), 1)
 
     @staticmethod
     def _draw_party_board(surf, x, y, tk):
