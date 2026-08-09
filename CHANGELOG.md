@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.12.1 — Fix
+
+- **Fixed** the Hall of Fame monument rendering as a long stretched pillar down the screen (a draw-height bug). It's now a compact marble stand.
+
 ## v2.12.0 — Global rankings (Hall of Fame)
 
 Compare your runs with the whole world.

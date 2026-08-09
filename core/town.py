@@ -818,10 +818,12 @@ class TownScene:
         ts = TILE_SIZE
         cx = x + ts // 2
         base = y + ts - 2
-        # 대리석 받침 + 기둥
+        # 대리석 받침 + 기둥 (기둥 높이는 상대값 — base는 절대Y라 그대로 쓰면 안 됨)
+        p_top = y + 8
+        p_h = (base - 6) - p_top          # 받침 바로 위까지 (=ts-16)
         pygame.draw.rect(surf, (206, 210, 224), (cx - 16, base - 6, 32, 6))
-        pygame.draw.rect(surf, (170, 176, 194), (cx - 13, y + 8, 26, base - 14))
-        pygame.draw.rect(surf, (120, 126, 146), (cx - 13, y + 8, 26, base - 14), 1)
+        pygame.draw.rect(surf, (170, 176, 194), (cx - 13, p_top, 26, p_h))
+        pygame.draw.rect(surf, (120, 126, 146), (cx - 13, p_top, 26, p_h), 1)
         # 순위 막대 3개 (1·2·3위)
         for i, (h, c) in enumerate(((16, (255, 215, 90)), (11, (208, 214, 224)), (7, (205, 150, 96)))):
             bxr = cx - 9 + i * 8
