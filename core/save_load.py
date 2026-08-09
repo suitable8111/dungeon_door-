@@ -129,7 +129,7 @@ def advanced_classes_unlocked(records=None) -> bool:
 def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
               skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None,
               skill_enchants=None, quests=None, max_floor_reached=0,
-              slot=1, name=None, char_class=None):
+              slot=1, name=None, char_class=None, coop_quests=None):
     data = {
         'floor': floor,
         'name':       name or getattr(player, 'char_name', '') or 'Hero',
@@ -171,6 +171,7 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'equipped_skills': equipped_skills or {},
         'skill_enchants':  skill_enchants  or {},
         'quests':          quests or {},
+        'coop_quests':     coop_quests or {},
         'max_floor_reached': max_floor_reached,
     }
     try:

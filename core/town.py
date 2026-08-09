@@ -133,6 +133,15 @@ class TownScene:
                               'home': (x, y), 'fx': x * ts, 'fy': y * ts,
                               'tx': x, 'ty': y, 'wait': 0.0, 'radius': 6,
                               'facing': 1, 'moving': False})
+        # 용병 길드 게시판 — 광장 근처 상주 (E로 협동 전용 퀘스트, 멀티 중에만 활성)
+        for (bx, by) in ((55, 44), (55, 46), (52, 44), (70, 46), (62, 44)):
+            if self.dungeon.is_walkable(bx, by) and (bx, by) not in (self.portal_pos, self.spawn_pos):
+                self.npcs.append({'id': 'party_board', 'x': bx, 'y': by,
+                                  'name_key': 'party_board',
+                                  'home': (bx, by), 'fx': bx * ts, 'fy': by * ts,
+                                  'tx': bx, 'ty': by, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
         # 배회 엑스트라 시민 — 도시 북적임 (비상호작용)
         import random as _r
         _r.seed(7788)
@@ -534,6 +543,8 @@ class TownScene:
                 self._draw_altar(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'angler':                  # 낚시 노인 (물고기 교환)
                 self._draw_angler(surf, sx, sy + walk, npc.get('facing', 1), ticks)
+            elif npc['id'] == 'party_board':             # 용병 길드 게시판
+                self._draw_party_board(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'home_chest':              # 내 집 보관함
                 mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
@@ -787,6 +798,30 @@ class TownScene:
             pygame.draw.line(s, (230, 140, 150), (cx - 8, cy + 4), (cx - 11, cy + 2), 2)
             for lx in (cx - 5, cx, cx + 6):
                 pygame.draw.line(s, (210, 130, 140), (lx, cy + 8), (lx, cy + 13), 2)
+
+    @staticmethod
+    def _draw_party_board(surf, x, y, tk):
+        """용병 길드 게시판 — 나무 기둥 게시판 + 의뢰지 + 검 상징."""
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        base = y + ts - 2
+        # 두 다리 기둥
+        pygame.draw.rect(surf, (96, 66, 40), (cx - 10, y + 10, 3, ts - 12))
+        pygame.draw.rect(surf, (96, 66, 40), (cx + 7, y + 10, 3, ts - 12))
+        # 게시판 널판
+        pygame.draw.rect(surf, (120, 84, 50), (cx - 12, y + 4, 24, 16))
+        pygame.draw.rect(surf, (150, 108, 66), (cx - 12, y + 4, 24, 16), 1)
+        # 의뢰지 두 장
+        pygame.draw.rect(surf, (232, 226, 208), (cx - 9, y + 7, 7, 9))
+        pygame.draw.rect(surf, (232, 226, 208), (cx + 1, y + 6, 7, 10))
+        pygame.draw.line(surf, (150, 140, 120), (cx - 8, y + 10), (cx - 3, y + 10), 1)
+        pygame.draw.line(surf, (150, 140, 120), (cx + 2, y + 9), (cx + 7, y + 9), 1)
+        # 교차 검 상징(길드 표식) — 상단
+        pygame.draw.line(surf, (200, 205, 220), (cx - 4, y + 2), (cx + 4, y + 8), 2)
+        pygame.draw.line(surf, (200, 205, 220), (cx + 4, y + 2), (cx - 4, y + 8), 2)
+        if (tk // 300) % 2 == 0:
+            pygame.draw.circle(surf, (255, 226, 120), (cx + 6, y + 4), 1)
+        _ = base
 
     @staticmethod
     def _draw_home_board(surf, x, y, tk):

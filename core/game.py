@@ -310,6 +310,8 @@ class Game:
         # ── 퀘스트 (시민 의뢰) — 런 단위, 세이브에 포함 ──────────────
         from core.quests import fresh_states
         self._quests: dict = fresh_states()
+        from core.coop_quests import fresh_states as _coop_fresh
+        self._coop_quests: dict = _coop_fresh()  # 협동 퀘스트 — 계정 단위(세이브)
         self._dialog: dict | None = None         # 하단 대화창 상태
         self._max_floor_reached: int = 1         # 시민 등장·개방 판정용
         self._quest_clear_ms:   float = 0.0      # 클리어 연출 오버레이 타이머
@@ -485,6 +487,12 @@ class Game:
         self._coop_diff    = None     # 난이도 배수 {'hp','atk'} — 싱글보다 강함
         self._coop_item_next = 0      # 드랍 아이템 net_id 카운터(호스트)
         self._coop_granting  = False  # 호스트 승인 획득 처리 중(_pickup 게이트 우회)
+        # 다운/부활/관전 (co-op 전용)
+        self._downed       = False    # 내가 쓰러짐(부활 대기)
+        self._downed_ms    = 0.0      # 블리드아웃 남은 시간(0이면 관전行)
+        self._spectating   = False    # 사망 후 관전(다음 층에서 부활)
+        self._revive_of    = {}       # pid → 내가 진행 중인 부활 누적 ms
+        self._coop_time_acc = 0.0     # co-op 플레이시간 누적 버퍼(초 배치 기록용)
         # 마을 co-op 채팅
         self._chat_open    = False
         self._chat_text    = ''
@@ -500,12 +508,14 @@ class Game:
         if p is None:
             return None
         pid = self.net.tp.local_id() if self.net is not None else 0
+        status = 2 if self._spectating else (1 if self._downed else 0)
         return P.player_state(
             pid, p.x, p.y, self._facing, self._walk_frame,
             p.char_class, getattr(p, 'char_name', 'Hero'),
             getattr(p, 'appearance', None), p.hp, p.max_hp,
             floor=int(self.floor),
-            defense=int(p.total_defense), evasion=int(p.total_evasion))
+            defense=int(p.total_defense), evasion=int(p.total_evasion),
+            status=status)
 
     def start_net_session(self, transport, mode='town'):
         """전송 계층을 받아 멀티플레이 세션을 시작한다.
@@ -558,6 +568,9 @@ class Game:
         elif kind == 'fx':
             # 파티원의 공격/스킬 이펙트 재생
             self._play_remote_fx(from_id, data)
+        elif kind == 'revive':
+            # 파티원이 나를 부활시킴
+            self._revive_self()
 
     _FX_DIR = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
 
@@ -588,6 +601,7 @@ class Game:
             self.animator.add(GoldPopAnim(self.player.x, self.player.y, gold))
         if xp > 0 and self.player.gain_xp(xp):
             self._skill_points += 3
+            self._ach_check_level()
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.messages.append((t('sp_gained', self._skill_points), 'info'))
             self.animator.add(BannerAnim(f"LEVEL UP!  Lv.{self.player.level}",
@@ -619,6 +633,129 @@ class Game:
 
     def _coop_party_size(self):
         return 1 + (len(self.net.remote_players) if self.net else 0)
+
+    # ── 다운 / 부활 / 관전 (co-op 전용) ───────────────────────────────
+    _DOWN_MS      = 45000.0   # 다운 후 관전까지 블리드아웃 시간
+    _REVIVE_MS    = 2400.0    # 파티원 인접 부활 채널 시간
+    _REVIVE_FRAC  = 0.40      # 부활 시 회복 HP 비율
+
+    def _enter_downed(self):
+        """co-op: HP 0 → 다운. 이동/공격 불가, 파티원 부활 대기."""
+        self._downed = True
+        self._downed_ms = self._DOWN_MS
+        self.player.hp = 0
+        self.audio.play('player_hit')
+        self._start_shake(7, 260)
+        self.messages.append((t('coop_downed_self'), 'warn'))
+        self.animator.add(BannerAnim(t('coop_downed_banner'), (255, 90, 90),
+                                     y=120, size=28, duration_ms=1400))
+        if self.net is not None:
+            self.net.broadcast_local_state()   # 다운 상태 즉시 전파
+
+    def _enter_spectating(self):
+        """다운 시간 만료 → 사망(관전). 다음 층 진입 시 부활."""
+        self._downed = False
+        self._downed_ms = 0.0
+        self._spectating = True
+        self.messages.append((t('coop_spectate'), 'warn'))
+        self.animator.add(BannerAnim(t('coop_spectate_banner'), (180, 180, 200),
+                                     y=120, size=26, duration_ms=1600))
+        if self.net is not None:
+            self.net.broadcast_local_state()
+
+    def _revive_self(self):
+        """파티원이 나를 부활시킴 — HP 일부 회복 + 복귀."""
+        was = self._downed or self._spectating
+        self._downed = False
+        self._downed_ms = 0.0
+        self._spectating = False
+        if self.player is not None:
+            self.player.hp = max(1, int(self.player.max_hp * self._REVIVE_FRAC))
+        if was:
+            self.audio.play('levelup')
+            self.animator.add(BannerAnim(t('coop_revived'), (140, 255, 170),
+                                         y=120, size=28, duration_ms=1400))
+            self.animator.particles.emit_levelup(self.player.x, self.player.y)
+            self._hurt_flash_ms = 0
+        if self.net is not None:
+            self.net.broadcast_local_state()
+
+    def _coop_downed_tick(self, dt):
+        """매 프레임: 내 다운 타이머 감소 + 파티원 부활 진행 + 파티 전멸 판정."""
+        if self.net is None or not self._coop_dungeon or self._in_town:
+            return
+        # 1) 내가 다운이면 블리드아웃 카운트다운
+        if self._downed:
+            self._downed_ms -= dt
+            if self._downed_ms <= 0:
+                self._enter_spectating()
+        # 2) 내가 살아있으면, 인접한 '다운' 파티원을 부활시킨다(근접 자동 채널)
+        if not self._downed and not self._spectating and self.player is not None:
+            for pid, rp in list(self.net.remote_players.items()):
+                if rp.status == 1 and max(abs(rp.x - self.player.x),
+                                          abs(rp.y - self.player.y)) <= 1:
+                    acc = self._revive_of.get(pid, 0.0) + dt
+                    if acc >= self._REVIVE_MS:
+                        self._revive_of.pop(pid, None)
+                        rp.revive_prog = 0.0
+                        self.net.send_event_to(pid, 'revive', {})
+                        self._on_revive_done()
+                    else:
+                        self._revive_of[pid] = acc
+                        rp.revive_prog = min(1.0, acc / self._REVIVE_MS)
+                else:
+                    if pid in self._revive_of:
+                        self._revive_of.pop(pid, None)
+                        rp.revive_prog = 0.0
+        else:
+            self._revive_of.clear()
+        # 3) 파티 전멸 판정 — 아무도 살아있지 않으면 게임오버
+        self._coop_wipe_check()
+
+    def _on_revive_done(self):
+        """내가 파티원 하나를 부활시킴 — 업적/퀘스트 크레딧."""
+        self.audio.play('tier_up')
+        self.messages.append((t('coop_revive_done'), 'good'))
+        self._ach_unlock('ACH_REVIVE')
+        self._ach_stat('revives')
+        self._coop_quest_on_revive()
+
+    def _coop_wipe_check(self):
+        """전멸(파티 전원 다운/관전) 시 게임오버. 각 피어가 독립 판정(상태 브로드캐스트 기반)."""
+        if not (self._downed or self._spectating):
+            return   # 나는 살아있음 → 전멸 아님
+        for rp in self.net.remote_players.values():
+            if rp.status == 0:
+                return   # 살아있는 파티원 존재
+        # 아무도 살아있지 않음 → 파티 전멸
+        self._downed = False
+        self._spectating = False
+        self._records = update_records(self.floor, self._run_kills, self.player.gold)
+        delete_save(self._save_slot)
+        self.audio.play('death')
+        self.messages.append((t('coop_wipe'), 'warn'))
+        self.state = 'dead'
+
+    def _coop_input_locked(self):
+        """다운/관전 중이면 이동·공격·스킬 입력 차단."""
+        return self._downed or self._spectating
+
+    def _reset_downed_state(self):
+        """새 런/이어하기 시 다운·부활 상태 초기화 (스테일 이월 방지)."""
+        self._downed = False
+        self._downed_ms = 0.0
+        self._spectating = False
+        self._revive_of.clear()
+
+    def _coop_time_track(self, dt):
+        """co-op 세션 플레이시간 누적 — 15초 배치로 stat 기록(파일쓰기 절감)."""
+        if self.net is None or self._is_test_mode:
+            return
+        self._coop_time_acc += dt
+        if self._coop_time_acc >= 15000.0:
+            secs = int(self._coop_time_acc // 1000)
+            self._coop_time_acc -= secs * 1000.0
+            self._ach_stat('coop_secs', secs)
 
     def _coop_begin_dungeon(self):
         """호스트: 파티 최저 층 + 공유 시드 + 난이도로 co-op 던전 시작."""
@@ -655,6 +792,11 @@ class Game:
         self.floor         = floor
         self._in_town      = False
         self._saved_camera = None
+        # 다운/관전 파티원은 다음 층 진입 시 부활 (안전망)
+        if self._downed or self._spectating:
+            self._revive_self()
+        self._revive_of.clear()
+        self._coop_quest_on_floor(floor)   # 동반 하강 협동 퀘스트 추적
         self.messages.append((t('coop_enter_msg', floor), 'good'))
         self._load_floor()
 
@@ -1014,8 +1156,28 @@ class Game:
         bub.blit(surf, (pad, pad // 2))
         self._game_surf.blit(bub, (bx, by))
 
-    def _draw_join_overlay(self):
-        """게임 중 '친구 참가' — 중앙 코드 입력 박스."""
+    def _draw_downed_overlay(self):
+        """co-op 다운/관전 오버레이 — 화면 틴트 + 상태 + 부활 안내."""
+        tint = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+        if self._spectating:
+            tint.fill((14, 16, 30, 150))
+        else:
+            # 다운: 붉은 비네트 + 잔여 시간 비례로 진해짐
+            frac = 1.0 - max(0.0, min(1.0, self._downed_ms / self._DOWN_MS))
+            tint.fill((70, 8, 8, int(70 + 90 * frac)))
+        self.screen.blit(tint, (GAME_X, GAME_Y))
+        fbig = self.hud.font_lg if hasattr(self.hud, 'font_lg') else self.hud.font_md
+        cx = GAME_X + GAME_W // 2
+        cy = GAME_Y + GAME_H // 2
+        if self._downed:
+            title = fbig.render(t('coop_downed_title'), True, (255, 120, 120))
+            secs = max(0, int(self._downed_ms / 1000) + 1)
+            sub = self.hud.font_md.render(t('coop_downed_hint', secs), True, (255, 210, 210))
+        else:
+            title = fbig.render(t('coop_spectate_title'), True, (200, 205, 225))
+            sub = self.hud.font_md.render(t('coop_spectate_hint'), True, (185, 190, 210))
+        self.screen.blit(title, (cx - title.get_width() // 2, cy - 40))
+        self.screen.blit(sub, (cx - sub.get_width() // 2, cy + 6))
         bw, bh = 470, 104
         bx = GAME_X + (GAME_W - bw) // 2
         by = GAME_Y + (GAME_H - bh) // 2
@@ -1250,6 +1412,8 @@ class Game:
                     self._update_chat_timers(dt)
                     if self._coop_dungeon and not self._in_town:
                         self._coop_reveal()   # 시야 공유(원격 파티원 주변)
+                        self._coop_downed_tick(dt)  # 다운/부활/전멸 판정
+                    self._coop_time_track(dt)   # 파티 플레이시간 업적
                     if os.environ.get('DD_MP_DEBUG'):
                         self._mp_dbg = getattr(self, '_mp_dbg', 0) + 1
                         if self._mp_dbg % 60 == 0:
@@ -2011,9 +2175,12 @@ class Game:
         self._coop_dungeon    = False
         self._coop_seed       = None
         self._coop_diff       = None
+        self._reset_downed_state()
         self._dungeon_session = None
         from core.quests import fresh_states
         self._quests = fresh_states()
+        from core.coop_quests import fresh_states as _coop_fresh
+        self._coop_quests = _coop_fresh()
         self._dialog = None
         self._max_floor_reached = 1
         self._load_floor(is_new_game=True)
@@ -2134,6 +2301,7 @@ class Game:
         self._coop_dungeon    = False
         self._coop_seed       = None
         self._coop_diff       = None
+        self._reset_downed_state()
         self._dungeon_session = None
         self._char_class = data.get('char_class', 'warrior')
         self._char_name  = data.get('name', 'Hero')
@@ -2154,6 +2322,12 @@ class Game:
         for _qid, _qs in _saved_q.items():
             if _qid in self._quests and isinstance(_qs, dict):
                 self._quests[_qid].update(_qs)
+        from core.coop_quests import fresh_states as _fresh_cq
+        _saved_cq = data.get('coop_quests') or {}
+        self._coop_quests = _fresh_cq()
+        for _qid, _qs in _saved_cq.items():
+            if _qid in self._coop_quests and isinstance(_qs, dict):
+                self._coop_quests[_qid].update(_qs)
         self._max_floor_reached = max(1, data.get('max_floor_reached', self.floor))
         self._skill_books     = set(data.get('skill_books', []))
         # migrate old slot-keyed saves to skill_id-keyed
@@ -2244,7 +2418,8 @@ class Game:
                               self._equipped_skills, self._skill_enchants, self._quests,
                               self._max_floor_reached, slot=self._save_slot,
                               name=getattr(self,'_char_name','Hero'),
-                              char_class=getattr(self,'_char_class','warrior'))
+                              char_class=getattr(self,'_char_class','warrior'),
+                              coop_quests=self._coop_quests)
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -3276,7 +3451,8 @@ class Game:
                           self._equipped_skills, self._skill_enchants, self._quests,
                           self._max_floor_reached, slot=self._save_slot,
                           name=getattr(self,'_char_name','Hero'),
-                          char_class=getattr(self,'_char_class','warrior'))
+                          char_class=getattr(self,'_char_class','warrior'),
+                          coop_quests=self._coop_quests)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -3509,6 +3685,10 @@ class Game:
     # ------------------------------------------------------------------ #
     def _process(self, action):
         acted = False
+        # co-op 다운/관전: 게임플레이 입력 차단 (부활 대기)
+        if self._coop_input_locked() and action.get('type') in (
+                'move', 'attack', 'skill', 'combo_skill', 'ultimate', 'use_item'):
+            return
         if   action['type'] == 'move':     acted = self._player_move(action['dx'], action['dy'])
         elif action['type'] == 'wait':     acted = True
         elif action['type'] == 'attack':   acted = self._player_basic_attack()
@@ -4040,6 +4220,23 @@ class Game:
         if not self._is_test_mode:
             self.achievements.add_stat(stat, amount)
 
+    _LEVEL_ACH = ((99, 'ACH_LEVEL_99'), (80, 'ACH_LEVEL_80'), (60, 'ACH_LEVEL_60'),
+                  (40, 'ACH_LEVEL_40'), (20, 'ACH_LEVEL_20'))
+
+    def _ach_check_level(self):
+        """현재 레벨로 달성한 레벨 도전과제를 모두 잠금 해제."""
+        lv = self.player.level if self.player else 0
+        for need, api in self._LEVEL_ACH:
+            if lv >= need:
+                self._ach_unlock(api)
+
+    def _check_life_master(self):
+        """농사·낚시·목장을 모두 1회 이상 경험하면 생활 마스터."""
+        r = self._records
+        if (int(r.get('harvest_total', 0)) >= 1 and int(r.get('fish_total', 0)) >= 1
+                and int(r.get('ranch_total', 0)) >= 1):
+            self._ach_unlock('ACH_LIFE_MASTER')
+
     def _on_enemy_killed(self, enemy):
         # 프롭(항아리/나무상자): 파괴 연출 + 콤보 유지 + 소소한 보상 후 종료
         if enemy.is_prop:
@@ -4097,6 +4294,10 @@ class Game:
             self.juice.overkill()
         # 퀘스트 진행 (kill_any / kill_key)
         self._quest_on_kill(enemy)
+        # 협동: 파티 킬/퀘스트 + 협동 킬 업적
+        if self._coop_dungeon and self.net is not None:
+            self._ach_stat('coop_kills')
+            self._coop_quest_on_kill(enemy)
         # 도전과제
         self._ach_stat('kills')
         if enemy.elite:
@@ -4104,6 +4305,8 @@ class Game:
         if enemy.is_boss:
             self._ach_stat('boss_kills')
             self._ach_unlock('ACH_FIRST_BOSS')
+            if self._coop_dungeon and self.net is not None:
+                self._ach_unlock('ACH_COOP_BOSS')
         if self._combo_count >= 15:
             self._ach_unlock('ACH_COMBO_15')
         if self.player.gold + (gold or 0) >= 2000:
@@ -4117,8 +4320,7 @@ class Game:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
         if self.player.gain_xp(enemy.xp_value):
             self._skill_points += 3
-            if self.player.level >= 20:
-                self._ach_unlock('ACH_LEVEL_20')
+            self._ach_check_level()
             self.messages.append((t('levelup', self.player.level), 'good'))
             self.messages.append((t('sp_gained', self._skill_points), 'info'))
             # 레벨업 셀레브레이션 — 배너 + 황금 분수 + 골든 플래시 + 히트스톱
@@ -4823,7 +5025,7 @@ class Game:
         """마을에서 E: 인접 NPC 상호작용."""
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
-                         'home_chest', 'altar', 'angler')
+                         'home_chest', 'altar', 'angler', 'party_board')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
             # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
@@ -4870,6 +5072,8 @@ class Game:
             self._open_altar()
         elif npc['id'] == 'angler':
             self._open_angler()
+        elif npc['id'] == 'party_board':
+            self._open_coop_board()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -5009,6 +5213,9 @@ class Game:
         self._gold_flash_ms = 220
         added = self._give_inventory_item(pkey)
         pen['fed'] = False; pen['stage'] = 0          # 재생산 위해 다시 먹이 필요
+        self._records['ranch_total'] = int(self._records.get('ranch_total', 0)) + 1
+        self._ach_unlock('ACH_RANCH_FIRST')      # 첫 목장 수확
+        self._check_life_master()
         if added:
             self.messages.append((t('ranch_collect_item', added, gold), 'good'))
         else:
@@ -5236,6 +5443,9 @@ class Game:
         """수확 누적(퀘스트형) — 5회마다 농부의 인정 보너스."""
         n = int(self._records.get('harvest_total', 0)) + 1
         self._records['harvest_total'] = n
+        self._ach_unlock('ACH_FARM_FIRST')       # 첫 수확
+        self._ach_stat('harvest')                # 수확 100회 카운터
+        self._check_life_master()
         if n % 5 == 0:
             bonus = 100 * (n // 5)
             self.player.gold += bonus
@@ -5490,6 +5700,9 @@ class Game:
         counts = self._fish_counts()
         counts[key] += 1
         self._records['fish_total'] = int(self._records.get('fish_total', 0)) + 1
+        self._ach_unlock('ACH_FISH_FIRST')       # 첫 낚시
+        self._ach_stat('fish')                   # 물고기 50마리 카운터
+        self._check_life_master()
         # 채집품: 구운 생선을 인벤토리에 지급(고급 어종은 특상 생선구이)
         f['food'] = self._give_inventory_item('deluxe_fish' if grade >= 2 else 'grilled_fish')
         if f['food']:
@@ -5797,15 +6010,124 @@ class Game:
             return
         if self._dialog['mode'] == 'offer':
             qid = self._dialog['qid']
-            self._quests[qid]['state'] = 'active'
-            from core.quests import qtext
-            self.messages.append((t('quest_accepted', qtext(qid, 'name')), 'good'))
-            self.audio.play('menu_confirm')
-            # 이미 목표 층까지 내려가 있던 경우 즉시 반영
-            cur_floor = (self._dungeon_session['floor']
-                         if self._dungeon_session else self.floor)
-            self._quest_on_floor(cur_floor)
+            if self._dialog.get('coop'):
+                from core.coop_quests import qtext as cq
+                self._coop_quests[qid]['state'] = 'active'
+                self.messages.append((t('quest_accepted', cq(qid, 'name')), 'good'))
+                self.audio.play('menu_confirm')
+                self._coop_quest_on_floor(int(self.floor))  # 이미 도달했으면 즉시 반영
+            else:
+                self._quests[qid]['state'] = 'active'
+                from core.quests import qtext
+                self.messages.append((t('quest_accepted', qtext(qid, 'name')), 'good'))
+                self.audio.play('menu_confirm')
+                # 이미 목표 층까지 내려가 있던 경우 즉시 반영
+                cur_floor = (self._dungeon_session['floor']
+                             if self._dungeon_session else self.floor)
+                self._quest_on_floor(cur_floor)
         self._dialog_close()
+
+    def _open_coop_board(self):
+        """용병 길드 게시판 — 멀티 접속 중일 때만 협동 퀘스트 제공."""
+        from core.coop_quests import (qtext, current_quest, board_name)
+        bname = board_name()
+        # 멀티 미접속: 안내만
+        if self.net is None:
+            self._dialog = {'qid': None, 'mode': 'info', 'coop': True,
+                            'npc_name': bname, 'text': t('coop_board_offline'),
+                            'start': pygame.time.get_ticks()}
+            self.state = 'dialog'
+            self.audio.play('menu_select')
+            return
+        qid = current_quest(self._coop_quests)
+        if qid is None:
+            self._dialog = {'qid': None, 'mode': 'info', 'coop': True,
+                            'npc_name': bname, 'text': t('coop_board_done'),
+                            'start': pygame.time.get_ticks()}
+            self.state = 'dialog'
+            self.audio.play('menu_select')
+            return
+        st = self._coop_quests[qid]['state']
+        if st == 'done':
+            self._claim_coop_quest(qid)
+            text, mode = qtext(qid, 'done'), 'info'
+        else:
+            text = qtext(qid, 'offer' if st == 'available' else 'active')
+            mode = 'offer' if st == 'available' else 'info'
+        self._dialog = {'qid': qid, 'mode': mode, 'coop': True,
+                        'npc_name': bname, 'text': text,
+                        'start': pygame.time.get_ticks()}
+        self.state = 'dialog'
+        self.audio.play('menu_select')
+
+    def _claim_coop_quest(self, qid):
+        """협동 퀘스트 보고 — 보상 지급 + 클리어 연출 + 업적."""
+        from core.coop_quests import COOP_QUESTS, qtext
+        from entities.item import Item
+        self._coop_quests[qid]['state'] = 'claimed'
+        r = COOP_QUESTS[qid]['reward']
+        gold = r.get('gold', 0)
+        if gold:
+            self.player.gold += gold
+            self.vfx_loot.spawn_gold(self.player.x, self.player.y, gold)
+        if r.get('stones'):
+            self.player.enhance_stones += r['stones']
+        for key in r.get('items', ()):
+            if key in self._item_data and \
+                    len(self.player.inventory) < self.player.max_inventory:
+                d = dict(self._item_data[key]); d['key'] = key
+                self.player.inventory.append(Item(0, 0, d))
+        self.messages.append((t('quest_reward', qtext(qid, 'name'), gold), 'good'))
+        self._quest_clear_ms   = 2200
+        self._quest_clear_name = qtext(qid, 'name')
+        self.animator.add(BannerAnim(t('quest_reward_banner'), (255, 225, 120),
+                                     y=96, size=34, duration_ms=1600))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self._gold_flash_ms = 520
+        self._start_shake(4, 300)
+        self.audio.play('levelup_big')
+        self.audio.play('tier_up')
+        self._ach_unlock('ACH_COOP_QUEST')
+
+    # ── 협동 퀘스트 추적 훅 ───────────────────────────────────────────
+    def _coop_quest_on_kill(self, enemy):
+        from core.coop_quests import COOP_QUESTS
+        for qid, qs in self._coop_quests.items():
+            if qs['state'] != 'active' or COOP_QUESTS[qid]['kind'] != 'coop_kill':
+                continue
+            qs['progress'] += 1
+            if qs['progress'] >= COOP_QUESTS[qid]['count']:
+                self._coop_quest_complete(qid)
+
+    def _coop_quest_on_revive(self):
+        from core.coop_quests import COOP_QUESTS
+        for qid, qs in self._coop_quests.items():
+            if qs['state'] != 'active' or COOP_QUESTS[qid]['kind'] != 'coop_revive':
+                continue
+            qs['progress'] += 1
+            if qs['progress'] >= COOP_QUESTS[qid]['count']:
+                self._coop_quest_complete(qid)
+
+    def _coop_quest_on_floor(self, floor):
+        """협동으로 도달한 층 추적 (co-op 던전에서만 의미)."""
+        if not (self._coop_dungeon and self.net is not None):
+            return
+        from core.coop_quests import COOP_QUESTS
+        for qid, qs in self._coop_quests.items():
+            if qs['state'] != 'active' or COOP_QUESTS[qid]['kind'] != 'coop_floor':
+                continue
+            qs['progress'] = max(qs['progress'], floor)
+            if qs['progress'] >= COOP_QUESTS[qid]['floor']:
+                self._coop_quest_complete(qid)
+
+    def _coop_quest_complete(self, qid):
+        from core.coop_quests import qtext
+        self._coop_quests[qid]['state'] = 'done'
+        self.messages.append((t('quest_complete', qtext(qid, 'name')), 'good'))
+        self.animator.add(BannerAnim(t('quest_complete_banner'),
+                                     (140, 255, 170), y=140, size=24,
+                                     duration_ms=1100))
+        self.audio.play('tier_up')
 
     def _dialog_close(self, declined=False):
         if declined and self._dialog and self._dialog['mode'] == 'offer':
@@ -5914,6 +6236,22 @@ class Game:
             my = int(npc.get('fy', npc['y'] * ts)) - cy * ts - 26 + bob
             txt = self.hud.font_md.render(mark, True, col)
             self._game_surf.blit(txt, (mx - txt.get_width() // 2, my))
+        # 용병 게시판 마커 (멀티 접속 중, 제공/보고 가능할 때)
+        if self.net is not None:
+            from core.coop_quests import current_quest as _cq_cur
+            cqid = _cq_cur(self._coop_quests)
+            if cqid is not None:
+                cst = self._coop_quests[cqid]['state']
+                cmark = ('!', (120, 200, 255)) if cst == 'available' else \
+                        (('?', (120, 255, 150)) if cst == 'done' else None)
+                if cmark:
+                    for npc in self._town.npcs:
+                        if npc.get('id') == 'party_board':
+                            mx = int(npc.get('fx', npc['x'] * ts)) - cx * ts + ts // 2
+                            my = int(npc.get('fy', npc['y'] * ts)) - cy * ts - 26 + bob
+                            txt = self.hud.font_md.render(cmark[0], True, cmark[1])
+                            self._game_surf.blit(txt, (mx - txt.get_width() // 2, my))
+                            break
 
     def _draw_quest_tracker(self):
         """뷰포트 좌상단 실시간 퀘스트 목표 (active/done만)."""
@@ -5932,6 +6270,21 @@ class Game:
             self._game_surf.blit(bg, (6, y - 2))
             self._game_surf.blit(txt, (11, y))
             y += 18
+        # 협동 퀘스트 (멀티 중, active/done) — 파랑 계열로 구분
+        if self.net is not None:
+            from core.coop_quests import qtext as cqt, objective_str as cobj
+            for qid, qs in self._coop_quests.items():
+                if qs['state'] not in ('active', 'done'):
+                    continue
+                done = qs['state'] == 'done'
+                line = f"{'✔' if done else '◆'} {cqt(qid, 'name')}  {cobj(qid, qs['progress'])}"
+                txt = self.hud.font_sm.render(
+                    line, True, (130, 255, 160) if done else (170, 210, 255))
+                bg = pygame.Surface((txt.get_width() + 10, 16), pygame.SRCALPHA)
+                bg.fill((0, 0, 0, 110))
+                self._game_surf.blit(bg, (6, y - 2))
+                self._game_surf.blit(txt, (11, y))
+                y += 18
 
     def _draw_quest_clear_overlay(self):
         """퀘스트 보고 완료 순간의 화려한 전면 연출 (골드 방사 + 이름)."""
@@ -7847,7 +8200,13 @@ class Game:
                 elif skill == 'fear':
                     self.animator.add(HitFlashAnim(self.player.x, self.player.y, 0, (255, 200, 50)))
 
-        if not self.player.is_alive() and self.state == 'playing':
+        if (not self.player.is_alive() and self.state == 'playing'
+                and self._coop_dungeon and self.net is not None
+                and not self._downed and not self._spectating):
+            # co-op: 즉사 대신 '다운' — 파티원이 부활시킬 수 있다.
+            self._enter_downed()
+        elif (not self.player.is_alive() and self.state == 'playing'
+              and not self._downed and not self._spectating):
             if self._burning_active:
                 self._exit_burning_stage(survived=False)
             else:
@@ -7929,6 +8288,9 @@ class Game:
         # 마을·co-op던전 채팅 오버레이 (최근 피드 + 입력줄)
         if self.net is not None and (self._in_town or self._coop_dungeon):
             self._draw_chat_overlay()
+        # co-op 다운/관전 오버레이 + 부활 안내
+        if self._downed or self._spectating:
+            self._draw_downed_overlay()
         # 게임 중 '친구 참가' 코드 입력 오버레이
         if self._mp_join_open:
             self._draw_join_overlay()

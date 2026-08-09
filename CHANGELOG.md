@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.11.0 — More achievements & full localization
+
+Lots more to chase, in every language.
+
+### 14 new achievements 🏆
+- **Level milestones** — Seasoned (40), Elite (60), Champion (80), Pinnacle (max 99).
+- **Deep descent** — Centurion Depth (100), Deep Delver (250), Halfway Down (500), The Bottom (999).
+- **Village life** — First Harvest, Green Thumb (100 crops), First Catch, Master Angler (50 fish), Ranch Hand, and Homesteader (farm + fish + ranch).
+- Brings the total to **38 achievements**, each with a hand-drawn icon (unlocked + locked).
+
+### Localized 🌏
+- All achievement names & descriptions localized to **Korean, Japanese, Simplified Chinese, and Russian** (via Steam localization tokens).
+
+## v2.10.0 — Co-op content & Achievements
+
+Playing together now has stakes, goals, and bragging rights.
+
+### Never leave a friend behind 🩹
+- **Downed & revive.** In co-op, dropping to 0 HP no longer ends your run — you're **downed** with a 45-second timer. A partner just has to **stand next to you** and a revive meter fills; you're back on your feet at 40% HP.
+- **Second chances.** If the timer runs out you become a **spectator** instead of dying outright — and you **revive automatically when the party descends** to the next floor.
+- **Party wipe only when everyone's down.** The run ends only if the whole party is downed/out at once.
+
+### Mercenary Guild Board 📜 (multiplayer only)
+- A new **board in town** hands out **co-op-only contracts** — active only while you're in a party:
+  - **Party Bounty** — slay 50 monsters together → gold + enhancement stones
+  - **Bond of Brothers** — revive fallen allies 3 times → accessory
+  - **Descent Together** — reach floor 5 as a party → big reward
+- Contracts unlock in a chain and their progress rides along in your save.
+
+### Steam Achievements 🏆
+- **8 new achievements**, most of them co-op:
+  - *Hundred Together* (100 co-op kills), *Brother in Arms* (first revive), *Leave No One Behind* (10 revives)
+  - *An Hour Together / Steadfast Duo / Party Forever* (1h / 3h / 5h of co-op)
+  - *Guild's Trust* (first board contract), *Giant Slayers* (kill a boss in co-op)
+
+> Achievements unlock locally and sync to Steam automatically. New API names must be registered on the Steamworks partner site: `ACH_COOP_KILLS_100`, `ACH_REVIVE`, `ACH_REVIVE_10`, `ACH_COOP_1H`, `ACH_COOP_3H`, `ACH_COOP_5H`, `ACH_COOP_QUEST`, `ACH_COOP_BOSS`.
+
 ## v2.9.5 — Multiplayer (beta): See your ally fight
 
 - **Party combat effects are now shared** — when your co-op partner swings, shoots, or casts, you see their attack pose and the swing/bolt effect, not just a standing avatar. Makes fighting side by side feel alive.

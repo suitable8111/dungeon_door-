@@ -31,6 +31,8 @@ class RemotePlayer:
         self.floor = 0
         self.defense = 0
         self.evasion = 0
+        self.status = 0            # 0 정상 / 1 다운 / 2 관전 (co-op 부활)
+        self.revive_prog = 0.0     # 이 원격 파티원을 내가 부활 중인 진행도 [0,1]
         self._initialized = False
 
     # ── 상태 수신 ────────────────────────────────────────────────────
@@ -48,6 +50,10 @@ class RemotePlayer:
         self.floor = st.get("fl", self.floor)
         self.defense = st.get("de", self.defense)
         self.evasion = st.get("ev", self.evasion)
+        new_status = st.get("st", self.status)
+        if new_status != 1:        # 다운 해제/관전 전환 시 부활 진행도 리셋
+            self.revive_prog = 0.0
+        self.status = new_status
         if not self._initialized:
             # 첫 상태 수신: 보간 없이 즉시 스냅
             self.render_px = self.x * TILE_SIZE
@@ -80,6 +86,11 @@ class RemotePlayer:
         from entities.avatar import draw_avatar_tile
         sx = int(round(self.render_px - cx * TILE_SIZE))
         sy = int(round(self.render_py - cy * TILE_SIZE))
+        if self.status != 0:
+            # 다운/관전: 쓰러진 아바타 + 상태 표식 (부활 대상 강조)
+            self._draw_fallen(surf, sx, sy)
+            self._draw_nameplate(surf, sx, sy)
+            return
         # 공격 중이면 공격 포즈(phase 2) + 공격 방향으로 렌더
         atk = self.atk_ms > 0
         face = self.atk_facing if atk else self.facing
@@ -88,6 +99,36 @@ class RemotePlayer:
                          self.appearance, self.char_class)
         # 클라 이름표 (원격 플레이어 식별)
         self._draw_nameplate(surf, sx, sy)
+
+    def _draw_fallen(self, surf, sx: int, sy: int) -> None:
+        """다운/관전 상태 렌더 — 반투명 쓰러진 아바타 + 부활 링."""
+        import pygame
+        from entities.avatar import draw_avatar_tile
+        tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+        draw_avatar_tile(tmp, 0, 0, 'down', 0, 0, self.appearance,
+                         self.char_class)
+        # 90° 회전으로 '쓰러진' 느낌 + 상태별 반투명
+        prone = pygame.transform.rotate(tmp, 90)
+        prone.set_alpha(110 if self.status == 2 else 175)
+        surf.blit(prone, (sx + (TILE_SIZE - prone.get_width()) // 2,
+                          sy + (TILE_SIZE - prone.get_height()) // 2))
+        cx = sx + TILE_SIZE // 2
+        cy = sy + TILE_SIZE // 2
+        if self.status == 1:
+            # 부활 진행 링 (초록) — 파티원이 옆에 있으면 채워짐
+            r = TILE_SIZE // 2 + 3
+            pygame.draw.circle(surf, (60, 30, 30), (cx, cy), r, 2)
+            if self.revive_prog > 0:
+                pts = [(cx, cy)]
+                import math
+                steps = max(2, int(self.revive_prog * 24))
+                for i in range(steps + 1):
+                    a = -math.pi / 2 + (i / 24.0) * 2 * math.pi
+                    pts.append((cx + int(math.cos(a) * r),
+                                cy + int(math.sin(a) * r)))
+                if len(pts) >= 3:
+                    pygame.draw.polygon(surf, (90, 230, 120), pts)
+                    pygame.draw.circle(surf, (140, 255, 170), (cx, cy), r, 2)
 
     def _draw_nameplate(self, surf, sx: int, sy: int) -> None:
         try:

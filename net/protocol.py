@@ -84,9 +84,12 @@ def event(kind: str, data: dict | None = None) -> dict:
 def player_state(pid: int, x: int, y: int, facing: str, walk: int,
                  char_class: str, name: str, appearance: dict | None,
                  hp: int, max_hp: int, floor: int = 0,
-                 defense: int = 0, evasion: int = 0) -> dict:
-    """스냅샷에 담기는 한 플레이어의 최소 상태."""
+                 defense: int = 0, evasion: int = 0, status: int = 0) -> dict:
+    """스냅샷에 담기는 한 플레이어의 최소 상태.
+
+    status: 0=정상 / 1=다운(부활 대기) / 2=관전(사망, 다음 층 부활 대기) — co-op 부활용.
+    """
     return {"id": pid, "x": x, "y": y, "f": facing, "w": walk,
             "c": char_class, "n": name, "a": appearance or {},
             "hp": hp, "mhp": max_hp, "fl": floor,
-            "de": defense, "ev": evasion}
+            "de": defense, "ev": evasion, "st": status}

@@ -33,12 +33,36 @@ ACHIEVEMENTS = {
     'ACH_BURNING':     {},
     'ACH_ULTIMATE':    {},
     'ACH_DIE':         {},
+    # ── 협동(co-op) 도전과제 ──────────────────────────────────────────
+    'ACH_COOP_KILLS_100': {'stat': 'coop_kills', 'need': 100},
+    'ACH_REVIVE':         {},                                   # 첫 부활
+    'ACH_REVIVE_10':      {'stat': 'revives',    'need': 10},
+    'ACH_COOP_1H':        {'stat': 'coop_secs',  'need': 3600},
+    'ACH_COOP_3H':        {'stat': 'coop_secs',  'need': 10800},
+    'ACH_COOP_5H':        {'stat': 'coop_secs',  'need': 18000},
+    'ACH_COOP_QUEST':     {},                                   # 첫 협동 퀘스트 완료
+    'ACH_COOP_BOSS':      {},                                   # 협동으로 보스 처치
+    # ── 레벨 심화 (최대 99) ───────────────────────────────────────────
+    'ACH_LEVEL_40':  {}, 'ACH_LEVEL_60':  {},
+    'ACH_LEVEL_80':  {}, 'ACH_LEVEL_99':  {},
+    # ── 심층 (최대 999) ──────────────────────────────────────────────
+    'ACH_FLOOR_100': {}, 'ACH_FLOOR_250': {},
+    'ACH_FLOOR_500': {}, 'ACH_FLOOR_999': {},
+    # ── 생활(마을) 콘텐츠 ────────────────────────────────────────────
+    'ACH_FARM_FIRST':  {},                                      # 첫 수확
+    'ACH_FARM_100':    {'stat': 'harvest', 'need': 100},        # 수확 100회
+    'ACH_FISH_FIRST':  {},                                      # 첫 낚시
+    'ACH_FISH_50':     {'stat': 'fish',    'need': 50},         # 물고기 50마리
+    'ACH_RANCH_FIRST': {},                                      # 첫 목장 수확
+    'ACH_LIFE_MASTER': {},                                      # 농사·낚시·목장 전부 경험
 }
 
 # 층수 도달형: floor → api_name
 FLOOR_ACHIEVEMENTS = {
     5: 'ACH_FLOOR_5', 10: 'ACH_FLOOR_10',
     25: 'ACH_FLOOR_25', 50: 'ACH_FLOOR_50',
+    100: 'ACH_FLOOR_100', 250: 'ACH_FLOOR_250',
+    500: 'ACH_FLOOR_500', 999: 'ACH_FLOOR_999',
 }
 
 
