@@ -129,9 +129,10 @@ def advanced_classes_unlocked(records=None) -> bool:
 def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
               skill_levels=None, skill_xp=None, skill_points=0, equipped_skills=None,
               skill_enchants=None, quests=None, max_floor_reached=0,
-              slot=1, name=None, char_class=None, coop_quests=None):
+              slot=1, name=None, char_class=None, coop_quests=None, in_town=False):
     data = {
         'floor': floor,
+        'in_town': bool(in_town),   # 마을에서 저장 시 재접속도 마을로
         'name':       name or getattr(player, 'char_name', '') or 'Hero',
         'char_class': char_class or getattr(player, 'char_class', 'warrior'),
         'appearance': dict(getattr(player, 'appearance', None)

@@ -2127,6 +2127,18 @@ class Game:
     def _is_fading(self):
         return self._fade_dir != 0
 
+    def _do_autosave(self, in_town=False):
+        """현재 상태 저장 (테스트 모드 제외). in_town=True면 재접속도 마을로."""
+        if self._is_test_mode:
+            return
+        save_game(self.player, self.floor, self.skills, self._unlocked_combos,
+                  self._skill_books, self._skill_levels, self._skill_xp,
+                  self._skill_points, self._equipped_skills, self._skill_enchants,
+                  self._quests, self._max_floor_reached, slot=self._save_slot,
+                  name=getattr(self, '_char_name', 'Hero'),
+                  char_class=getattr(self, '_char_class', 'warrior'),
+                  coop_quests=self._coop_quests, in_town=in_town)
+
     # ─────────────── BGM 제어 ─────────────────────────────────────────
     def _update_bgm(self):
         if not self.audio.bgm:
@@ -2137,7 +2149,7 @@ class Game:
             if self.dungeon is None:
                 return
             if self._in_town:
-                self.audio.bgm.play('shop')      # 마을 = 평화로운 상점 트랙
+                self.audio.bgm.play('town')      # 마을 = 평화로운 마을 테마
             elif self.dungeon.is_boss_floor:
                 self.audio.bgm.play('boss')
             elif self.dungeon.has_shop:
@@ -2377,6 +2389,9 @@ class Game:
         self.messages.append((t('floor_cont', self.floor), 'good'))
         self.state = 'playing'
         self._maybe_begin_coop()   # co-op 대기 중이면 마을 진입 + 세션 부착
+        # 마을에서 저장했다면 마을로 복귀(방금 만든 던전이 포탈 복귀 지점이 됨)
+        if data.get('in_town') and not self._in_town and self.net is None:
+            self._enter_town()
 
     def _load_floor(self, is_new_game=False):
         # 엔들리스(심연): 999 클리어 후엔 999 너머로 하강 허용
@@ -2418,13 +2433,7 @@ class Game:
             elif dungeon.has_shop:
                 self.messages.append((t('shop_floor'), 'info'))
             if not self._is_test_mode and not self._coop_dungeon:
-                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                              self._skill_levels, self._skill_xp, self._skill_points,
-                              self._equipped_skills, self._skill_enchants, self._quests,
-                              self._max_floor_reached, slot=self._save_slot,
-                              name=getattr(self,'_char_name','Hero'),
-                              char_class=getattr(self,'_char_class','warrior'),
-                              coop_quests=self._coop_quests)
+                self._do_autosave(in_town=False)
                 self.messages.append((t('auto_saved'), 'info'))
                 self.audio.play('save')
         self.camera = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -3454,13 +3463,7 @@ class Game:
             self.state = 'playing'
         elif tag == 'save':
             if self.player and not self._is_test_mode:
-                save_game(self.player, self.floor, self.skills, self._unlocked_combos, self._skill_books,
-                          self._skill_levels, self._skill_xp, self._skill_points,
-                          self._equipped_skills, self._skill_enchants, self._quests,
-                          self._max_floor_reached, slot=self._save_slot,
-                          name=getattr(self,'_char_name','Hero'),
-                          char_class=getattr(self,'_char_class','warrior'),
-                          coop_quests=self._coop_quests)
+                self._do_autosave(in_town=self._in_town)
                 self.messages.append((t('saved'), 'good'))
                 self.audio.play('save')
             self.state = 'playing'
@@ -4566,6 +4569,9 @@ class Game:
         if moved:
             self.messages.append((t('town_deposit', moved), 'info'))
         self.audio.play('stairs')
+        # 마을 도착 시 자동 저장(재접속도 마을로) — co-op 클라이언트 제외
+        if not (self.net is not None and not self.net.is_host):
+            self._do_autosave(in_town=True)
         # 방 입장 시 자기 프로필 브로드캐스트 (스텁 · 미래 멀티플레이 결합점)
         self._broadcast_user_profile()
 

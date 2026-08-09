@@ -277,6 +277,15 @@ class HUD:
                     pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x + 33, row))
                     pygame.draw.line(screen, (4, 4, 8), (col_x, row), (col_x, row + 25))
 
+        # ── 버전 표시 (우하단) — 빌드 확인용 ─────────────────────────
+        try:
+            vtxt = self.font_sm.render(f"v{VERSION}", True, (150, 158, 180))
+            vsh = self.font_sm.render(f"v{VERSION}", True, (0, 0, 0))
+            screen.blit(vsh, (W - vtxt.get_width() - 11, H - vtxt.get_height() - 9))
+            screen.blit(vtxt, (W - vtxt.get_width() - 12, H - vtxt.get_height() - 10))
+        except Exception:
+            pass
+
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
             p_w = 470

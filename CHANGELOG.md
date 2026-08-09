@@ -10,6 +10,11 @@ Compare your runs with the whole world.
 - Your best run is submitted automatically as you descend; your row is highlighted in the list.
 - Powered by **Steam Leaderboards** — works offline too (shows your own record).
 
+### Quality of life
+- **Version shown on the title screen** (bottom-right) so you always know which build you're on.
+- **Save in town, resume in town** — quitting from the village now brings you back to the village, not the dungeon.
+- **A dedicated, peaceful town theme** now plays in the village instead of dungeon music.
+
 ## v2.11.0 — More achievements & full localization
 
 Lots more to chase, in every language.
