@@ -973,6 +973,16 @@ ULTIMATE_SKILL_DEFS = localize_defs(ULTIMATE_SKILL_DEFS)
 
 # 클래스별 R 궁극기 표시 오버라이드 (효과는 game._use_ultimate가 분기)
 _R_ULT_OVERRIDE = localize_defs({
+    'warrior': {
+        'name': '귀멸의 존재', 'name_en': 'Annihilator', 'name_ja': '鬼滅の存在',
+        'name_zh': '鬼灭之存在', 'name_ru': 'Истребитель',
+        'color': (255, 150, 60),
+        'desc': '15초간 SP 무제한 — 모든 스킬을 무한 난사',
+        'desc_en': '15s of unlimited SP — spam every skill freely',
+        'desc_ja': '15秒間SP無限 — 全スキルを撃ち放題',
+        'desc_zh': '15秒无限SP——无限连发所有技能',
+        'desc_ru': '15с безлимитного SP — спамьте любые навыки',
+    },
     'mage': {
         'name': '인페르노', 'name_en': 'Inferno', 'name_ja': 'インフェルノ',
         'name_zh': '炼狱', 'name_ru': 'Инферно',
@@ -996,12 +1006,28 @@ _R_ULT_OVERRIDE = localize_defs({
 })
 
 
+# 클래스별 Ctrl+R 궁극기 표시 오버라이드
+_CTRL_R_ULT_OVERRIDE = localize_defs({
+    'warrior': {
+        'name': '초인 모드', 'name_en': 'Superhuman', 'name_ja': '超人モード',
+        'name_zh': '超人模式', 'name_ru': 'Сверхчеловек',
+        'color': (255, 220, 90),
+        'desc': '60초 SP무제한 + 전체 50% 피해 + 스킬피해2배 + 이동·공격속도 극대화',
+        'desc_en': '60s unlimited SP + 50% dmg to all + double skill dmg + max move/attack speed',
+        'desc_ja': '60秒SP無限 + 全体50%ダメージ + スキル2倍 + 移動·攻撃速度最大',
+        'desc_zh': '60秒无限SP + 全体50%伤害 + 技能双倍 + 移动攻速极大化',
+        'desc_ru': '60с безлимит SP + 50% урона всем + двойной урон навыков + макс. скорость',
+    },
+})
+
+
 def ultimate_def_for(uid: str, char_class: str = 'warrior') -> dict:
-    """클래스별 R 궁극기 표시 정의 (이름/설명/색만 오버라이드, 나머지는 기본).
-    병합 후 localize_defs로 다시 감싸 현재 언어 이름 해석을 유지한다."""
+    """클래스별 궁극기 표시 정의 (이름/설명/색만 오버라이드, 나머지는 기본)."""
     base = ULTIMATE_SKILL_DEFS.get(uid)
     if uid == 'R' and char_class in _R_ULT_OVERRIDE and base:
         return localize_defs({**base, **_R_ULT_OVERRIDE[char_class]})
+    if uid == 'Ctrl_R' and char_class in _CTRL_R_ULT_OVERRIDE and base:
+        return localize_defs({**base, **_CTRL_R_ULT_OVERRIDE[char_class]})
     return base
 
 

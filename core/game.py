@@ -300,6 +300,7 @@ class Game:
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
         self._stamina_delay_ms: float = 0.0      # 회복 시작까지 대기
         self._last_exhaust_msg: int   = -9999    # 탈진 메시지 쿨다운
+        self._infinite_sp_ms:  float  = 0.0      # >0이면 SP 무제한(전사 궁극기)
 
         # ── 마을 시스템 (GameManager 역할: 던전 세션 통째 보존) ──────
         from core.town import TownScene
@@ -1341,8 +1342,12 @@ class Game:
             if self.state == 'playing' and self.player:
                 self.player.drive = min(self.player.drive_max,
                                         self.player.drive + dt * 0.0004)
+                # 무한 SP(전사 궁극기): 지속 동안 SP 항상 가득 → 스킬 난사
+                if self._infinite_sp_ms > 0:
+                    self._infinite_sp_ms = max(0.0, self._infinite_sp_ms - dt)
+                    self.player.stamina = self.player.stamina_max
                 # 스태미나: 마지막 소모 후 0.9초 지나면 초당 22 회복
-                if self._stamina_delay_ms > 0:
+                elif self._stamina_delay_ms > 0:
                     self._stamina_delay_ms = max(0.0, self._stamina_delay_ms - dt)
                 else:
                     self.player.stamina = min(self.player.stamina_max,
@@ -3889,6 +3894,8 @@ class Game:
         레벨·장비 SP 경감(total_sp_reduce)이 모든 소모에 일괄 적용된다.
         """
         p = self.player
+        if self._infinite_sp_ms > 0:      # 무한 SP 발동 중 — 소모 없음(스킬 난사)
+            return True
         cost *= (1.0 - p.total_sp_reduce)
         if p.stamina < cost:
             now = pygame.time.get_ticks()
@@ -8128,7 +8135,10 @@ class Game:
             else:
                 result = self._skill_ultimate_breaker()
         elif key == 'Ctrl_R':
-            result = self._skill_ultimate_slash()
+            if self.player.char_class == 'warrior':
+                result = self._skill_ultimate_superhuman()
+            else:
+                result = self._skill_ultimate_slash()
         else:
             return False
         if result:
@@ -8136,31 +8146,53 @@ class Game:
         return result
 
     def _skill_ultimate_breaker(self):
-        """던전 브레이커: 화면 내 모든 적에게 공격력 3배 일격 + 대규모 이펙트."""
-        targets = [e for e in self.dungeon.enemies
-                   if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible]
-        hits = 0
-        for enemy in targets:
-            dmg = roll_damage(self._skill_atk, enemy.defense, 3.0)
-            enemy.take_damage(dmg)
-            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, (255, 80, 80)))
-            self.animator.particles.emit_power_hit(enemy.x, enemy.y)
-            hits += 1
-            if not enemy.is_alive():
-                self._on_enemy_killed(enemy)
-        # 여러 방향으로 슬래시 이펙트
+        """귀멸의 존재(전사 R): 15초간 SP 무제한 — 모든 스킬을 무한 난사."""
+        self._infinite_sp_ms = max(self._infinite_sp_ms, 15000.0)
+        self.player.stamina = self.player.stamina_max
         px, py = self.player.x, self.player.y
-        for facing in ('right', 'left', 'up', 'down'):
-            self.animator.add(SlashAnim(px, py, px, py, (255, 120, 60)))
-        # 던전 브레이커 — 시야 내 균열 벽도 전부 붕괴 (이름값)
-        self._break_cracked_walls_near(px, py, 12)
-        self._start_shake(8, 500)
+        for _ in range(4):
+            self.animator.add(SlashAnim(px, py, px, py, (255, 150, 60)))
+        self.animator.particles.emit_levelup(px, py)
+        self.animator.add(BannerAnim(t('ult_kimetsu'), (255, 160, 70),
+                                     y=110, size=32, duration_ms=1600))
+        self._start_shake(6, 420)
+        self._start_punch_zoom(0.05, 140)
         self.skills.trigger('R')
         self.audio.play('skill_whirl')
-        if hits:
-            self.messages.append((t('ult_breaker_hit', hits), 'bad'))
-        else:
-            self.messages.append((t('ult_breaker_miss'), 'info'))
+        self.messages.append((t('ult_kimetsu_msg'), 'good'))
+        return True
+
+    def _skill_ultimate_superhuman(self):
+        """초인 모드(전사 Ctrl+R): 60초 SP무제한 + 전체 50% 피해 +
+        공격력2배(스킬피해2배) + 이동·공격속도 극대화."""
+        p = self.player
+        self._infinite_sp_ms = max(self._infinite_sp_ms, 60000.0)
+        p.stamina = p.stamina_max
+        # 데미지 2배(공격력 +100%) + 이동/공격속도 극대화 (60초)
+        p.atk_bonus_pct = max(p.atk_bonus_pct, 1.0); p.atk_bonus_ms = max(p.atk_bonus_ms, 60000)
+        p.move_buff_pct = max(p.move_buff_pct, 1.0); p.move_buff_ms = max(p.move_buff_ms, 60000)
+        p.aspd_buff_pct = max(p.aspd_buff_pct, 1.0); p.aspd_buff_ms = max(p.aspd_buff_ms, 60000)
+        # 던전 전체 적에게 최대 HP의 50% 피해
+        hits = 0
+        for e in list(self.dungeon.enemies):
+            if e.is_alive():
+                dmg = max(1, int(e.max_hp * 0.5))
+                e.take_damage(dmg)
+                if self.dungeon.tiles[e.y][e.x].visible:
+                    self.animator.add(HitFlashAnim(e.x, e.y, dmg, (255, 240, 120)))
+                hits += 1
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+        px, py = p.x, p.y
+        self.animator.add(WhirlAnim(px, py))
+        self.animator.add(BannerAnim(t('ult_superhuman'), (255, 220, 90),
+                                     y=104, size=34, duration_ms=1900))
+        self.animator.particles.emit_levelup(px, py)
+        self._start_shake(10, 640); self._start_punch_zoom(0.07, 190)
+        self.juice.slowmo(320, 0.4)
+        self.skills.trigger('Ctrl_R')
+        self.audio.play('skill_whirl')
+        self.messages.append((t('ult_superhuman_msg', hits), 'bad'))
         return True
 
     def _skill_ultimate_inferno(self):

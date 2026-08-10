@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.15.0 — Warrior ultimates reforged
+
+- **R — Annihilator** — for **15 seconds, SP is unlimited**. Spam every skill nonstop, like an endless engine of destruction.
+- **Ctrl+R — Superhuman** — for **60 seconds**: unlimited SP, **double damage**, and **maxed-out move & attack speed** — plus an instant hit dealing **50% of max HP to every enemy on the floor**.
+
 ## v2.14.0 — Gear, vision & UI polish
 
 - **Vision helmets** — new head gear grants extended sight (Scout Helm, +4), and the rare **Helm of True Sight** reveals the entire floor.
