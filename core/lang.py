@@ -1114,6 +1114,8 @@ _T: dict[str, dict[str, str]] = {
     'ult_no_level':     {'ko': '{}: Lv.{} 필요 (현재 Lv.{})', 'en': '{}: Requires Lv.{} (cur Lv.{})',
                          'ja': '{}: Lv.{}が必要 (現在Lv.{})', 'zh': '{}: 需要Lv.{} (当前Lv.{})',
                          'ru': '{}: нужен ур.{} (сейчас {})'},
+    'ult_active_wait':  {'ko': '{} 발동 중 — 남은 {}초', 'en': '{} active — {}s left',
+                         'ja': '{} 発動中 — 残り{}秒', 'zh': '{} 生效中 — 剩余{}秒', 'ru': '{} активно — осталось {}с'},
     'ult_kimetsu':      {'ko': '귀멸의 존재!', 'en': 'ANNIHILATOR!', 'ja': '鬼滅の存在!', 'zh': '鬼灭之存在!', 'ru': 'ИСТРЕБИТЕЛЬ!'},
     'ult_kimetsu_msg':  {'ko': '⚔ 귀멸의 존재 — 15초간 SP 무제한! 스킬을 난사하라!',
                          'en': '⚔ Annihilator — unlimited SP for 15s! Spam your skills!',

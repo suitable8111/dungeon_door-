@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.15.1 — Ultimate timing & readout
+
+- **Cooldown now starts *after* the effect ends** — the ultimate's cooldown timer only begins once its duration (15s / 60s) runs out, so total downtime is duration + cooldown.
+- **Active-ultimate label** — while an ultimate is running, a banner at the top shows its name and a live remaining-time countdown with a shrinking bar. Re-activating is blocked until it ends.
+
 ## v2.15.0 — Warrior ultimates reforged
 
 - **R — Annihilator** — for **15 seconds, SP is unlimited**. Spam every skill nonstop, like an endless engine of destruction.

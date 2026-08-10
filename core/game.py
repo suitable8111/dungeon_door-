@@ -301,6 +301,7 @@ class Game:
         self._stamina_delay_ms: float = 0.0      # 회복 시작까지 대기
         self._last_exhaust_msg: int   = -9999    # 탈진 메시지 쿨다운
         self._infinite_sp_ms:  float  = 0.0      # >0이면 SP 무제한(전사 궁극기)
+        self._ult_active = None   # 발동 중 궁극기 {key,name,color,total,left} — 쿨타임은 종료 후 시작
 
         # ── 마을 시스템 (GameManager 역할: 던전 세션 통째 보존) ──────
         from core.town import TownScene
@@ -1164,6 +1165,28 @@ class Game:
         bub.blit(surf, (pad, pad // 2))
         self._game_surf.blit(bub, (bx, by))
 
+    def _draw_ult_active(self):
+        """발동 중 궁극기 — 상단 중앙에 이름 + 남은 시간 + 감소 바."""
+        u = self._ult_active
+        col = tuple(u.get('color', (255, 220, 90)))
+        left_s = max(0.0, u['left'] / 1000.0)
+        frac = max(0.0, min(1.0, u['left'] / u['total']))
+        name = u.get('name', '')
+        label = f"{name}   {left_s:0.1f}s"
+        f = self.hud.font_md
+        ts = f.render(label, True, col)
+        bw = max(180, ts.get_width() + 28)
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + 40
+        panel = pygame.Surface((bw, 34), pygame.SRCALPHA)
+        panel.fill((12, 12, 22, 210))
+        self.screen.blit(panel, (bx, by))
+        pygame.draw.rect(self.screen, col, (bx, by, bw, 34), 2, border_radius=6)
+        self.screen.blit(ts, (bx + (bw - ts.get_width()) // 2, by + 3))
+        # 남은 시간 바
+        pygame.draw.rect(self.screen, (30, 30, 44), (bx + 6, by + 27, bw - 12, 4), border_radius=2)
+        pygame.draw.rect(self.screen, col, (bx + 6, by + 27, int((bw - 12) * frac), 4), border_radius=2)
+
     def _draw_downed_overlay(self):
         """co-op 다운/관전 오버레이 — 화면 틴트 + 상태 + 부활 안내."""
         tint = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
@@ -1342,6 +1365,12 @@ class Game:
             if self.state == 'playing' and self.player:
                 self.player.drive = min(self.player.drive_max,
                                         self.player.drive + dt * 0.0004)
+                # 지속형 궁극기: 남은 시간 감소 → 종료 시점에 비로소 쿨타임 시작
+                if self._ult_active is not None:
+                    self._ult_active['left'] -= dt
+                    if self._ult_active['left'] <= 0:
+                        self.skills.trigger(self._ult_active['key'])
+                        self._ult_active = None
                 # 무한 SP(전사 궁극기): 지속 동안 SP 항상 가득 → 스킬 난사
                 if self._infinite_sp_ms > 0:
                     self._infinite_sp_ms = max(0.0, self._infinite_sp_ms - dt)
@@ -8112,10 +8141,23 @@ class Game:
             self._fortify_atk_bonus   = 0.0
 
     # ─────────────── 궁극기 ─────────────────────────────────────────────
+    def _begin_ult(self, key: str, duration_ms: float):
+        """지속형 궁극기 발동 등록 — 쿨타임은 지속 종료 후 시작(라벨 표시용)."""
+        from core.skills import ultimate_def_for
+        d = ultimate_def_for(key, self.player.char_class) or {}
+        self._ult_active = {'key': key, 'name': d.get('name', key),
+                            'color': d.get('color', (255, 220, 90)),
+                            'total': float(duration_ms), 'left': float(duration_ms)}
+
     def _use_ultimate(self, key: str):
         # 오의 창이 열려 있으면 R키를 오의 발동으로 우선 처리
         if key == 'R' and self._arcane_window_ms > 0:
             return self._try_arcane_art()
+        # 지속형 궁극기 발동 중이면 재발동 불가(쿨타임은 종료 후 시작)
+        if self._ult_active is not None:
+            self.messages.append((t('ult_active_wait', self._ult_active['name'],
+                                    int(self._ult_active['left'] / 1000) + 1), 'info'))
+            return False
 
         udef = ULTIMATE_SKILL_DEFS.get(key)
         if not udef:
@@ -8157,7 +8199,7 @@ class Game:
                                      y=110, size=32, duration_ms=1600))
         self._start_shake(6, 420)
         self._start_punch_zoom(0.05, 140)
-        self.skills.trigger('R')
+        self._begin_ult('R', 15000.0)   # 쿨타임은 15초 지속 종료 후 시작
         self.audio.play('skill_whirl')
         self.messages.append((t('ult_kimetsu_msg'), 'good'))
         return True
@@ -8190,7 +8232,7 @@ class Game:
         self.animator.particles.emit_levelup(px, py)
         self._start_shake(10, 640); self._start_punch_zoom(0.07, 190)
         self.juice.slowmo(320, 0.4)
-        self.skills.trigger('Ctrl_R')
+        self._begin_ult('Ctrl_R', 60000.0)   # 쿨타임은 60초 지속 종료 후 시작
         self.audio.play('skill_whirl')
         self.messages.append((t('ult_superhuman_msg', hits), 'bad'))
         return True
@@ -8539,6 +8581,9 @@ class Game:
         # co-op 다운/관전 오버레이 + 부활 안내
         if self._downed or self._spectating:
             self._draw_downed_overlay()
+        # 발동 중 궁극기 — 이름 + 남은 시간 라벨
+        if self._ult_active is not None:
+            self._draw_ult_active()
         # 게임 중 '친구 참가' 코드 입력 오버레이
         if self._mp_join_open:
             self._draw_join_overlay()
