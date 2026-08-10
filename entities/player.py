@@ -266,6 +266,19 @@ class Player(Entity):
                 self.move_buff_pct = 0.0
 
     @property
+    def total_vision(self) -> int:
+        """시야 반경 — 기본 7 + 머리 장비의 'vision' 보너스."""
+        bonus = sum(int(item.value) for item in self.equipment.values()
+                    if item and not item.broken and item.effect == 'vision')
+        return 7 + bonus
+
+    @property
+    def full_vision(self) -> bool:
+        """진실의 시야 — 레어 투구(effect='true_sight')면 맵 전체 공개."""
+        return any(item and not item.broken and item.effect == 'true_sight'
+                   for item in self.equipment.values())
+
+    @property
     def total_move_speed(self) -> float:
         bonus = sum(
             item.value for item in self.equipment.values()

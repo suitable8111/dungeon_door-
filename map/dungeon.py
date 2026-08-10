@@ -51,6 +51,13 @@ class Dungeon:
                 t.visible  = True
                 t.explored = True
 
+    def reveal_all(self):
+        """전체 맵 공개 — 진실의 시야(레어 투구) 등."""
+        for row in self.tiles:
+            for t in row:
+                t.visible = True
+                t.explored = True
+
     def update_visibility(self, px, py, radius=7):
         for row in self.tiles:
             for t in row:

@@ -955,7 +955,7 @@ class Game:
             self.dungeon.tiles[wy][wx] = nt
             self.animator.particles.emit_death(wx, wy, (120, 110, 96))
         if not self._is_test_mode:
-            self.dungeon.update_visibility(self.player.x, self.player.y)
+            self._reveal_player()
 
     def _net_apply_pick(self, peer_id, item_id):
         """호스트: 클라의 획득 요청 — 아이템 있으면 바닥에서 제거하고 그 클라에 지급."""
@@ -1913,7 +1913,7 @@ class Game:
         n = len(broken)
         # 새로 열린 공간을 즉시 밝힌다 — 단, 테스트/마을은 전체 공개(reveal_all)라 건너뜀
         if n and not self._is_test_mode and not self._in_town:
-            self.dungeon.update_visibility(self.player.x, self.player.y)
+            self._reveal_player()
         # co-op 호스트: 부서진 벽을 브로드캐스트(맵 일관성) — 런타임 타일 변경 동기화
         if (broken and self.net is not None and self.net.is_host
                 and self._coop_dungeon):
@@ -2003,7 +2003,7 @@ class Game:
             self._keys -= 1
             self.dungeon.tiles[y][x] = Tile.floor()
             if not self._is_test_mode and not self._in_town:
-                self.dungeon.update_visibility(self.player.x, self.player.y)
+                self._reveal_player()
             self.animator.add(BannerAnim(t('vault_open'), (245, 215, 90), size=26))
             self.messages.append((t('vault_open'), 'good'))
             self.animator.particles.emit_levelup(x, y)
@@ -2414,7 +2414,7 @@ class Game:
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
         self.camera.center_on(self.player.x, self.player.y)
         if not self._is_test_mode:
-            self.dungeon.update_visibility(self.player.x, self.player.y)
+            self._reveal_player()
         self.messages.append((t('floor_cont', self.floor), 'good'))
         self.state = 'playing'
         self._maybe_begin_coop()   # co-op 대기 중이면 마을 진입 + 세션 부착
@@ -2477,7 +2477,7 @@ class Game:
         if self._is_test_mode:
             self.dungeon.reveal_all()
         else:
-            self.dungeon.update_visibility(self.player.x, self.player.y)
+            self._reveal_player()
 
         # 파괴 가능 프롭 + 보물 고블린 (리스폰 카운트 산정 전에 스폰)
         self._spawn_floor_props()
@@ -3738,7 +3738,7 @@ class Game:
         elif action['type'] == 'ultimate':    acted = self._use_ultimate(action['key'])
         if acted:
             if not self._in_town and not self._is_test_mode and not self._collapse_active:
-                self.dungeon.update_visibility(self.player.x, self.player.y)
+                self._reveal_player()
             self.camera.center_on(self.player.x, self.player.y)
 
     def _player_move(self, dx, dy):
@@ -4578,8 +4578,7 @@ class Game:
             'theme': self._theme,
             'respawn_max': self._respawn_max,
         }
-        # ② 소지품 → 영구 창고 이전 (Transfer)
-        moved = self._deposit_all_to_storage()
+        # ② 소지품은 그대로 유지 — 강제 창고 이전 폐지(창고는 수동으로만 사용)
         # ③ 씬 전환
         self._in_town = True
         self.vfx_loot.clear()
@@ -4592,8 +4591,6 @@ class Game:
         self.camera.center_on(self.player.x, self.player.y)
         self._apply_map_fx()        # 마을은 정적 (지진/왜곡 없음)
         self.messages.append((t('town_enter'), 'good'))
-        if moved:
-            self.messages.append((t('town_deposit', moved), 'info'))
         self.audio.play('stairs')
         # 마을 도착 시 자동 저장(재접속도 마을로) — co-op 클라이언트 제외
         if not (self.net is not None and not self.net.is_host):
@@ -4606,16 +4603,16 @@ class Game:
     _CLASS_GEAR = {
         'warrior': ['broad_sword', 'great_sword', 'chain_mail', 'plate_armor',
                     'mythril_armor', 'iron_shield', 'tower_shield', 'knight_helm',
-                    'war_pendant'],
+                    'war_pendant', 'scout_helm', 'true_sight_helm'],
         'archer':  ['sword', 'broad_sword', 'swift_boots', 'shadow_boots',
                     'leather_armor', 'mythril_armor', 'iron_helm', 'magic_stone',
-                    'silver_ring'],
+                    'silver_ring', 'scout_helm', 'true_sight_helm'],
         'mage':    ['apprentice_staff', 'arcane_staff', 'leather_armor',
                     'mythril_armor', 'leather_boots', 'magic_stone', 'silver_ring',
-                    'war_pendant', 'leather_helm'],
+                    'war_pendant', 'leather_helm', 'scout_helm', 'true_sight_helm'],
         'axeman':  ['battle_axe', 'great_axe', 'chain_mail', 'plate_armor',
                     'mythril_armor', 'iron_helm', 'knight_helm', 'war_pendant',
-                    'iron_boots'],
+                    'iron_boots', 'scout_helm', 'true_sight_helm'],
     }
 
     def _grant_floor_clear_reward(self, cleared_floor):
@@ -4937,7 +4934,7 @@ class Game:
             self.player.x, self.player.y = s['px'], s['py']
             self._dungeon_session = None
             if not self._is_test_mode:
-                self.dungeon.update_visibility(self.player.x, self.player.y)
+                self._reveal_player()
             self.camera.center_on(self.player.x, self.player.y)
             self._apply_map_fx()        # 복귀한 층의 지진/왜곡 재적용
             self.messages.append((t('town_return', self.floor), 'good'))
@@ -4945,6 +4942,16 @@ class Game:
         else:
             # 세션 없음 (마을에서 시작한 경우) → 현재 층 새로 생성
             self._load_floor()
+
+    def _reveal_player(self):
+        """플레이어 위치 기준 시야 갱신 — 시야 반경(장비) 반영 + 진실의 시야면 전체 공개."""
+        if self.player is None or self.dungeon is None:
+            return
+        if self.player.full_vision:
+            self.dungeon.reveal_all()
+        else:
+            self.dungeon.update_visibility(self.player.x, self.player.y,
+                                           radius=self.player.total_vision)
 
     def _revive_to_town(self):
         """소프트 사망 → 마을 복귀. 재시작 시 도달 층을 재도전할 수 있다

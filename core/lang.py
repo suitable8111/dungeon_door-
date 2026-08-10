@@ -1644,6 +1644,7 @@ _T: dict[str, dict[str, str]] = {
     'inv_type_acc':    {'ko': '장신구', 'en': 'Accessory', 'ja': '装飾品', 'zh': '饰品', 'ru': 'Аксессуар'},
     'inv_type_boots':  {'ko': '신발', 'en': 'Boots', 'ja': '靴', 'zh': '鞋子', 'ru': 'Обувь'},
     'inv_type_cons':   {'ko': '소비', 'en': 'Consumable', 'ja': '消費', 'zh': '消耗品', 'ru': 'Расходник'},
+    'inv_vs_equipped': {'ko': '장착 대비', 'en': 'vs equipped', 'ja': '装備比較', 'zh': '对比装备', 'ru': 'против экип.'},
     'inv_type_book':   {'ko': '스킬북', 'en': 'Skill Book', 'ja': 'スキルブック', 'zh': '技能书', 'ru': 'Книга навыка'},
     'inv_discard_btn': {'ko': '🗑 버리기', 'en': '🗑 Discard', 'ja': '🗑 捨てる', 'zh': '🗑 丢弃', 'ru': '🗑 Выбросить'},
     'inv_del_hint':    {'ko': 'Del:버리기', 'en': 'Del:Discard', 'ja': 'Del:捨てる', 'zh': 'Del:丢弃', 'ru': 'Del:Выбросить'},

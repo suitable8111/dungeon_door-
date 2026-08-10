@@ -205,19 +205,13 @@ def _place_hazards(dungeon, rooms, floor_level):
                   if is_floor(x, y) and (x, y) not in protected and (x, y) not in used]
     random.shuffle(room_spots)
     n_room = min(8, 2 + floor_level // 50)
-    for x, y in room_spots[:n_room]:
-        dungeon.tiles[y][x] = Tile.trap(random.choice((TileType.WEB_TRAP,
-                                                       TileType.CURSE_TRAP)))
-        used.add((x, y))
-    for x, y in room_spots[n_room:n_room + random.randint(1, 2)]:
-        if (x, y) not in used:
-            dungeon.tiles[y][x] = Tile.button(); used.add((x, y))
-    # 4) 미스터리 룬(도박) — 밟으면 랜덤 버프/디버프. 2~3개, 통로에도 흩뿌림
+    # 고정 슬로우/저주 트랩·압력판은 폐지 — 대신 방/통로 무작위 위치에 미스터리 룬만
+    # (한번 위치를 알면 무조건 피해버리는 결정론적 나쁜 트랩 제거, 도박 요소로 대체)
     rune_pool = [(x, y) for r in rooms
                  for y in range(r.y, r.y + r.h) for x in range(r.x, r.x + r.w)
                  if is_floor(x, y) and (x, y) not in protected and (x, y) not in used]
     random.shuffle(rune_pool)
-    for x, y in rune_pool[:random.randint(2, 3)]:
+    for x, y in rune_pool[:random.randint(4, 6)]:
         dungeon.tiles[y][x] = Tile.trap(TileType.RUNE_TRAP)
         used.add((x, y))
 

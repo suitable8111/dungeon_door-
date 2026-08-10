@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.14.0 — Gear, vision & UI polish
+
+- **Vision helmets** — new head gear grants extended sight (Scout Helm, +4), and the rare **Helm of True Sight** reveals the entire floor.
+- **No more fixed slow/curse traps or pressure plates** — those predictable, always-avoided hazards are gone. In their place, more **Mystery Runes** (random buff/debuff gambles).
+- **No forced deposit** — returning to town no longer dumps your inventory into storage. Use storage manually when you want.
+- **Item tooltips & comparison** — in the inventory, hover or select an item to see its full stats, and equipment shows a **green/red comparison** vs what you have equipped.
+- **Detailed equipment screen** — the gear screen now lays out your full character stats (HP · ATK · DEF · EVA · Move · Attack Speed · Sight).
+
 ## v2.13.0 — Quality of life & dopamine
 
 - **Soft death** — dying no longer ends your run. Press **R** to revive in town, then dive back to the floor you reached and try again.

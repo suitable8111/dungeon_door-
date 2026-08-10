@@ -1600,6 +1600,23 @@ class HUD:
             return 'gather'
         return 'consume'
 
+    @staticmethod
+    def _item_stats(item):
+        """아이템의 능력치 dict {ATK,DEF,SPD,SIGHT,HP}. 강화 보정 포함."""
+        if item is None:
+            return {}
+        e, v = item.effect, item.value
+        enh = getattr(item, 'enhance_level', 0)
+        s = {}
+        if e == 'attack_up':    s['ATK'] = v + enh
+        elif e == 'defense_up': s['DEF'] = v + enh
+        elif e == 'stat_up_all': s['ATK'] = v + enh; s['DEF'] = v + enh
+        elif e == 'speed_up':   s['SPD'] = v
+        elif e == 'vision':     s['SIGHT'] = v
+        elif e == 'true_sight': s['SIGHT'] = 99
+        elif e == 'heal':       s['HP'] = v
+        return s
+
     def render_inventory(self, screen, player, sel, mouse_pos=(0, 0),
                          drag_idx=None, drag_pos=(0, 0),
                          view=None, cat=0, cat_counts=None):
@@ -1725,34 +1742,60 @@ class HUD:
                 pygame.draw.circle(screen, (34, 34, 52),
                                    (sx + (cell-2)//2, sy + (cell-2)//2), 3)
 
-        # 선택된 아이템 정보
+        # 선택/호버 아이템 상세 — 능력치 + 장비 비교(현재 장착 대비 델타)
         info_y = gy + rows * cell + pad + 4
         pygame.draw.line(screen, (50, 50, 80), (bx+12, info_y), (bx+pw-12, info_y))
-        if sel < len(view):
-            item = inv[view[sel]]
+        focus = sel
+        for _i in range(min(len(view), cols * rows)):
+            _r, _c = divmod(_i, cols)
+            if pygame.Rect(gx + _c*cell, gy + _r*cell, cell-2, cell-2).collidepoint(mouse_pos):
+                focus = _i; break
+        if focus < len(view):
+            item = inv[view[focus]]
             type_map = {'weapon': t('inv_type_weapon'), 'armor': t('inv_type_armor'),
                         'head': t('inv_type_head'), 'off_hand': t('inv_type_off'),
                         'accessory': t('inv_type_acc'), 'boots': t('inv_type_boots'),
                         'consumable': t('inv_type_cons'), 'skillbook': t('inv_type_book')}
             tname = type_map.get(item.item_type, item.item_type)
-            info = f"{item.name}  [{tname}]"
-            if item.equip_slot:
-                if item.effect == 'stat_up_all':
-                    info += f"  ATK+{item.value} DEF+{item.value}"
-                elif item.effect == 'attack_up':
-                    info += f"  ATK +{item.value}"
-                elif item.effect == 'defense_up':
-                    info += f"  DEF +{item.value}"
-            elif item.effect == 'heal':
-                info += f"  HP +{item.value}"
-            # 내구도 (방어구)
+            # 1줄: 이름 [종류] +강화 x개수 내구도
+            head = f"{item.name}  [{tname}]"
+            if getattr(item, 'enhance_level', 0): head += f"  [+{item.enhance_level}]"
+            if getattr(item, 'count', 1) > 1:     head += f"  x{item.count}"
             if getattr(item, 'max_durability', 0) > 0:
-                info += ('  ' + t('broken_tag') if item.broken
+                head += ('  ' + t('broken_tag') if item.broken
                          else f'  🛡{item.durability}/{item.max_durability}')
-            info_s = self.font_sm.render(info, True,
-                                         (255, 80, 60) if getattr(item, 'broken', False)
-                                         else item.color)
-            screen.blit(info_s, (bx + (pw - info_s.get_width()) // 2, info_y + 6))
+            hs = self.font_sm.render(head, True,
+                                     (255, 80, 60) if item.broken else item.color)
+            screen.blit(hs, (bx + (pw - hs.get_width()) // 2, info_y + 4))
+            # 2줄: 능력치
+            stats = HUD._item_stats(item)
+            if stats:
+                txt = "   ".join(f"{k} " + ("ALL" if (k == 'SIGHT' and v >= 99) else f"+{v}")
+                                 for k, v in stats.items())
+                ss = self.font_sm.render(txt, True, (200, 210, 235))
+                screen.blit(ss, (bx + (pw - ss.get_width()) // 2, info_y + 19))
+            # 3줄: 장비 비교 (같은 슬롯 장착 아이템 대비) — 미장착 장비만
+            equipped_now = any(e is item for e in player.equipment.values())
+            if item.equip_slot and not equipped_now:
+                eq = player.equipment.get(item.equip_slot)
+                new_s, old_s = HUD._item_stats(item), HUD._item_stats(eq)
+                segs = []
+                for k in ('ATK', 'DEF', 'SPD', 'SIGHT', 'HP'):
+                    if k not in new_s and k not in old_s:
+                        continue
+                    dv = new_s.get(k, 0) - old_s.get(k, 0)
+                    if dv == 0:
+                        continue
+                    col = (120, 230, 140) if dv > 0 else (235, 110, 100)
+                    segs.append((f"{k} {'+' if dv > 0 else ''}{dv}", col))
+                if segs:
+                    lbl = self.font_sm.render(t('inv_vs_equipped') + " ", True, (150, 150, 175))
+                    total = lbl.get_width() + sum(self.font_sm.size(s2)[0] + 10 for s2, _ in segs)
+                    xx = bx + (pw - total) // 2
+                    screen.blit(lbl, (xx, info_y + 35)); xx += lbl.get_width()
+                    for s2, col in segs:
+                        cs = self.font_sm.render(s2, True, col)
+                        screen.blit(cs, (xx, info_y + 35)); xx += cs.get_width() + 10
 
         # ── 버리기 존 ────────────────────────────────────────────────
         trash_rect = pygame.Rect(bx + pw - 130, by + ph - 42, 122, 34)
@@ -2953,16 +2996,30 @@ class HUD:
                 screen.blit(none_s, (sx + (SW - none_s.get_width()) // 2,
                                      sy + SH - none_s.get_height() - 4))
 
-        # ── 스탯 + 힌트 ─────────────────────────────────────────────
-        sep_y = by + ph - 56
+        # ── 상세 캐릭터 스탯 (2줄 그리드) + 힌트 ─────────────────────
+        sep_y = by + ph - 58
         pygame.draw.line(screen, (50, 50, 80), (bx+12, sep_y), (bx+pw-12, sep_y))
-        stat_str = (f"ATK {player.total_attack}   DEF {player.total_defense}   "
-                    f"SPD {player.attack_speed:.2f}   EVA {player.evasion}%")
-        stat_s = self.font_sm.render(stat_str, True, (130, 130, 160))
-        screen.blit(stat_s, (bx + (pw - stat_s.get_width()) // 2, sep_y + 6))
+        vis = player.total_vision
+        row1 = [('HP', str(player.max_hp)), ('ATK', str(player.total_attack)),
+                ('DEF', str(player.total_defense)), ('EVA', f"{player.total_evasion}%")]
+        row2 = [('SPD', f"{player.total_move_speed:.2f}"),
+                ('ASPD', f"{player.total_attack_speed:.2f}"),
+                ('SIGHT', 'MAX' if player.full_vision else str(vis))]
+        def _draw_stat_row(cells, ry):
+            segs = []
+            for k, v in cells:
+                segs.append((self.font_sm.render(k + ' ', True, (120, 130, 160)),
+                             self.font_sm.render(v, True, (225, 232, 245))))
+            total = sum(a.get_width() + b.get_width() + 18 for a, b in segs) - 18
+            xx = bx + (pw - total) // 2
+            for a, b in segs:
+                screen.blit(a, (xx, ry)); xx += a.get_width()
+                screen.blit(b, (xx, ry)); xx += b.get_width() + 18
+        _draw_stat_row(row1, sep_y + 6)
+        _draw_stat_row(row2, sep_y + 22)
 
         hint_s = self.font_sm.render(t('equip_hint'), True, (80, 80, 110))
-        screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 22))
+        screen.blit(hint_s, (bx + (pw - hint_s.get_width()) // 2, by + ph - 20))
 
     # ------------------------------------------------------------------ #
     def render_discard_confirm(self, screen, item_name, yes_rect, no_rect,

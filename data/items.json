@@ -923,5 +923,37 @@
     "name_ja": "豚バラ",
     "name_zh": "五花肉",
     "name_ru": "Свинина"
+  },
+  "scout_helm": {
+    "name": "정찰 투구",
+    "color": [
+      150,
+      200,
+      140
+    ],
+    "type": "head",
+    "effect": "vision",
+    "value": 4,
+    "name_en": "Scout Helm",
+    "name_ja": "斥候の兜",
+    "name_zh": "斥候头盔",
+    "name_ru": "Шлем разведчика",
+    "sp_reduce": 0.02
+  },
+  "true_sight_helm": {
+    "name": "진안의 투구",
+    "color": [
+      235,
+      215,
+      120
+    ],
+    "type": "head",
+    "effect": "true_sight",
+    "value": 0,
+    "name_en": "Helm of True Sight",
+    "name_ja": "真眼の兜",
+    "name_zh": "真视头盔",
+    "name_ru": "Шлем истинного зрения",
+    "sp_reduce": 0.04
   }
 }
