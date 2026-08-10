@@ -1699,10 +1699,39 @@ class Game:
             self.animator.add(CalloutAnim(x, y, t('hazard_curse'), (190, 120, 235)))
             self.animator.particles.emit_death(x, y, (150, 90, 210))
             self.audio.play('hit')
+        elif tt == TileType.RUNE_TRAP:
+            self._trigger_rune(x, y)
         elif tt == TileType.BUTTON:
             self._press_button(x, y)
         elif tt == TileType.ALTAR:
             self._trigger_altar(x, y)
+
+    def _trigger_rune(self, x, y):
+        """미스터리 룬 — 밟으면 랜덤 버프/디버프(도박). 소모형(1회)."""
+        p = self.player
+        roll = random.random()
+        if roll < 0.28:        # 이동속도 상승 (좋음)
+            p.move_buff_ms = max(p.move_buff_ms, 5000); p.move_buff_pct = 0.45
+            msg, col = t('rune_haste'), (120, 235, 160)
+            self.animator.particles.emit_levelup(x, y); self.audio.play('levelup')
+        elif roll < 0.56:      # 공격력 상승 (좋음)
+            p.atk_bonus_ms = max(p.atk_bonus_ms, 6000); p.atk_bonus_pct = max(p.atk_bonus_pct, 0.45)
+            msg, col = t('rune_power'), (255, 205, 110)
+            self.animator.particles.emit_combo_tier(x, y, (255, 205, 110)); self.audio.play('tier_up')
+        elif roll < 0.78:      # 슬로우 (나쁨)
+            p.slowed_ms = max(p.slowed_ms, 2600)
+            msg, col = t('rune_slow'), (150, 190, 230)
+            self.animator.particles.emit_basic_hit(x, y); self.audio.play('hit')
+        else:                  # 공격력 저하 (나쁨)
+            p.atk_down_ms = max(p.atk_down_ms, 4200); p.atk_down_pct = max(p.atk_down_pct, 0.28)
+            msg, col = t('rune_weak'), (200, 130, 235)
+            self.animator.particles.emit_death(x, y, (170, 110, 220)); self.audio.play('hit')
+        self.animator.add(CalloutAnim(x, y, msg, col))
+        self.animator.add(BannerAnim(msg, col, y=150, size=22, duration_ms=900))
+        # 소모: 룬은 1회용 → 바닥 타일로
+        from map.tile import Tile
+        self.dungeon.tiles[y][x] = Tile.floor()
+        self._start_punch_zoom(0.03, 90)
 
     def _press_button(self, x, y):
         """압력판 — 보상(골드+전투 함성 버프) + 이동벽 전부 개방. 1회성."""
@@ -2204,11 +2233,8 @@ class Game:
         self._dialog = None
         self._max_floor_reached = 1
         self._load_floor(is_new_game=True)
-        # 시작 지원: 귀환 주문서 1장 (창고에 모아둔 유산을 찾으러 갈 수 있게)
-        from entities.item import Item
-        if 'return_scroll' in self._item_data:
-            d = dict(self._item_data['return_scroll']); d['key'] = 'return_scroll'
-            self.player.inventory.append(Item(0, 0, d))
+        # 시작 지원: 마을 귀환 포탈 5개 (누적 아이템 — 마을·던전을 오갈 수 있게)
+        self._give_inventory_item('return_scroll', count=5)
         self.state = 'playing'
         self._maybe_begin_coop()   # co-op 대기 중이면 마을 진입 + 세션 부착
 
@@ -2780,7 +2806,7 @@ class Game:
                         self._process(action)
             elif self.state == 'dead':
                 if t == 'ultimate' and action.get('key') == 'R':
-                    self._new_game()
+                    self._revive_to_town()
 
     def _handle_menu_action(self, action):
         if self._menu_page == 'settings':
@@ -4460,47 +4486,44 @@ class Game:
                 else:
                     self.messages.append((t('combo_need_skill_level', item.name, slv_req), 'warn'))
             return
-        if len(self.player.inventory) < self.player.max_inventory:
-            self.player.inventory.append(item)
+        if self.player.add_item(item):
             self.dungeon.remove_item(item)
             self.messages.append((t('pickup', item.name), 'good'))
             self.audio.play('pickup')
         else:
             self.messages.append((t('inv_full'), 'warn'))
 
+    def _consumables(self):
+        """퀵슬롯 대상 = 소모품(물약·주문서 등)만. 장비는 인벤토리(I)에서 관리."""
+        return [it for it in self.player.inventory if it.item_type == 'consumable']
+
     def _use_item(self, slot):
-        if slot >= len(self.player.inventory):
+        """퀵슬롯 슬롯(0~4) → 소모품 목록의 n번째. 사용 시 개수 1 차감(스택)."""
+        cons = self._consumables()
+        if slot >= len(cons):
             return False
-        item = self.player.inventory[slot]
-        if item.equip_slot:
-            # 장비 아이템: equip이 인벤토리 이동을 직접 처리
-            msg = item.use(self.player)
-            self.messages.append((msg, 'good'))
-            self._equip_burst(item)
-            self.audio.play('use_item')
-        elif item.effect == 'teleport':
-            self.player.inventory.pop(slot)
+        item = cons[slot]
+        if item.effect == 'teleport':
             self._use_teleport()
         elif item.effect == 'town_portal':
             if self._in_town:
                 return False                   # 마을에서는 사용 불가
-            self.player.inventory.pop(slot)
             self._spawn_town_portal()
         elif item.effect == 'repair':
-            self.player.inventory.pop(slot)
             self._use_repair_kit()
         elif item.effect == 'whirlwind':
-            self.player.inventory.pop(slot)
             self._skill_whirl(no_cooldown=True)
         elif item.effect == 'bomb':
             if self._in_town:
                 return False               # 마을에선 사용 불가
-            self.player.inventory.pop(slot)
             self._throw_bomb()
         else:
-            self.player.inventory.pop(slot)
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
+        # 스택 개수 차감 → 0이면 제거
+        item.count -= 1
+        if item.count <= 0 and item in self.player.inventory:
+            self.player.inventory.remove(item)
         return True
 
     # ═════════════════ 마을 시스템 ═══════════════════════════════════
@@ -4923,6 +4946,22 @@ class Game:
             # 세션 없음 (마을에서 시작한 경우) → 현재 층 새로 생성
             self._load_floor()
 
+    def _revive_to_town(self):
+        """소프트 사망 → 마을 복귀. 재시작 시 도달 층을 재도전할 수 있다
+        (포탈 재진입 시 해당 층을 새로 생성). 캐릭터·레벨·창고는 유지."""
+        if self.player is None:
+            self._new_game()
+            return
+        self.player.hp = self.player.max_hp
+        self._downed = False
+        self._spectating = False
+        death_floor = int(self.floor)
+        self._enter_town()             # 소지품→창고 + 마을 전환 + 자동저장(in_town=True)
+        self._dungeon_session = None   # 포탈 재진입 시 도달 층을 새로 생성
+        self.floor = death_floor       # 재하강은 도달 층부터
+        self.state = 'playing'
+        self.messages.append((t('revive_town', death_floor), 'good'))
+
     # 스택 가능(개수 누적) 아이템 타입 — 소모품·스킬북·강화석 등 동일 아이템
     _STACK_TYPES = {'consumable', 'skillbook', 'enhance_stone'}
 
@@ -4971,12 +5010,17 @@ class Game:
         """소지품 전량을 영구 창고로 이전하고 저장. 이전 개수 반환."""
         from core.save_load import save_storage
         moved = 0
+        full = False
         for it in list(self.player.inventory):
-            if not self._storage_add(it.key, it.enhance_level, it.durability):
+            for _ in range(getattr(it, 'count', 1)):   # 스택은 개수만큼 이전
+                if not self._storage_add(it.key, it.enhance_level, it.durability):
+                    full = True
+                    break
+                moved += 1
+            if full:
                 self.messages.append((t('storage_cap_full'), 'warn'))
                 break
             self.player.inventory.remove(it)
-            moved += 1
         if moved:
             save_storage(self._storage, self._storage_cap)
         return moved
@@ -5012,7 +5056,7 @@ class Game:
                 d['enhance_level'] = entry.get('enhance_level', 0)
                 if 'durability' in entry:
                     d['durability'] = entry['durability']
-                self.player.inventory.append(Item(0, 0, d))
+                self.player.add_item(Item(0, 0, d))
             cnt = entry.get('count', 1)                    # 스택은 1개씩 인출
             if cnt > 1:
                 entry['count'] = cnt - 1
@@ -5426,11 +5470,11 @@ class Game:
         self._gold_flash_ms = 220
         pkey = self._CROP_PRODUCE.get(crop)
         added = None
-        if pkey and pkey in self._item_data and len(self.player.inventory) < self.player.max_inventory:
+        if pkey and pkey in self._item_data:
             d = dict(self._item_data[pkey]); d['key'] = pkey
             it = Item(0, 0, d)
-            self.player.inventory.append(it)
-            added = it.name
+            if self.player.add_item(it):
+                added = it.name
         plot['crop'] = None; plot['stage'] = 0; plot['watered'] = False
         if added:
             self.messages.append((t('farm_harvest_item', added, gold), 'good'))
@@ -5620,16 +5664,15 @@ class Game:
     # 고대 유물(장신구) 교환 3단계 — (아이템 key, 요구 물고기 포인트)
     ANGLER_RELICS = (('relic_charm', 20), ('relic_pendant', 48), ('relic_crown', 95))
 
-    def _give_inventory_item(self, key):
-        """아이템 1개를 인벤토리에 지급. 성공 시 이름, 실패(꽉참/없음) 시 None."""
+    def _give_inventory_item(self, key, count=1):
+        """아이템 count개 인벤토리 지급(소모품은 스택). 성공 시 이름, 실패 시 None."""
         from entities.item import Item
         if key not in self._item_data:
             return None
-        if len(self.player.inventory) >= self.player.max_inventory:
-            return None
-        d = dict(self._item_data[key]); d['key'] = key
+        d = dict(self._item_data[key]); d['key'] = key; d['count'] = count
         it = Item(0, 0, d)
-        self.player.inventory.append(it)
+        if not self.player.add_item(it):
+            return None
         return it.name
 
     def _open_fishing(self):
@@ -6096,7 +6139,7 @@ class Game:
             if key in self._item_data and \
                     len(self.player.inventory) < self.player.max_inventory:
                 d = dict(self._item_data[key]); d['key'] = key
-                self.player.inventory.append(Item(0, 0, d))
+                self.player.add_item(Item(0, 0, d))
         self.messages.append((t('quest_reward', qtext(qid, 'name'), gold), 'good'))
         self._quest_clear_ms   = 2200
         self._quest_clear_name = qtext(qid, 'name')
@@ -6313,7 +6356,7 @@ class Game:
             if key in self._item_data and \
                     len(self.player.inventory) < self.player.max_inventory:
                 d = dict(self._item_data[key]); d['key'] = key
-                self.player.inventory.append(Item(0, 0, d))
+                self.player.add_item(Item(0, 0, d))
         self.messages.append((t('quest_reward', qtext(qid, 'name'), gold), 'good'))
         # ── 화려한 클리어 연출 ──────────────────────────────────────
         self._quest_clear_ms   = 2200
@@ -6587,7 +6630,7 @@ class Game:
         if len(self.player.inventory) >= self.player.max_inventory:
             self.messages.append((t('inv_full'), 'warn')); return
         self.player.gold -= price
-        self.player.inventory.append(item)
+        self.player.add_item(item)
         self.dungeon.shop_items.pop(slot)
         self.messages.append((t('buy_ok', item.name, price), 'good'))
         self.audio.play('buy')
@@ -8377,7 +8420,7 @@ class Game:
                 self._exit_burning_stage(survived=False)
             else:
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
-                delete_save(self._save_slot)
+                # 소프트 사망: 세이브 유지 → 재시작 시 마을로 복귀, 도달 층 재도전 가능
                 self.audio.play('death')
                 self._ach_unlock('ACH_DIE')
                 self.state = 'dead'
@@ -8799,7 +8842,7 @@ class Game:
         elif tt in (TileType.CONVEYOR_LEFT, TileType.CONVEYOR_RIGHT):
             self._draw_conveyor(s, x, y, lit, tt)
         elif tt in (TileType.SPIKE_TRAP, TileType.WEB_TRAP,
-                    TileType.CURSE_TRAP, TileType.BUTTON):
+                    TileType.CURSE_TRAP, TileType.RUNE_TRAP, TileType.BUTTON):
             self._draw_trap(s, x, y, lit, tt, tile)
         elif tt == TileType.SHIFT_WALL:
             self._draw_shift_wall(s, x, y, lit, tile)
@@ -9161,6 +9204,17 @@ class Game:
             pygame.draw.circle(s, C((120, 60, 180)), (cx, cy), 4)
             pygame.draw.line(s, mc, (cx - 4, cy - 4), (cx + 4, cy + 4), 1)
             pygame.draw.line(s, mc, (cx + 4, cy - 4), (cx - 4, cy + 4), 1)
+        elif tt == TileType.RUNE_TRAP:
+            # 미스터리 룬 — 색이 순환하는 마름모 + '?' (도박)
+            hue = (pygame.time.get_ticks() * 0.12) % 360
+            import colorsys
+            rr, gg, bb = colorsys.hsv_to_rgb(hue / 360.0, 0.55, 1.0)
+            rc = C((int(rr * 255), int(gg * 255), int(bb * 255)))
+            dia = [(cx, cy - 9), (cx + 9, cy), (cx, cy + 9), (cx - 9, cy)]
+            pygame.draw.polygon(s, C((40, 40, 60)), dia)
+            pygame.draw.polygon(s, rc, dia, 2)
+            q = self.hud.font_sm.render('?', True, rc)
+            s.blit(q, (cx - q.get_width() // 2, cy - q.get_height() // 2))
         elif tt == TileType.BUTTON:
             gc = C((255, 205, 90))
             pygame.draw.circle(s, C((90, 70, 30)), (cx, cy), 9)

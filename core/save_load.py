@@ -154,7 +154,8 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'pet_stones': player.pet_stones,
             'inventory': [
                 {'key': item.key, 'enhance_level': item.enhance_level,
-                 'durability': item.durability}
+                 'durability': item.durability,
+                 'count': getattr(item, 'count', 1)}
                 for item in player.inventory
             ],
             'equipment': {

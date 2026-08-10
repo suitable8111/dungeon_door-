@@ -1293,14 +1293,16 @@ class HUD:
                 y += 4
         y += 2
 
-        # ── 빠른 아이템 (슬롯 1-5) ──────────────────────────────────
+        # ── 빠른 물약 (슬롯 1-5) — 소모품만, 개수 누적 표시 ─────────────
         sec_header('sec_inv', LIGHT_GRAY)
+        cons = [it for it in player.inventory if it.item_type == 'consumable']
         for i in range(5):
-            if i < len(player.inventory):
-                item = player.inventory[i]
-                nm = item.name if len(item.name) <= 9 else item.name[:8] + '…'
+            if i < len(cons):
+                item = cons[i]
+                nm = item.name if len(item.name) <= 8 else item.name[:7] + '…'
+                cnt = f" x{item.count}" if getattr(item, 'count', 1) > 1 else ""
                 pygame.draw.rect(screen, (20, 22, 38), (rx+6, y-1, pw-12, 14))
-                txt = self.font_sm.render(f"[{i+1}] {nm}", True, item.color)
+                txt = self.font_sm.render(f"[{i+1}] {nm}{cnt}", True, item.color)
             else:
                 txt = self.font_sm.render(f"[{i+1}] ---", True, (40, 40, 60))
             screen.blit(txt, (rx+8, y)); y += 14
@@ -1695,6 +1697,15 @@ class HUD:
                     pygame.draw.rect(screen, item.color, (ico_x, ico_y, ico_size, ico_size), border_radius=3)
                     pygame.draw.rect(screen, tuple(max(0, c-60) for c in item.color),
                                      (ico_x, ico_y, ico_size, ico_size), 1, border_radius=3)
+                # 개수 뱃지 (스택 아이템 우하단)
+                _cnt = getattr(item, 'count', 1)
+                if _cnt > 1:
+                    cb = self.font_sm.render(f"x{_cnt}", True, (255, 236, 150))
+                    cbg = pygame.Rect(ico_x + ico_size - cb.get_width() - 2,
+                                      ico_y + ico_size - cb.get_height() - 1,
+                                      cb.get_width() + 3, cb.get_height() + 1)
+                    pygame.draw.rect(screen, (12, 14, 24), cbg, border_radius=2)
+                    screen.blit(cb, (cbg.x + 1, cbg.y))
                 # 이름 (2줄로 줄임)
                 name = item.name
                 if len(name) > 5:

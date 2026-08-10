@@ -215,6 +215,18 @@ class Player(Entity):
         if it.durability <= 0:
             self.just_broken.append(it)
 
+    def add_item(self, item) -> bool:
+        """인벤토리에 추가 — 소모품은 같은 종류에 개수 누적(스택). 반환: 성공."""
+        if getattr(item, 'is_stackable', False):
+            for e in self.inventory:
+                if getattr(e, 'is_stackable', False) and e.key == item.key:
+                    e.count += getattr(item, 'count', 1)
+                    return True
+        if len(self.inventory) < self.max_inventory:
+            self.inventory.append(item)
+            return True
+        return False
+
     def tick_debuffs(self, dt_ms: int):
         if self.cursed_ms > 0:
             self.cursed_ms = max(0, self.cursed_ms - dt_ms)
@@ -359,6 +371,8 @@ class Player(Entity):
             d['enhance_level'] = enh
             if isinstance(entry, dict) and 'durability' in entry:
                 d['durability'] = entry['durability']
+            if isinstance(entry, dict) and 'count' in entry:
+                d['count'] = entry['count']
             return Item(0, 0, d)
 
         p.inventory = []

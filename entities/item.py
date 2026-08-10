@@ -14,6 +14,7 @@ class Item:
         self.value        = data.get('value', 0)
         self.enhance_level = data.get('enhance_level', 0)  # 0~18
         self.sp_reduce     = data.get('sp_reduce', 0.0)    # SP 소모 경감 비율
+        self.count         = max(1, int(data.get('count', 1)))  # 소모품 스택 개수
 
         # ── 내구도 (방어구 4종 전용) — 피격마다 닳고 0이면 효과 정지 ──
         self.max_durability = Item.calc_max_durability(data)
@@ -40,6 +41,11 @@ class Item:
     def broken(self) -> bool:
         """파손 — 아이템은 남지만 모든 스탯 효과가 정지된다 (수리 가능)."""
         return self.max_durability > 0 and self.durability <= 0
+
+    @property
+    def is_stackable(self) -> bool:
+        """소모품은 개수로 누적(퀵슬롯 낭비 방지). 강화/내구 있는 장비는 개별."""
+        return self.item_type == 'consumable'
 
     @property
     def name(self) -> str:

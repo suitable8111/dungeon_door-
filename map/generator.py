@@ -212,6 +212,14 @@ def _place_hazards(dungeon, rooms, floor_level):
     for x, y in room_spots[n_room:n_room + random.randint(1, 2)]:
         if (x, y) not in used:
             dungeon.tiles[y][x] = Tile.button(); used.add((x, y))
+    # 4) 미스터리 룬(도박) — 밟으면 랜덤 버프/디버프. 2~3개, 통로에도 흩뿌림
+    rune_pool = [(x, y) for r in rooms
+                 for y in range(r.y, r.y + r.h) for x in range(r.x, r.x + r.w)
+                 if is_floor(x, y) and (x, y) not in protected and (x, y) not in used]
+    random.shuffle(rune_pool)
+    for x, y in rune_pool[:random.randint(2, 3)]:
+        dungeon.tiles[y][x] = Tile.trap(TileType.RUNE_TRAP)
+        used.add((x, y))
 
     # 4) shift 테마: 방 하나를 파도 관문으로
     if theme_fx(floor_level).get('shift'):
@@ -518,6 +526,11 @@ def _populate(dungeon, rooms, floor_level, enemy_data, is_boss_floor):
         bdata = _scale_enemy(enemy_data[boss_key], floor_level)
         bdata['key']     = boss_key
         bdata['is_boss'] = True
+        # 저층 보스 밸런스: 5층 0.55 → 25층 1.0 로 완만히 상승 (초반 보스가 과하게 셈)
+        if floor_level < 25:
+            dampen = max(0.55, min(1.0, 0.55 + (floor_level - 5) * 0.0225))
+            bdata['hp']     = max(1, int(bdata['hp']     * dampen))
+            bdata['attack'] = max(1, int(bdata['attack'] * dampen))
         bcx, bcy = boss_room.center
         boss = Enemy(bcx, bcy, bdata)
         dungeon.enemies.append(boss)

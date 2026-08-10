@@ -15,6 +15,7 @@ class TileType(Enum):
     SPIKE_TRAP = auto()         # 밟으면 피해
     WEB_TRAP = auto()           # 밟으면 슬로우
     CURSE_TRAP = auto()         # 밟으면 공격력 저하
+    RUNE_TRAP = auto()          # 미스터리 룬 — 밟으면 랜덤 버프/디버프(도박)
     BUTTON = auto()             # 압력판 — 보상 + 이동벽 개방
     SHIFT_WALL = auto()         # 실시간으로 열리고 닫히는 벽(팝업 기둥)
     CRACKED_WALL = auto()       # 균열 벽 — 폭탄/강타로 부수면 통로가 됨
@@ -25,7 +26,8 @@ class TileType(Enum):
 
 
 # 밟을 때 효과가 발동하는 트랩
-TRAP_TYPES = (TileType.SPIKE_TRAP, TileType.WEB_TRAP, TileType.CURSE_TRAP)
+TRAP_TYPES = (TileType.SPIKE_TRAP, TileType.WEB_TRAP, TileType.CURSE_TRAP,
+              TileType.RUNE_TRAP)
 
 
 @dataclass

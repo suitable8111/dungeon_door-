@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.13.0 — Quality of life & dopamine
+
+- **Soft death** — dying no longer ends your run. Press **R** to revive in town, then dive back to the floor you reached and try again.
+- **Potion quick slots** — the quick bar (1–5) now holds **consumables only**, and identical potions **stack with a count** (no more wasted slots). Equip gear from the inventory (I).
+- **Start with 5 Town Portals** — new characters carry 5 return scrolls (one stacked slot) to hop between town and dungeon.
+- **Mystery Runes** — new gamble tiles scattered around: step on one for a **random** buff or debuff (speed↑ / attack↑ / slow / attack↓). Risk it?
+- **Easier early bosses** — floor-5 boss dialed down to ~55% (ramping back to full by floor 25).
+
 ## v2.12.3 — Steam integration (achievements & leaderboards actually connect)
 
 - **Bundled the missing Steam native libraries** (`steam_api64.dll`, `libsteam_api.dylib`, and a freshly-built universal `SteamworksPy.dylib` for macOS). Previously the builds shipped *without* these, so Steam never connected — achievements stayed local-only and leaderboards were always "offline".
