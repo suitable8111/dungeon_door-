@@ -118,6 +118,14 @@ jobs:
         run: |
           pip install pygame-ce pyinstaller pillow
 
+      # steamworks 파이썬 패키지가 있어야 spec이 번들에 포함(도전과제/리더보드).
+      # 네이티브 dylib(SteamworksPy.dylib/libsteam_api.dylib)은 steam_libs/에 커밋됨.
+      - name: Install SteamworksPy (optional)
+        continue-on-error: true
+        run: |
+          pip install git+https://github.com/philippj/SteamworksPy.git
+          echo "steam_libs:"; ls -la steam_libs/ || true
+
       - name: Generate icns icon
         run: |
           python -c "

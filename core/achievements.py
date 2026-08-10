@@ -78,11 +78,31 @@ class AchievementManager:
             self._sync_all_to_steam()
 
     # ── Steam (옵셔널) ────────────────────────────────────────────────
+    APP_ID = '4718470'
+
+    def _ensure_appid(self):
+        """SteamworksPy는 cwd의 steam_appid.txt를 필수로 읽는다(없으면 예외).
+        스팀 실행 시 cwd=설치폴더(쓰기가능)이므로 여기에 써준다. 프리즈 빌드는
+        실행파일 폴더에도 시도."""
+        import sys
+        for d in (os.getcwd(),
+                  os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else None):
+            if not d:
+                continue
+            try:
+                p = os.path.join(d, 'steam_appid.txt')
+                if not os.path.isfile(p):
+                    with open(p, 'w') as f:
+                        f.write(self.APP_ID)
+            except Exception:
+                pass
+
     def _init_steam(self):
         try:
-            from steamworks import STEAMWORKS
+            from steamworks import STEAMWORKS   # 미설치(dev)면 여기서 중단 — 파일 안 씀
+            self._ensure_appid()
             sw = STEAMWORKS()
-            sw.initialize()   # steam_appid.txt 또는 스팀 실행 환경 필요
+            sw.initialize()   # cwd의 steam_appid.txt 또는 스팀 실행 환경 필요
             sw.UserStats.RequestCurrentStats()
             return sw
         except Exception:

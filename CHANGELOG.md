@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.12.3 — Steam integration (achievements & leaderboards actually connect)
+
+- **Bundled the missing Steam native libraries** (`steam_api64.dll`, `libsteam_api.dylib`, and a freshly-built universal `SteamworksPy.dylib` for macOS). Previously the builds shipped *without* these, so Steam never connected — achievements stayed local-only and leaderboards were always "offline".
+- **Auto-writes `steam_appid.txt`** at startup (required by the Steam binding) and installs SteamworksPy on the macOS build.
+- With this, Steam achievements should pop and global leaderboards should populate on a Steam-launched build.
+
 ## v2.12.2 — Ranking polish & Steam fix
 
 - **Ranking arrows** now draw as real ◀▶ / ▲▼ icons (previously showed as boxes in the pixel font). ◀▶ changes the leaderboard, ▲▼ toggles Global/Friends.
