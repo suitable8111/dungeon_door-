@@ -11,6 +11,10 @@ class Player(Entity):
         super().__init__(x, y, "영웅", hp=30, max_hp=30, attack=5, defense=2)
         # 캐릭터 정체성 (세이브 카드)
         self.char_class = char_class if char_class in CLASSES else 'warrior'
+        self.subclass   = None    # 2차 전직 id (없으면 None) — 되돌릴 수 없음
+        self.subclass_sp_reduce = 0.0  # 전직 SP 경감 보너스
+        self.advance_kills = 0    # 전직 퀘스트: Lv40 이후 처치한 몬스터 수
+        self.advance_boss  = 0    # 전직 퀘스트: Lv40 이후 처치한 보스 수
         self.char_name  = char_name or 'Hero'
         # 외형 커스터마이즈 (피부/헤어스타일/머리색) — 세이브 카드 프리뷰용
         self.appearance = {'skin': 0, 'hair': 0, 'haircol': 0}
@@ -169,7 +173,8 @@ class Player(Entity):
         equip = sum(getattr(it, 'sp_reduce', 0.0)
                     for it in self.equipment.values()
                     if it and not it.broken)
-        return min(0.45, self.level * 0.004 + equip)
+        return min(0.45, self.level * 0.004 + equip
+                   + getattr(self, 'subclass_sp_reduce', 0.0))
 
     @property
     def total_evasion(self) -> int:
@@ -360,6 +365,8 @@ class Player(Entity):
         p.attack_speed  = data.get('attack_speed', 1.0)
         p.evasion       = data.get('evasion', 0)
         p.move_speed    = data.get('move_speed', 1.0)
+        p.advance_kills = data.get('advance_kills', 0)
+        p.advance_boss  = data.get('advance_boss', 0)
         # 던전 증표 (구버전 세이브 안전 기본값)
         _tok = data.get('tokens') or {}
         p.tokens = {'atk': int(_tok.get('atk', 0)),

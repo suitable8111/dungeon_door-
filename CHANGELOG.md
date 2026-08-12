@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.16.0 — Class Advancement (Phase 1)
+
+- **Second-tier classes!** At **level 40**, complete the advancement quest (slay 300 monsters + 3 bosses after Lv40), then visit the new **Class Master** in town to choose your path. **The choice is permanent.**
+  - **Warrior** → Dual Blade / Magic Swordsman
+  - **Archer** → Crossbow Master / Twin Archer
+  - **Mage** → Battle Mage / Speed Mage
+  - *(Axeman advancement coming soon)*
+- Each advancement grants permanent stat gains suited to its style (HP / ATK / DEF / speed / evasion / SP efficiency) and changes your displayed class.
+- *(Phase 2 will add each subclass's unique skills & ultimate.)*
+
 ## v2.15.1 — Ultimate timing & readout
 
 - **Cooldown now starts *after* the effect ends** — the ultimate's cooldown timer only begins once its duration (15s / 60s) runs out, so total downtime is duration + cooldown.

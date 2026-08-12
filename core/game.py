@@ -470,6 +470,8 @@ class Game:
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
         self._rank_lb_idx = 0        # 랭킹: 현재 리더보드 탭
         self._rank_mode = 'global'   # 랭킹: 전세계/친구
+        self._advance_idx = 0        # 전직 선택 커서
+        self._advance_notified = False  # 전직 조건 충족 안내 1회
         self._fish = None            # 낚시 미니게임 상태
         self._ranch_menu_pen = None  # 목장 팝업 대상 우리
         self._ranch_menu_idx = 0     # 목장 팝업 커서
@@ -2443,6 +2445,9 @@ class Game:
         self.player  = Player.from_save(start[0], start[1], data['player'], self._item_data,
                                         char_class=self._char_class, char_name=self._char_name,
                                         appearance=self._char_appearance)
+        # 2차 전직 복원 (스탯 델타는 이미 저장된 max_hp/attack 등에 반영돼 있음)
+        self.player.subclass = data.get('subclass')
+        self.player.subclass_sp_reduce = data.get('subclass_sp_reduce', 0.0)
         self._attach_pet()
         self._apply_relic_bonus()
         self.camera  = Camera(MAP_WIDTH, MAP_HEIGHT)
@@ -2754,7 +2759,7 @@ class Game:
                     self.state = 'playing'
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
                                     'altar', 'angler', 'fishing', 'ranch_menu',
-                                    'ranking'):
+                                    'ranking', 'advance'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -2805,6 +2810,8 @@ class Game:
                 self._handle_inn_action(action)
             elif self.state == 'ranking':
                 self._handle_ranking_action(action)
+            elif self.state == 'advance':
+                self._handle_advance_action(action)
             elif self.state == 'dialog':
                 if t in ('confirm', 'attack', 'interact'):
                     self._dialog_confirm()
@@ -4370,6 +4377,7 @@ class Game:
             self.juice.overkill()
         # 퀘스트 진행 (kill_any / kill_key)
         self._quest_on_kill(enemy)
+        self._advance_on_kill(enemy)   # 전직 퀘스트 진행
         # 협동: 파티 킬/퀘스트 + 협동 킬 업적
         if self._coop_dungeon and self.net is not None:
             self._ach_stat('coop_kills')
@@ -5130,7 +5138,7 @@ class Game:
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
                          'home_chest', 'altar', 'angler', 'party_board',
-                         'ranking_board')
+                         'ranking_board', 'advance_master')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
             # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
@@ -5181,6 +5189,8 @@ class Game:
             self._open_coop_board()
         elif npc['id'] == 'ranking_board':
             self._open_ranking()
+        elif npc['id'] == 'advance_master':
+            self._open_advance()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -6332,6 +6342,75 @@ class Game:
             pts = [(cx - r, cy - r), (cx + r, cy - r), (cx, cy + r)]
         pygame.draw.polygon(surf, col, pts)
 
+    def _render_advance(self):
+        """전직 선택 — 2개 카드(◀▶), 이름·설명·스탯 + 되돌릴 수 없음 경고."""
+        from core.subclasses import (choices_for, name_key, desc_key, SUBCLASSES)
+        opts = choices_for(self.player.char_class)
+        if not opts:
+            self.state = 'playing'; return
+        idx = self._advance_idx % len(opts)
+        sid = opts[idx]
+        bw, bh = 480, 360
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        s = self.screen
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA); panel.fill((16, 14, 26, 242))
+        s.blit(panel, (bx, by))
+        pygame.draw.rect(s, (235, 200, 110), (bx, by, bw, bh), 2, border_radius=8)
+        title = (self.hud.font_lg if hasattr(self.hud, 'font_lg') else self.hud.font_md)\
+            .render(t('advance_title'), True, (255, 226, 140))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 12))
+        # 좌우 화살표 + 전직명
+        nm = self.hud.font_lg.render(t(name_key(sid)), True, (255, 236, 170)) \
+            if hasattr(self.hud, 'font_lg') else self.hud.font_md.render(t(name_key(sid)), True, (255, 236, 170))
+        ny = by + 56
+        s.blit(nm, (bx + (bw - nm.get_width()) // 2, ny))
+        self._draw_tri(s, bx + 30, ny + nm.get_height() // 2, 9, 'left', (235, 200, 110))
+        self._draw_tri(s, bx + bw - 30, ny + nm.get_height() // 2, 9, 'right', (235, 200, 110))
+        pg_dot = f"({idx + 1}/{len(opts)})"
+        ds = self.hud.font_sm.render(pg_dot, True, (150, 150, 175))
+        s.blit(ds, (bx + (bw - ds.get_width()) // 2, ny + nm.get_height() + 2))
+        # 설명 (줄바꿈)
+        desc = t(desc_key(sid))
+        y = by + 130
+        for line in self._wrap_text(desc, self.hud.font_sm, bw - 48):
+            ls = self.hud.font_sm.render(line, True, (210, 214, 230))
+            s.blit(ls, (bx + 24, y)); y += 18
+        # 스탯 델타
+        stats = SUBCLASSES[sid]['stats']
+        _lbl = {'max_hp': 'HP', 'attack': 'ATK', 'defense': 'DEF',
+                'move_speed': '이동', 'attack_speed': '공속', 'evasion': '회피',
+                'sp_reduce_bonus': 'SP경감'}
+        segs = []
+        for k, v in stats.items():
+            if k == 'sp_reduce_bonus':
+                segs.append(f"{_lbl[k]} +{int(v*100)}%")
+            elif k == 'evasion':
+                segs.append(f"{_lbl[k]} +{v}%")
+            elif k in ('move_speed', 'attack_speed'):
+                segs.append(f"{_lbl[k]} +{v:g}")
+            else:
+                segs.append(f"{_lbl.get(k,k)} +{v}")
+        st = self.hud.font_sm.render("   ".join(segs), True, (150, 230, 170))
+        s.blit(st, (bx + (bw - st.get_width()) // 2, by + bh - 84))
+        # 경고 + 조작
+        warn = self.hud.font_sm.render(t('advance_warn'), True, (255, 150, 120))
+        s.blit(warn, (bx + (bw - warn.get_width()) // 2, by + bh - 56))
+        hint = self.hud.font_sm.render(t('advance_hint'), True, (140, 145, 170))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 26))
+
+    def _wrap_text(self, text, font, max_w):
+        """폭 기준 단순 줄바꿈 (한글은 글자 단위, 영문은 공백 우선)."""
+        lines, cur = [], ''
+        for ch in text:
+            if font.size(cur + ch)[0] > max_w and cur:
+                lines.append(cur); cur = ch
+            else:
+                cur += ch
+        if cur:
+            lines.append(cur)
+        return lines[:4]
+
     # ── 협동 퀘스트 추적 훅 ───────────────────────────────────────────
     def _coop_quest_on_kill(self, enemy):
         from core.coop_quests import COOP_QUESTS
@@ -6441,6 +6520,102 @@ class Game:
                 qs['progress'] += 1
                 if qs['progress'] >= QUESTS[qid]['count']:
                     self._quest_complete_toast(qid)
+
+    # ── 2차 전직 ──────────────────────────────────────────────────────
+    def _advance_on_kill(self, enemy):
+        from core.subclasses import (has_advancement, ADVANCE_LEVEL,
+                                      ADVANCE_KILL_REQ, ADVANCE_BOSS_REQ)
+        p = self.player
+        if (p is None or p.subclass or not has_advancement(p.char_class)
+                or p.level < ADVANCE_LEVEL or getattr(enemy, 'is_prop', False)):
+            return
+        if enemy.is_boss:
+            p.advance_boss = min(ADVANCE_BOSS_REQ, p.advance_boss + 1)
+        else:
+            p.advance_kills = min(ADVANCE_KILL_REQ, p.advance_kills + 1)
+        if self._advance_ready() and not getattr(self, '_advance_notified', False):
+            self._advance_notified = True
+            self.messages.append((t('advance_ready'), 'good'))
+            self.animator.add(BannerAnim(t('advance_ready_banner'), (255, 220, 120),
+                                         y=120, size=26, duration_ms=1700))
+            self.audio.play('tier_up')
+
+    def _advance_ready(self) -> bool:
+        from core.subclasses import (has_advancement, ADVANCE_LEVEL,
+                                      ADVANCE_KILL_REQ, ADVANCE_BOSS_REQ)
+        p = self.player
+        return bool(p and not p.subclass and has_advancement(p.char_class)
+                    and p.level >= ADVANCE_LEVEL
+                    and p.advance_kills >= ADVANCE_KILL_REQ
+                    and p.advance_boss >= ADVANCE_BOSS_REQ)
+
+    def _class_display_name(self) -> str:
+        """현재 직업 표시명 — 전직했으면 전직명, 아니면 기본 직업명."""
+        p = self.player
+        if p and getattr(p, 'subclass', None):
+            from core.subclasses import name_key
+            return t(name_key(p.subclass))
+        return t('class_' + (p.char_class if p else 'warrior'))
+
+    def _open_advance(self):
+        """전직 마스터 상호작용 — 조건 미달이면 진행도 안내, 충족이면 선택 화면."""
+        from core.subclasses import (has_advancement, ADVANCE_LEVEL,
+                                      ADVANCE_KILL_REQ, ADVANCE_BOSS_REQ)
+        p = self.player
+        if p.subclass:
+            self._advance_info(t('advance_done', self._class_display_name()))
+            return
+        if not has_advancement(p.char_class):
+            self._advance_info(t('advance_none'))       # 도끼맨 등 TBD
+            return
+        if p.level < ADVANCE_LEVEL:
+            self._advance_info(t('advance_need_level', ADVANCE_LEVEL, p.level))
+            return
+        if not self._advance_ready():
+            self._advance_info(t('advance_progress',
+                                 min(p.advance_kills, ADVANCE_KILL_REQ), ADVANCE_KILL_REQ,
+                                 min(p.advance_boss, ADVANCE_BOSS_REQ), ADVANCE_BOSS_REQ))
+            return
+        self._advance_idx = 0
+        self.state = 'advance'
+        self.audio.play('shop_open')
+
+    def _advance_info(self, text):
+        self._dialog = {'qid': None, 'mode': 'info',
+                        'npc_name': t('advance_master'),
+                        'text': text, 'start': pygame.time.get_ticks()}
+        self.state = 'dialog'
+        self.audio.play('menu_select')
+
+    def _handle_advance_action(self, action):
+        from core.subclasses import choices_for
+        opts = choices_for(self.player.char_class)
+        if not opts:
+            self.state = 'playing'; return
+        ty = action['type']
+        if ty == 'move':
+            d = action.get('dx') or 0
+            if d:
+                self._advance_idx = (self._advance_idx + d) % len(opts)
+                self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._do_advance(opts[self._advance_idx % len(opts)])
+
+    def _do_advance(self, subclass_id):
+        from core.subclasses import apply_subclass, name_key
+        if not apply_subclass(self.player, subclass_id):
+            self.state = 'playing'; return
+        nm = t(name_key(subclass_id))
+        self.messages.append((t('advance_success', nm), 'good'))
+        self.animator.add(BannerAnim(t('advance_banner', nm), (255, 230, 130),
+                                     y=100, size=34, duration_ms=2200))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self._start_shake(6, 400); self._start_punch_zoom(0.07, 180)
+        self.juice.slowmo(360, 0.4)
+        self.audio.play('levelup_big'); self.audio.play('tier_up')
+        self.state = 'playing'
+        if not self._is_test_mode:
+            self._do_autosave(in_town=self._in_town)
 
     def _lb_submit(self):
         """현재 진행 상태를 리더보드에 반영(테스트 모드 제외)."""
@@ -8621,6 +8796,8 @@ class Game:
             self.hud.render_inn(self.screen, self.player, self._inn_rest_cost())
         elif self.state == 'ranking':
             self._render_ranking()
+        elif self.state == 'advance':
+            self._render_advance()
         elif self.state == 'dialog' and self._dialog:
             self.hud.render_dialog(self.screen, self._dialog)
         elif self.state == 'questlog':

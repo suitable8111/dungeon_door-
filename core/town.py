@@ -142,6 +142,16 @@ class TownScene:
                                   'tx': bx, 'ty': by, 'wait': 0.0, 'radius': 0,
                                   'facing': 1, 'moving': False})
                 break
+        # 전직 마스터 — 광장 근처 상주 (E로 2차 전직, Lv40+)
+        for (mx, my) in ((66, 44), (66, 46), (69, 44), (63, 44), (66, 42)):
+            if self.dungeon.is_walkable(mx, my) and (mx, my) not in (self.portal_pos, self.spawn_pos) \
+                    and not any(n['x'] == mx and n['y'] == my for n in self.npcs):
+                self.npcs.append({'id': 'advance_master', 'x': mx, 'y': my,
+                                  'name_key': 'advance_master',
+                                  'home': (mx, my), 'fx': mx * ts, 'fy': my * ts,
+                                  'tx': mx, 'ty': my, 'wait': 0.0, 'radius': 0,
+                                  'facing': 1, 'moving': False})
+                break
         # 명예의 전당(랭킹 게시판) — 광장 근처 상주 (E로 전세계 랭킹)
         for (rx, ry) in ((59, 44), (59, 46), (62, 46), (52, 46), (55, 42)):
             if self.dungeon.is_walkable(rx, ry) and (rx, ry) not in (self.portal_pos, self.spawn_pos) \
@@ -557,6 +567,8 @@ class TownScene:
                 self._draw_party_board(surf, sx, sy + walk, ticks)
             elif npc['id'] == 'ranking_board':           # 명예의 전당(랭킹)
                 self._draw_ranking_board(surf, sx, sy + walk, ticks)
+            elif npc['id'] == 'advance_master':          # 전직 마스터
+                self._draw_advance_master(surf, sx, sy + walk, npc.get('facing', 1), ticks)
             elif npc['id'] == 'home_chest':              # 내 집 보관함
                 mc_object(surf, sx, sy + walk, (150, 110, 60), ticks, kind='chest')
             elif npc.get('facing', 1) < 0:               # 좌향 → 좌우 반전
@@ -810,6 +822,31 @@ class TownScene:
             pygame.draw.line(s, (230, 140, 150), (cx - 8, cy + 4), (cx - 11, cy + 2), 2)
             for lx in (cx - 5, cx, cx + 6):
                 pygame.draw.line(s, (210, 130, 140), (lx, cy + 8), (lx, cy + 13), 2)
+
+    @staticmethod
+    def _draw_advance_master(surf, x, y, facing, tk):
+        """전직 마스터 — 로브 두른 무인 + 등 뒤 빛나는 검 + 오라."""
+        import math as _m
+        ts = TILE_SIZE
+        cx = x + ts // 2
+        # 오라
+        glow = 0.5 + 0.5 * _m.sin(tk * 0.005)
+        aura = pygame.Surface((ts, ts), pygame.SRCALPHA)
+        pygame.draw.circle(aura, (235, 200, 110, int(40 + 50 * glow)), (ts // 2, ts // 2), 13)
+        surf.blit(aura, (x, y))
+        # 등 뒤 검 (대각선)
+        pygame.draw.line(surf, (210, 214, 230), (cx + 8, y + ts - 6), (cx - 6, y + 4), 3)
+        pygame.draw.line(surf, (235, 200, 110), (cx - 8, y + 8), (cx - 4, y + 12), 2)
+        # 로브 (사다리꼴)
+        pygame.draw.polygon(surf, (70, 60, 110),
+                            [(cx - 8, y + ts - 3), (cx + 8, y + ts - 3), (cx + 6, y + 12), (cx - 6, y + 12)])
+        pygame.draw.polygon(surf, (110, 96, 170),
+                            [(cx - 8, y + ts - 3), (cx + 8, y + ts - 3), (cx + 6, y + 12), (cx - 6, y + 12)], 1)
+        # 머리 + 두건
+        pygame.draw.circle(surf, (225, 195, 160), (cx, y + 9), 5)
+        pygame.draw.arc(surf, (90, 80, 140), (cx - 7, y + 2, 14, 12), 0, _m.pi, 3)
+        if (tk // 260) % 2 == 0:
+            pygame.draw.circle(surf, (255, 246, 200), (cx + 6, y + 4), 1)
 
     @staticmethod
     def _draw_ranking_board(surf, x, y, tk):

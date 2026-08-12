@@ -135,6 +135,8 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
         'in_town': bool(in_town),   # 마을에서 저장 시 재접속도 마을로
         'name':       name or getattr(player, 'char_name', '') or 'Hero',
         'char_class': char_class or getattr(player, 'char_class', 'warrior'),
+        'subclass':   getattr(player, 'subclass', None),
+        'subclass_sp_reduce': getattr(player, 'subclass_sp_reduce', 0.0),
         'appearance': dict(getattr(player, 'appearance', None)
                            or {'skin': 0, 'hair': 0, 'haircol': 0}),
         'player': {
@@ -146,6 +148,8 @@ def save_game(player, floor, skill_mgr, unlocked_combos=None, skill_books=None,
             'attack_speed': player.attack_speed,
             'evasion':      player.evasion,
             'move_speed':   player.move_speed,
+            'advance_kills': getattr(player, 'advance_kills', 0),
+            'advance_boss':  getattr(player, 'advance_boss', 0),
             'tokens':       dict(getattr(player, 'tokens', {}) or {}),
             # 펫 시스템 (캐릭터 슬롯에 저장 — 런당 지속)
             'is_pet_unlocked': player.is_pet_unlocked,
