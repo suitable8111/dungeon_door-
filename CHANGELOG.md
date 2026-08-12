@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.17.2 — Advanced class skills, reworked
+
+Each second-tier class now has a **signature skill** that plays to its identity:
+- **Dual Blade** — *Flash Dash* now **pierces through every enemy** in the path and unleashes an **area finisher** on landing (much wider damage).
+- **Magic Swordsman** — new W skill **Elemental Burst**: sets off multiple **random elemental blasts** (lightning / fire / water / wind) around you, each with its own effect.
+- **Speed Mage** — skills reworked to feel *fast*: **Flash Dash** (W) replaces the slow blink, and new **Arcane Barrage** (D) rapid-fires a volley of magic bolts.
+- **Crossbow Master** — the **roll is now on W** (*Evasive Load*): roll to dodge, then your next attack is a **guaranteed critical** that stuns.
+
 ## v2.17.1 — Advanced class fixes & new skill
 
 - **Dual Blade** now shows **both swords when moving left** (the off-hand blade no longer vanishes).

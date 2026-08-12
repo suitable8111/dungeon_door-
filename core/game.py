@@ -6700,10 +6700,15 @@ class Game:
             self._do_advance(opts[self._advance_idx % len(opts)])
 
     def _apply_subclass_equips(self):
-        """2차 전직에 따른 기본 장착 스킬 교체(예: 석궁 마스터 D → 회피 장전)."""
+        """2차 전직에 따른 기본 장착 스킬 교체."""
         sub = getattr(self.player, 'subclass', None) if self.player else None
         if sub == 'crossbow_master':
-            self._equipped_skills['D'] = 'roll_strike'
+            self._equipped_skills['W'] = 'roll_strike'      # 구르기 회피 → 다음 공격 확정 크리
+        elif sub == 'magic_swordsman':
+            self._equipped_skills['W'] = 'elemental_burst'  # 근처 랜덤 원소 폭발
+        elif sub == 'speed_mage':
+            self._equipped_skills['W'] = 'flash_dash'       # 느린 점멸 대신 빠른 대시
+            self._equipped_skills['D'] = 'arcane_barrage'   # 초고속 연발 볼트
 
     def _do_advance(self, subclass_id):
         from core.subclasses import apply_subclass, name_key
@@ -7031,6 +7036,8 @@ class Game:
             'dark_pulse':  self._exec_dark_pulse,
             'power_shot':  self._exec_power_shot,
             'roll_strike': self._exec_roll_strike,
+            'elemental_burst': self._exec_elemental_burst,
+            'arcane_barrage':  self._exec_arcane_barrage,
             'arrow_rain':  self._exec_arrow_rain,
             'flame_pool':  self._exec_flame_pool,
             'summon_familiar': self._exec_summon_familiar,
@@ -7084,17 +7091,35 @@ class Game:
         sx, sy = self.player.x, self.player.y
         moved = 0
         hit_enemy = False
+        # 쌍검사: 관통 대시 — 경로의 적을 멈추지 않고 모두 베고, 착지 시 주변까지 광역 타격
+        dual = getattr(self.player, 'subclass', None) == 'dual_blade'
+        struck = set()
         for _ in range(tiles):
             nx, ny = self.player.x + dx, self.player.y + dy
             enemy = self.dungeon.get_enemy_at(nx, ny)
             if enemy:
                 self._player_attack(enemy)
+                if dual and enemy.is_alive():           # 오프핸드 추가타
+                    self._player_attack(enemy, dmg_mul=0.7)
                 enemy.staggered_ms = stagger_ms
+                struck.add(id(enemy))
                 self.animator.add(HitFlashAnim(nx, ny, 0, (100, 180, 255)))
                 hit_enemy = True
-                break
+                if not dual:
+                    break                               # 기본: 첫 적에서 정지
+                continue                                # 쌍검사: 관통 계속
             if not self.dungeon.is_walkable(nx, ny): break
             self.player.x, self.player.y = nx, ny; moved += 1
+        if dual:                                        # 착지 지점 주변 8칸 광역 마무리
+            px, py = self.player.x, self.player.y
+            self.animator.add(WhirlAnim(px, py))
+            self.animator.particles.emit_power_hit(px, py)
+            for e in list(self.dungeon.enemies):
+                if (e.is_alive() and id(e) not in struck
+                        and max(abs(e.x - px), abs(e.y - py)) <= 1):
+                    self._player_attack(e, dmg_mul=0.8)
+                    e.staggered_ms = max(e.staggered_ms, stagger_ms)
+                    hit_enemy = True
         self.animator.particles.emit_dash_trail((sx, sy), (self.player.x, self.player.y))
         self._trigger_atk_anim()
         self._gain_skill_xp('flash_dash')
@@ -7134,6 +7159,80 @@ class Game:
         self.skills.trigger(slot)
         self.audio.play('skill_dash')
         self.messages.append((t('skill_roll_primed', moved), 'warn'))
+        return True
+
+    # 원소 폭발 원소별: (id, 색, 부가효과)
+    _BURST_ELEMS = (('bolt', (255, 240, 130)), ('fire', (255, 120, 45)),
+                    ('water', (90, 170, 255)), ('wind', (170, 245, 190)))
+
+    def _exec_elemental_burst(self, slot):
+        """마검사 — 주변에 랜덤 원소(번개/불/물/바람) 폭발을 여러 번 일으켜 광역 피해."""
+        lvl   = self._skill_levels.get('elemental_burst', 1)
+        stats = ALL_SKILL_DEFS['elemental_burst']['upgrades'][lvl - 1]
+        rmax, bursts, mul = stats['radius'], stats['bursts'], stats['mul']
+        p = self.player
+        self._start_shake(4, 220)
+        self.animator.particles.emit_power_hit(p.x, p.y)
+        hit_any = False
+        for _ in range(bursts):
+            # 플레이어 주변 랜덤 지점에 원소 폭발
+            ex = p.x + random.randint(-rmax, rmax)
+            ey = p.y + random.randint(-rmax, rmax)
+            if not self.dungeon.in_bounds(ex, ey):
+                ex, ey = p.x, p.y
+            elem, col = random.choice(self._BURST_ELEMS)
+            self.animator.add(ShockwaveAnim(ex, ey, color=col, rmax=1.8, dur=340))
+            self.animator.add(BoltAnim(p.x, p.y, ex, ey, col))
+            self.animator.particles.emit_basic_hit(ex, ey)
+            for e in list(self.dungeon.enemies):
+                if e.is_alive() and max(abs(e.x - ex), abs(e.y - ey)) <= 1:
+                    self._player_attack(e, dmg_mul=mul)
+                    hit_any = True
+                    if not e.is_alive():
+                        continue
+                    if elem == 'fire':
+                        self._apply_burn(e, dps=max(2, p.total_attack // 4), ms=2200, col=col)
+                    elif elem == 'water':
+                        e.slowed_ms = max(getattr(e, 'slowed_ms', 0), 1800)
+                    elif elem == 'bolt':
+                        e.staggered_ms = max(e.staggered_ms, 500)
+        self._trigger_atk_anim()
+        self._gain_skill_xp('elemental_burst')
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_elem_burst'), 'warn'))
+        return True
+
+    def _exec_arcane_barrage(self, slot):
+        """스피드 마법사 — 전방으로 마법 볼트를 초고속 연발(스피디한 스킬)."""
+        lvl   = self._skill_levels.get('arcane_barrage', 1)
+        stats = ALL_SKILL_DEFS['arcane_barrage']['upgrades'][lvl - 1]
+        shots, rng, mul = stats['shots'], stats['range'], stats['mul']
+        p = self.player
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        col = self._MAGE_BOLT_COL
+        hit_any = False
+        for s in range(shots):
+            # 매 발마다 ±1 좌우 산탄 → 빠른 연발 느낌
+            perp = (0, 0) if shots == 1 else random.choice([(-dy, dx), (0, 0), (dy, -dx)])
+            end = (p.x, p.y); hit = None
+            for i in range(1, rng + 1):
+                cx, cy = p.x + dx * i + perp[0], p.y + dy * i + perp[1]
+                if not self.dungeon.in_bounds(cx, cy) or self.dungeon.tiles[cy][cx].block_sight:
+                    break
+                end = (cx, cy)
+                e = self.dungeon.get_enemy_at(cx, cy)
+                if e and e.is_alive():
+                    hit = e; break
+            self.animator.add(MagicBoltAnim(p.x, p.y, end[0], end[1], self._facing, col))
+            if hit:
+                self._player_attack(hit, dmg_mul=mul)
+                hit_any = True
+        self._trigger_atk_anim()
+        self._gain_skill_xp('arcane_barrage')
+        self.skills.trigger(slot)
+        self.audio.play('bow_shoot')
+        self.messages.append((t('skill_barrage', shots), 'warn'))
         return True
 
     def _exec_arcane_blink(self, slot):
