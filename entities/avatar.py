@@ -215,10 +215,11 @@ def draw_avatar_tile(surf, x, y, facing='down', frame=0, phase=0,
     style = HAIR_STYLES[a.get('hair', 0) % len(HAIR_STYLES)]
     kit = _SUBCLASS_KIT.get(subclass) or _CLASS_KIT.get(char_class, _CLASS_KIT['warrior'])
 
-    # left면 임시 서피스에 right로 그린 뒤 반전
+    # left면 임시 서피스에 right로 그린 뒤 반전 (subclass도 넘겨 이중검/복장색 유지)
     if facing == 'left':
         tmp = pygame.Surface((32, 32), pygame.SRCALPHA)
-        draw_avatar_tile(tmp, 0, 0, 'right', frame, phase, appearance, char_class)
+        draw_avatar_tile(tmp, 0, 0, 'right', frame, phase, appearance,
+                         char_class, subclass=subclass)
         surf.blit(pygame.transform.flip(tmp, True, False), (x, y))
         return
 

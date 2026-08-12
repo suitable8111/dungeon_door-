@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.17.1 — Advanced class fixes & new skill
+
+- **Dual Blade** now shows **both swords when moving left** (the off-hand blade no longer vanishes).
+- **Magic Swordsman** now unleashes a **random elemental wave on every attack** — lightning (stagger), fire (burn), or ice/water (slow) — each with its own color.
+- **Twin Archer** now visibly fires **two arrows** (a second arrow flies alongside the first).
+- **Crossbow Master** gains a new skill **Evasive Load** (D): quickly roll to dodge, then your **next attack is a guaranteed critical that stuns** the target.
+
 ## v2.17.0 — Advanced classes fight differently (Phase 2)
 
 Each second-tier class now has a **signature basic attack** — you feel the advancement every swing:

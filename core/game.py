@@ -295,6 +295,8 @@ class Game:
         self._chain_step:      int   = 0         # 3단 콤보 단계 (0/1/2)
         self._chain_window_ms: float = 0.0       # 체인 유지 잔여 시간
         self._cancel_bonus_ms: float = 0.0       # 드라이브 캔슬 데미지 보너스 창
+        self._cbm_primed_ms:   float = 0.0       # 석궁 마스터 회피 장전(다음 1타 확정 크리+기절)
+        self._cbm_primed_stun: int   = 1200
         self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
 
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
@@ -1359,6 +1361,8 @@ class Game:
                 self._quest_clear_ms = max(0.0, self._quest_clear_ms - dt)
             if self._cancel_bonus_ms > 0:
                 self._cancel_bonus_ms = max(0.0, self._cancel_bonus_ms - dt)
+            if self._cbm_primed_ms > 0:
+                self._cbm_primed_ms = max(0.0, self._cbm_primed_ms - dt)
             if self._chain_window_ms > 0:
                 self._chain_window_ms = max(0.0, self._chain_window_ms - dt)
                 if self._chain_window_ms == 0:
@@ -2269,6 +2273,7 @@ class Game:
         self._skill_levels    = {sid: 1 for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
         self._equipped_skills = default_equipped_for(self._char_class)
+        self._apply_subclass_equips()
         self._skill_enchants  = {
             sid: {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0}
             for sid in ALL_SKILL_DEFS
@@ -2324,6 +2329,7 @@ class Game:
         self._skill_levels    = {sid: SKILL_MAX_LEVEL for sid in ALL_SKILL_DEFS}
         self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
         self._equipped_skills = default_equipped_for(self._char_class)
+        self._apply_subclass_equips()
         self._skill_enchants  = {
             sid: {'power': ENCHANT_MAX_LEVEL, 'haste': ENCHANT_MAX_LEVEL,
                   'efficiency': ENCHANT_MAX_LEVEL, 'arcane': ENCHANT_MAX_LEVEL}
@@ -2450,6 +2456,7 @@ class Game:
             self._skill_xp = {sid: _raw_xp.get(sid, 0) for sid in ALL_SKILL_DEFS}
         self._skill_points    = data.get('skill_points', 0)
         self._equipped_skills = data.get('equipped_skills', DEFAULT_EQUIPPED.copy())
+        self._apply_subclass_equips()
         _raw_enc = data.get('skill_enchants', {})
         self._skill_enchants = {}
         for sid in ALL_SKILL_DEFS:
@@ -4035,10 +4042,14 @@ class Game:
                     break
         self.animator.add(ArrowAnim(self.player.x, self.player.y,
                                     end[0], end[1], self._facing))
+        if sub == 'twin_bow':                        # 쌍궁: 두 번째 화살(수직 오프셋)
+            px, py = -dy, dx
+            self.animator.add(ArrowAnim(self.player.x + px * 0.35, self.player.y + py * 0.35,
+                                        end[0] + px * 0.5, end[1] + py * 0.5, self._facing))
         self.audio.play('bow_shoot')
         for e in targets:
             self._player_attack(e)
-            if sub == 'twin_bow' and e.is_alive():   # 쌍궁: 두 번째 화살
+            if sub == 'twin_bow' and e.is_alive():   # 쌍궁: 두 번째 화살(추가 피해)
                 self._player_attack(e)
         self._atk_cd_timer = self.player.atk_cooldown_ms
         return True
@@ -4143,8 +4154,8 @@ class Game:
                 self._finisher_impact(enemy, dx, dy)
         else:
             self.audio.play('finisher' if finisher else 'swing')
-        # 마검사: 피니셔에 전방 마력 검기(중거리 히트스캔)
-        if sub == 'magic_swordsman' and finisher:
+        # 마검사: 매 공격마다 랜덤 원소 검기(전방 중거리)
+        if sub == 'magic_swordsman':
             self._magic_sword_bolt(dx, dy)
 
         self._atk_cd_timer = self.player.atk_cooldown_ms * self._CHAIN_CD[step]
@@ -4152,10 +4163,13 @@ class Game:
         self._chain_window_ms = self._CHAIN_WINDOW_MS
         return True
 
+    # 마검사 원소: (id, 색). 매 공격 랜덤 — 번개/화염/냉기/물
+    _MAGIC_ELEMS = (('bolt', (255, 240, 130)), ('fire', (255, 130, 55)),
+                    ('ice', (150, 220, 255)), ('water', (90, 170, 255)))
+
     def _magic_sword_bolt(self, dx, dy):
-        """마검사 피니셔 — 전방 마력 검기(중거리 히트스캔, 첫 적에게 마법 피해)."""
-        from entities.avatar import SUBCLASS_AURA
-        col = SUBCLASS_AURA.get('magic_swordsman', (200, 130, 250))
+        """마검사 — 매 공격마다 랜덤 원소 검기(중거리). 원소별 부가효과."""
+        elem, col = random.choice(self._MAGIC_ELEMS)
         rng, end, hit = 5, (self.player.x, self.player.y), None
         for i in range(1, rng + 1):
             cx, cy = self.player.x + dx * i, self.player.y + dy * i
@@ -4167,8 +4181,15 @@ class Game:
                 hit = e
                 break
         self.animator.add(BoltAnim(self.player.x, self.player.y, end[0], end[1], col))
+        self.animator.particles.emit_basic_hit(end[0], end[1])
         if hit:
-            self._player_attack(hit, dmg_mul=0.8)
+            self._player_attack(hit, dmg_mul=0.7)
+            if elem == 'fire':                       # 화염 → 점화(DoT)
+                self._apply_burn(hit, dps=max(2, self.player.total_attack // 4), ms=2200, col=col)
+            elif elem in ('ice', 'water'):           # 냉기/물 → 둔화
+                hit.slowed_ms = max(getattr(hit, 'slowed_ms', 0), 1600)
+            elif elem == 'bolt':                     # 번개 → 짧은 경직
+                hit.staggered_ms = max(getattr(hit, 'staggered_ms', 0), 300)
 
     def _finisher_impact(self, enemy, dx, dy):
         """피니셔 적중 — 넉백 + 경직 + 임팩트 프레임 + 충격파."""
@@ -4328,6 +4349,11 @@ class Game:
             self.messages.append((t('fear_miss'), 'bad'))
             return
         crit = random.random() < 0.1
+        # 석궁 마스터 회피 장전: 다음 1타 확정 치명타 + 기절
+        primed = getattr(self, '_cbm_primed_ms', 0) > 0
+        if primed:
+            crit = True
+            self._cbm_primed_ms = 0
         # 체인 단계/커맨드 배율 + 드라이브 캔슬 보너스(+15%)
         if self._cancel_bonus_ms > 0:
             dmg_mul *= 1.15
@@ -4348,6 +4374,9 @@ class Game:
             self.messages.append((t('normal_hit', enemy.name, dmg), 'warn'))
         enemy.take_damage(dmg)
         enemy.on_hurt(self.player.x, self.player.y)
+        if primed and enemy.is_alive():
+            enemy.staggered_ms = max(enemy.staggered_ms,
+                                     getattr(self, '_cbm_primed_stun', 1200))
         self._apply_lifesteal(dmg)
         if crit:
             self.juice.crit()
@@ -6670,10 +6699,17 @@ class Game:
         elif ty in ('confirm', 'attack', 'interact'):
             self._do_advance(opts[self._advance_idx % len(opts)])
 
+    def _apply_subclass_equips(self):
+        """2차 전직에 따른 기본 장착 스킬 교체(예: 석궁 마스터 D → 회피 장전)."""
+        sub = getattr(self.player, 'subclass', None) if self.player else None
+        if sub == 'crossbow_master':
+            self._equipped_skills['D'] = 'roll_strike'
+
     def _do_advance(self, subclass_id):
         from core.subclasses import apply_subclass, name_key
         if not apply_subclass(self.player, subclass_id):
             self.state = 'playing'; return
+        self._apply_subclass_equips()
         nm = t(name_key(subclass_id))
         self.messages.append((t('advance_success', nm), 'good'))
         self.animator.add(BannerAnim(t('advance_banner', nm), (255, 230, 130),
@@ -6994,6 +7030,7 @@ class Game:
             'war_cry':     self._exec_war_cry,
             'dark_pulse':  self._exec_dark_pulse,
             'power_shot':  self._exec_power_shot,
+            'roll_strike': self._exec_roll_strike,
             'arrow_rain':  self._exec_arrow_rain,
             'flame_pool':  self._exec_flame_pool,
             'summon_familiar': self._exec_summon_familiar,
@@ -7067,6 +7104,36 @@ class Game:
             self.skills.trigger(slot)
         self.audio.play('skill_dash')
         self.messages.append((t('skill_dash', moved), 'warn'))
+        return True
+
+    def _exec_roll_strike(self, slot):
+        """석궁 마스터 — 빠른 회피 구르기 후 '다음 공격 확정 치명타+기절' 장전."""
+        lvl   = self._skill_levels.get('roll_strike', 1)
+        stats = ALL_SKILL_DEFS['roll_strike']['upgrades'][lvl - 1]
+        tiles = stats['tiles']
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        sx, sy = self.player.x, self.player.y
+        moved = 0
+        for _ in range(tiles):
+            nx, ny = self.player.x + dx, self.player.y + dy
+            if self.dungeon.get_enemy_at(nx, ny):
+                break                                  # 적 앞에서 정지(관통 X, 회피용)
+            if not self.dungeon.is_walkable(nx, ny):
+                break
+            self.player.x, self.player.y = nx, ny
+            moved += 1
+        if not self._is_test_mode:
+            self.dungeon.update_visibility(self.player.x, self.player.y)
+        self.camera.center_on(self.player.x, self.player.y)
+        self.animator.particles.emit_dash_trail((sx, sy), (self.player.x, self.player.y))
+        # 다음 공격 장전: 확정 치명타 + 기절
+        self._cbm_primed_ms  = stats['primed_ms']
+        self._cbm_primed_stun = stats['stun_ms']
+        self._trigger_atk_anim()
+        self._gain_skill_xp('roll_strike')
+        self.skills.trigger(slot)
+        self.audio.play('skill_dash')
+        self.messages.append((t('skill_roll_primed', moved), 'warn'))
         return True
 
     def _exec_arcane_blink(self, slot):
