@@ -9774,9 +9774,9 @@ class Game:
 
         def _weapon(dst, ox, oy):
             if cls == 'archer':
-                draw_archer_bow(dst, ox, oy, facing, phase)
+                draw_archer_bow(dst, ox, oy, facing, phase, subclass=sub)
             elif cls == 'mage':
-                draw_mage_staff(dst, ox, oy, facing, phase, tk)
+                draw_mage_staff(dst, ox, oy, facing, phase, tk, subclass=sub)
 
         if scale != 1.0:
             tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)

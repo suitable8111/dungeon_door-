@@ -333,9 +333,12 @@ def draw_avatar_tile(surf, x, y, facing='down', frame=0, phase=0,
             B(8, gy, (110, 80, 46))
         B(8, 7, (170, 150, 90))
 
-    # 직업 소품: 전사 검 (오른손) — 방향/공격 프레임 반영
+    # 직업 소품: 전사 검 (오른손) — 방향/공격 프레임 반영. 전직별 색/이중검.
     if char_class == 'warrior':
-        steel, steel_hi = (205, 210, 222), (236, 239, 246)
+        if subclass == 'magic_swordsman':     # 마검: 보라 마력검 + 광채
+            steel, steel_hi = (176, 120, 235), (226, 190, 252)
+        else:
+            steel, steel_hi = (205, 210, 222), (236, 239, 246)
         guard, grip, pommel = (150, 120, 60), (110, 80, 48), (232, 202, 92)
         if phase == 2:                        # 앞으로 내려친 슬래시(오른쪽으로 뻗음)
             for gx in range(11, 15):
@@ -348,9 +351,26 @@ def draw_avatar_tile(surf, x, y, facing='down', frame=0, phase=0,
             for gy in range(3 - up, 9 - up):
                 B(13, gy, steel)
             B(13, 3 - up, steel_hi)           # 칼끝
+            if subclass == 'magic_swordsman' and (frame or phase):  # 마력 광채
+                B(12, 4 - up, (150, 90, 230)); B(14, 5 - up, (150, 90, 230))
             B(12, 9 - up, guard); B(13, 9 - up, guard)   # 코등이
             B(13, 10 - up, grip); B(13, 11 - up, grip)   # 손잡이
             B(13, 12 - up, pommel)            # 폼멜
+        # 쌍검사: 왼손에 두 번째 검(청록) — 이중검
+        if subclass == 'dual_blade':
+            cs, cs_hi = (90, 210, 224), (200, 245, 250)
+            if phase == 2:                    # 왼쪽으로 뻗은 미러 슬래시
+                for gx in range(1, 5):
+                    B(gx, 10, cs)
+                B(1, 10, cs_hi)
+                B(4, 9, guard); B(4, 11, guard)
+            else:
+                up = 2 if phase == 1 else 0
+                for gy in range(3 - up, 9 - up):
+                    B(2, gy, cs)
+                B(2, 3 - up, cs_hi)
+                B(1, 9 - up, guard); B(2, 9 - up, guard)
+                B(2, 10 - up, grip); B(2, 11 - up, grip)
 
     # 직업 소품: 도끼맨 양손도끼 (오른손) — 공격 프레임에 내려침
     if char_class == 'axeman':

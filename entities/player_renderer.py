@@ -15,30 +15,51 @@ _PI = math.pi
 _DIR = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
 
 
-def draw_archer_bow(surf, tile_x, tile_y, facing, phase):
+def draw_archer_bow(surf, tile_x, tile_y, facing, phase, subclass=None):
     """궁수 활 오버레이 — 베이스 스프라이트 위에 활+화살을 그린다.
-
-    phase 0=대기(활 든 자세), 1=시위 당김(화살 노킹), 2=발사 직후.
+    전직: crossbow_master=석궁(금색+개머리), twin_bow=쌍궁(녹색+이중시위).
+    phase 0=대기, 1=당김(노킹), 2=발사 직후.
     """
     cx, cy = tile_x + 16, tile_y + 16
     dx, dy = _DIR.get(facing, (0, 1))
     px, py = -dy, dx                     # 수직
-    # 활 중심 — 몸 앞 손 위치
     bxc = cx + dx * 8
     byc = cy + dy * 8 + (2 if facing == 'down' else -2 if facing == 'up' else 0)
+    # ── 석궁 마스터: 짧고 두꺼운 리무 + 개머리(스톡) ──
+    if subclass == 'crossbow_master':
+        L = 7
+        t1 = (int(bxc + px * L), int(byc + py * L)); t2 = (int(bxc - px * L), int(byc - py * L))
+        pygame.draw.line(surf, (110, 84, 50),
+                         (int(cx + dx * 2), int(cy + dy * 2)),
+                         (int(bxc + dx * 5), int(byc + dy * 5)), 3)     # 스톡
+        pygame.draw.line(surf, (205, 170, 96), t1, t2, 3)              # 리무(금색·굵게)
+        pygame.draw.line(surf, (225, 228, 235), t1, t2, 1)            # 시위
+        if phase in (1, 2):                                            # 볼트
+            b2 = (int(bxc + dx * 11), int(byc + dy * 11))
+            pygame.draw.line(surf, (150, 150, 160), (int(bxc + dx * 5), int(byc + dy * 5)), b2, 2)
+            pygame.draw.polygon(surf, (240, 235, 180), [
+                (int(b2[0] + dx * 3), int(b2[1] + dy * 3)),
+                (int(b2[0] + px * 2), int(b2[1] + py * 2)),
+                (int(b2[0] - px * 2), int(b2[1] - py * 2))])
+        return
     L = 9
+    wood, lite = ((104, 176, 84), (176, 224, 130)) if subclass == 'twin_bow' \
+        else ((150, 110, 60), (196, 150, 90))
     t1 = (int(bxc + px * L), int(byc + py * L))
     t2 = (int(bxc - px * L), int(byc - py * L))
     mid = (int(bxc + dx * 4), int(byc + dy * 4))
-    wood, lite = (150, 110, 60), (196, 150, 90)
     pygame.draw.lines(surf, wood, False, [t1, mid, t2], 2)
     pygame.draw.circle(surf, lite, mid, 1)
-    # 시위: phase별 당김량
     pull = {0: 0, 1: 5, 2: -3}.get(phase, 0)
     nock = (int(bxc - dx * pull), int(byc - dy * pull))
     string = (225, 225, 232)
     pygame.draw.line(surf, string, t1, nock, 1)
     pygame.draw.line(surf, string, t2, nock, 1)
+    if subclass == 'twin_bow':                       # 두 번째 활(앞쪽 겹침)
+        o1 = (int(bxc + dx * 3 + px * (L - 2)), int(byc + dy * 3 + py * (L - 2)))
+        o2 = (int(bxc + dx * 3 - px * (L - 2)), int(byc + dy * 3 - py * (L - 2)))
+        om = (int(bxc + dx * 7), int(byc + dy * 7))
+        pygame.draw.lines(surf, lite, False, [o1, om, o2], 2)
     if phase == 1:                       # 노킹된 화살
         ax = (int(nock[0] + dx * 14), int(nock[1] + dy * 14))
         pygame.draw.line(surf, (150, 120, 70), nock, ax, 2)
@@ -48,9 +69,9 @@ def draw_archer_bow(surf, tile_x, tile_y, facing, phase):
             (int(ax[0] - px * 2), int(ax[1] - py * 2))])
 
 
-def draw_mage_staff(surf, tile_x, tile_y, facing, phase, t_ms=0):
+def draw_mage_staff(surf, tile_x, tile_y, facing, phase, t_ms=0, subclass=None):
     """마법사 지팡이 오버레이 — 몸 앞으로 든 지팡이 + 빛나는 오브.
-
+    전직: battle_mage=붉은 오브+단검날, speed_mage=파란 오브(빠른 맥동).
     phase 1=시전 백스윙, 2=시전 직후(오브 밝게 발광).
     """
     import math
@@ -64,10 +85,16 @@ def draw_mage_staff(surf, tile_x, tile_y, facing, phase, t_ms=0):
     tipy = int(hy - 11)
     pygame.draw.line(surf, (140, 100, 62), (int(hx), int(hy + 6)), (tipx, tipy), 2)
     pygame.draw.line(surf, (176, 134, 86), (int(hx), int(hy + 5)), (tipx, tipy), 1)
-    # 오브: 시전 직후 크게 발광
-    puls = 0.5 + 0.5 * math.sin(t_ms * 0.008)
+    if subclass == 'battle_mage':          # 전투마법사: 지팡이 끝 단검날
+        dx, dy = _DIR.get(facing, (0, 1))
+        pygame.draw.line(surf, (225, 120, 110), (tipx, tipy),
+                         (int(tipx + dx * 5), int(tipy - 5)), 2)
+    # 오브: 시전 직후 크게 발광 (전직별 색/속도)
+    _spd = 0.016 if subclass == 'speed_mage' else 0.008
+    puls = 0.5 + 0.5 * math.sin(t_ms * _spd)
     base_r = 3 + (2 if phase == 2 else 0)
-    orb = (150, 110, 245)
+    orb = {'battle_mage': (255, 96, 84), 'speed_mage': (90, 172, 255)}.get(
+        subclass, (150, 110, 245))
     glow = pygame.Surface((16, 16), pygame.SRCALPHA)
     a = int(90 + 60 * puls) + (60 if phase == 2 else 0)
     pygame.draw.circle(glow, (*orb, min(255, a)), (8, 8), base_r + 3)

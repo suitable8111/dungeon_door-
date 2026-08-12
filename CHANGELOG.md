@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.2 — Advanced weapon silhouettes
+
+- Each advanced class now wields a **distinct weapon**: Dual Blade fights with **two swords**, Magic Swordsman glows with a **purple mana blade**, Crossbow Master carries a **golden crossbow**, Twin Archer draws a **double bow**, Battle Mage adds a **blade to the staff**, and Speed Mage channels a **blue orb**.
+
 ## v2.16.1 — Advanced classes look the part
 
 - Advanced classes now **look different**: each subclass has its own **outfit colors**, a pulsing **aura** in its signature color, and **colored basic-attack effects** (Dual Blade & Twin Archer even strike twice). Now it actually feels like an advancement!
