@@ -38,6 +38,23 @@ _CLASS_KIT = {
                 'pants': (70, 56, 44),  'boot': (58, 44, 34)},
 }
 
+# 2차 전직 — 전직별 복장 색 (전직한 티가 나도록 뚜렷이 구분)
+_SUBCLASS_KIT = {
+    'dual_blade':      {'tunic': (40, 150, 160), 'trim': (200, 240, 245), 'pants': (40, 60, 78),  'boot': (60, 60, 62)},
+    'magic_swordsman': {'tunic': (140, 55, 150), 'trim': (225, 180, 245), 'pants': (55, 40, 80),  'boot': (60, 50, 70)},
+    'crossbow_master': {'tunic': (58, 96, 62),   'trim': (205, 168, 96),  'pants': (55, 60, 48),  'boot': (70, 52, 38)},
+    'twin_bow':        {'tunic': (120, 192, 96), 'trim': (228, 235, 158), 'pants': (70, 82, 56),  'boot': (86, 62, 42)},
+    'battle_mage':     {'tunic': (162, 60, 66),  'trim': (238, 168, 156), 'pants': (72, 40, 44),  'boot': (62, 44, 44)},
+    'speed_mage':      {'tunic': (66, 132, 212), 'trim': (182, 216, 255), 'pants': (44, 60, 96),  'boot': (50, 56, 84)},
+}
+
+# 전직 오라/기본공격 이펙트 색
+SUBCLASS_AURA = {
+    'dual_blade': (80, 232, 242), 'magic_swordsman': (212, 130, 250),
+    'crossbow_master': (232, 190, 92), 'twin_bow': (182, 242, 120),
+    'battle_mage': (255, 112, 92), 'speed_mage': (112, 202, 255),
+}
+
 
 def _shade(col, d):
     return tuple(max(0, min(255, c + d)) for c in col)
@@ -186,17 +203,17 @@ def draw_avatar(surf, cx, cy, scale, appearance=None, char_class='warrior'):
 #  인게임 타일용 방향별 아바타 (32px 타일, 2px 블록 = 16×16 논리 그리드)
 # ══════════════════════════════════════════════════════════════════════
 def draw_avatar_tile(surf, x, y, facing='down', frame=0, phase=0,
-                     appearance=None, char_class='warrior'):
+                     appearance=None, char_class='warrior', subclass=None):
     """(x,y) 타일 좌상단 기준으로 방향·걷기 프레임을 반영해 아바타를 그린다.
 
     facing: 'down'|'up'|'left'|'right'   frame: 걷기 애니(0/1)   phase: 공격(0 대기,1/2)
-    left는 right를 좌우 반전해서 그린다.
+    left는 right를 좌우 반전해서 그린다. subclass가 있으면 전직 복장색 사용.
     """
     a = appearance or {}
     skin = SKIN_TONES[a.get('skin', 0) % len(SKIN_TONES)]
     haircol = HAIR_COLORS[a.get('haircol', 0) % len(HAIR_COLORS)]
     style = HAIR_STYLES[a.get('hair', 0) % len(HAIR_STYLES)]
-    kit = _CLASS_KIT.get(char_class, _CLASS_KIT['warrior'])
+    kit = _SUBCLASS_KIT.get(subclass) or _CLASS_KIT.get(char_class, _CLASS_KIT['warrior'])
 
     # left면 임시 서피스에 right로 그린 뒤 반전
     if facing == 'left':

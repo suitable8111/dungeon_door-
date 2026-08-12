@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.1 — Advanced classes look the part
+
+- Advanced classes now **look different**: each subclass has its own **outfit colors**, a pulsing **aura** in its signature color, and **colored basic-attack effects** (Dual Blade & Twin Archer even strike twice). Now it actually feels like an advancement!
+
 ## v2.16.0 — Class Advancement (Phase 1)
 
 - **Second-tier classes!** At **level 40**, complete the advancement quest (slay 300 monsters + 3 bosses after Lv40), then visit the new **Class Master** in town to choose your path. **The choice is permanent.**

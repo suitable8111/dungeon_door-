@@ -1519,7 +1519,29 @@ class Game:
     def _trigger_atk_anim(self):
         self._atk_phase = 1
         self._atk_timer = self._ATK_READY_MS
+        self._subclass_atk_fx()
         self._broadcast_attack_fx()
+
+    def _subclass_atk_fx(self):
+        """전직 기본공격 시그니처 — 전직색 슬래시/볼트 (근접=슬래시, 원거리=볼트).
+        쌍검사/쌍궁수는 2연타 연출."""
+        p = self.player
+        sub = getattr(p, 'subclass', None) if p else None
+        if not sub:
+            return
+        from entities.avatar import SUBCLASS_AURA
+        col = SUBCLASS_AURA.get(sub)
+        if not col:
+            return
+        dx, dy = self._DIRS.get(self._facing, (0, 1))
+        if sub in ('crossbow_master', 'twin_bow', 'speed_mage'):   # 원거리
+            self.animator.add(BoltAnim(p.x, p.y, p.x + dx * 4, p.y + dy * 4, col))
+            if sub == 'twin_bow':
+                self.animator.add(BoltAnim(p.x, p.y, p.x + dx * 3, p.y + dy * 3, col))
+        else:                                                       # 근접
+            self.animator.add(SlashAnim(p.x, p.y, p.x + dx, p.y + dy, col))
+            if sub == 'dual_blade':
+                self.animator.add(SlashAnim(p.x, p.y, p.x + dx, p.y + dy, col))
 
     def _broadcast_attack_fx(self):
         """멀티: 내 공격/스킬 순간을 이펙트 큐로 브로드캐스트(파티원이 재생)."""
@@ -9737,7 +9759,18 @@ class Game:
         from entities.player_renderer import draw_archer_bow, draw_mage_staff
         ap  = getattr(self.player, 'appearance', None)
         cls = self.player.char_class
+        sub = getattr(self.player, 'subclass', None)
         tk = pygame.time.get_ticks()
+        # 2차 전직 오라 — 아바타 뒤에 맥동하는 색 글로우 ("전직한 티")
+        if sub:
+            from entities.avatar import SUBCLASS_AURA
+            ac = SUBCLASS_AURA.get(sub)
+            if ac:
+                pulse = 0.5 + 0.5 * math.sin(tk * 0.006)
+                glow = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
+                pygame.draw.circle(glow, (*ac, int(40 + 55 * pulse)),
+                                   (TILE_SIZE // 2, TILE_SIZE // 2 + 2), TILE_SIZE // 2 - 1)
+                self._game_surf.blit(glow, (x, y))
 
         def _weapon(dst, ox, oy):
             if cls == 'archer':
@@ -9747,7 +9780,7 @@ class Game:
 
         if scale != 1.0:
             tmp = pygame.Surface((TILE_SIZE, TILE_SIZE), pygame.SRCALPHA)
-            draw_avatar_tile(tmp, 0, 0, facing, self._walk_frame, phase, ap, cls)
+            draw_avatar_tile(tmp, 0, 0, facing, self._walk_frame, phase, ap, cls, subclass=sub)
             _weapon(tmp, 0, 0)
             w = h = round(TILE_SIZE * scale)
             scaled = pygame.transform.scale(tmp, (w, h))
@@ -9755,7 +9788,7 @@ class Game:
             self._game_surf.blit(scaled, (x + off, y + off))
         else:
             draw_avatar_tile(self._game_surf, x, y, facing, self._walk_frame,
-                             phase, ap, cls)
+                             phase, ap, cls, subclass=sub)
             _weapon(self._game_surf, x, y)
         # 칭호 뱃지 이펙트 (마을에서 [심연의 지배자] 반짝임)
         if getattr(self, '_title_badge', False) and self._in_town:
