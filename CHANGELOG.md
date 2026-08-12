@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.17.0 — Advanced classes fight differently (Phase 2)
+
+Each second-tier class now has a **signature basic attack** — you feel the advancement every swing:
+- **Dual Blade** — melee strikes **twice** (main hit + off-hand).
+- **Magic Swordsman** — the finishing blow launches a **mid-range mana wave**.
+- **Crossbow Master** — bolts **pierce** through every enemy in a line.
+- **Twin Archer** — fires **two arrows** for double damage.
+- **Battle Mage** — casts a **close-range magic burst** hitting everything within 2 tiles (+ burn).
+- **Speed Mage** — the fastest caster alive (move, cast, and SP efficiency).
+
 ## v2.16.2 — Advanced weapon silhouettes
 
 - Each advanced class now wields a **distinct weapon**: Dual Blade fights with **two swords**, Magic Swordsman glows with a **purple mana blade**, Crossbow Master carries a **golden crossbow**, Twin Archer draws a **double bow**, Battle Mage adds a **blade to the staff**, and Speed Mage channels a **blue orb**.

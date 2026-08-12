@@ -4018,22 +4018,28 @@ class Game:
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         self._atk_variant = 'shoot'
         self._trigger_atk_anim()                 # 활 당김 → 발사 프레임
+        sub = getattr(self.player, 'subclass', None)
+        pierce = (sub == 'crossbow_master')       # 석궁: 라인 관통
         end = (self.player.x, self.player.y)
-        hit = None
+        targets = []
         for i in range(1, self._ARCHER_RANGE + 1):
             cx, cy = self.player.x + dx * i, self.player.y + dy * i
             if not self.dungeon.in_bounds(cx, cy) or self.dungeon.tiles[cy][cx].block_sight:
                 break
             end = (cx, cy)
             e = self.dungeon.get_enemy_at(cx, cy)
-            if e:
-                hit = e
-                break
+            if e and e.is_alive():
+                targets.append(e)
+                if not pierce:                    # 일반/쌍궁은 첫 적에서 멈춤
+                    end = (cx, cy)
+                    break
         self.animator.add(ArrowAnim(self.player.x, self.player.y,
                                     end[0], end[1], self._facing))
         self.audio.play('bow_shoot')
-        if hit:
-            self._player_attack(hit)
+        for e in targets:
+            self._player_attack(e)
+            if sub == 'twin_bow' and e.is_alive():   # 쌍궁: 두 번째 화살
+                self._player_attack(e)
         self._atk_cd_timer = self.player.atk_cooldown_ms
         return True
 
@@ -4047,6 +4053,8 @@ class Game:
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         self._atk_variant = 'cast'
         self._trigger_atk_anim()
+        if getattr(self.player, 'subclass', None) == 'battle_mage':
+            return self._battle_mage_burst()      # 전투마법사: 근접 광역 폭발
         end = (self.player.x, self.player.y)
         hit = None
         for i in range(1, self._MAGE_RANGE + 1):
@@ -4068,6 +4076,21 @@ class Game:
             self._apply_burn(hit, dps=max(2, self.player.total_attack // 3),
                              ms=2500, col=self._MAGE_BOLT_COL)
         self._atk_cd_timer = self.player.atk_cooldown_ms
+        return True
+
+    def _battle_mage_burst(self):
+        """전투마법사 기본공격 — 반경 2 근접 마법 폭발(전 적 타격 + 점화)."""
+        p = self.player
+        col = (255, 96, 84)
+        self.animator.add(WhirlAnim(p.x, p.y))
+        self.animator.particles.emit_power_hit(p.x, p.y)
+        self._start_shake(3, 150)
+        for e in list(self.dungeon.enemies):
+            if e.is_alive() and max(abs(e.x - p.x), abs(e.y - p.y)) <= 2:
+                self._player_attack(e, dmg_mul=0.9)
+                self._apply_burn(e, dps=max(2, p.total_attack // 4), ms=2200, col=col)
+        self.audio.play('skill_whirl')
+        self._atk_cd_timer = p.atk_cooldown_ms
         return True
 
     def _apply_burn(self, enemy, dps: int, ms: int, col=(150, 110, 245)):
@@ -4111,17 +4134,41 @@ class Game:
             if finisher:
                 self.animator.particles.emit_death(px, py, (150, 135, 108))
                 self._start_shake(4, 170)
+        sub = getattr(self.player, 'subclass', None)
         if enemy:
             self._player_attack(enemy, dmg_mul=self._CHAIN_MUL[step])
+            if sub == 'dual_blade' and enemy.is_alive():   # 쌍검: 두 번째 검(70%)
+                self._player_attack(enemy, dmg_mul=self._CHAIN_MUL[step] * 0.7)
             if finisher:
                 self._finisher_impact(enemy, dx, dy)
         else:
             self.audio.play('finisher' if finisher else 'swing')
+        # 마검사: 피니셔에 전방 마력 검기(중거리 히트스캔)
+        if sub == 'magic_swordsman' and finisher:
+            self._magic_sword_bolt(dx, dy)
 
         self._atk_cd_timer = self.player.atk_cooldown_ms * self._CHAIN_CD[step]
         self._chain_step = (step + 1) % 3
         self._chain_window_ms = self._CHAIN_WINDOW_MS
         return True
+
+    def _magic_sword_bolt(self, dx, dy):
+        """마검사 피니셔 — 전방 마력 검기(중거리 히트스캔, 첫 적에게 마법 피해)."""
+        from entities.avatar import SUBCLASS_AURA
+        col = SUBCLASS_AURA.get('magic_swordsman', (200, 130, 250))
+        rng, end, hit = 5, (self.player.x, self.player.y), None
+        for i in range(1, rng + 1):
+            cx, cy = self.player.x + dx * i, self.player.y + dy * i
+            if not self.dungeon.in_bounds(cx, cy) or self.dungeon.tiles[cy][cx].block_sight:
+                break
+            end = (cx, cy)
+            e = self.dungeon.get_enemy_at(cx, cy)
+            if e and e.is_alive():
+                hit = e
+                break
+        self.animator.add(BoltAnim(self.player.x, self.player.y, end[0], end[1], col))
+        if hit:
+            self._player_attack(hit, dmg_mul=0.8)
 
     def _finisher_impact(self, enemy, dx, dy):
         """피니셔 적중 — 넉백 + 경직 + 임팩트 프레임 + 충격파."""
