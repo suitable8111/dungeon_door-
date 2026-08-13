@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.17.7 — Crossbow Master fix & Annihilator nerf
+
+- **Crossbow Master** — the guaranteed-hit shot after *Evasive Load* (W) no longer requires line of sight to lock on; it was frequently finding no valid target (and silently falling back to a normal shot) once the roll put a wall between you and the enemy. Deadeye (Archer R) still requires line of sight, unchanged.
+- **Warrior — Annihilator (R)** nerfed: SP cost during the 15s window is now drastically reduced instead of fully free — you can still run out of stamina if you spam without care.
+
 ## v2.17.6 — Arrow Windmill duration
 
 - **Arrow Windmill** (Archer Ctrl+R) is now a **30-second channel**: arrows spin outward every ~0.6s, continuously striking every visible enemy, instead of a single instant burst.

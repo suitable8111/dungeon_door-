@@ -305,7 +305,8 @@ class Game:
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
         self._stamina_delay_ms: float = 0.0      # 회복 시작까지 대기
         self._last_exhaust_msg: int   = -9999    # 탈진 메시지 쿨다운
-        self._infinite_sp_ms:  float  = 0.0      # >0이면 SP 무제한(전사 궁극기)
+        self._infinite_sp_ms:  float  = 0.0      # >0이면 SP 무제한(전사 초인모드)
+        self._breaker_cheap_sp_ms: float = 0.0   # >0이면 SP 소모 대폭 감소(전사 귀멸의 존재, 완전무료 아님)
         self._ult_active = None   # 발동 중 궁극기 {key,name,color,total,left} — 쿨타임은 종료 후 시작
 
         # ── 마을 시스템 (GameManager 역할: 던전 세션 통째 보존) ──────
@@ -1382,7 +1383,9 @@ class Game:
                     if self._ult_active['left'] <= 0:
                         self.skills.trigger(self._ult_active['key'])
                         self._ult_active = None
-                # 무한 SP(전사 궁극기): 지속 동안 SP 항상 가득 → 스킬 난사
+                if self._breaker_cheap_sp_ms > 0:
+                    self._breaker_cheap_sp_ms = max(0.0, self._breaker_cheap_sp_ms - dt)
+                # 무한 SP(전사 초인모드): 지속 동안 SP 항상 가득 → 스킬 난사
                 if self._infinite_sp_ms > 0:
                     self._infinite_sp_ms = max(0.0, self._infinite_sp_ms - dt)
                     self.player.stamina = self.player.stamina_max
@@ -3971,8 +3974,10 @@ class Game:
         레벨·장비 SP 경감(total_sp_reduce)이 모든 소모에 일괄 적용된다.
         """
         p = self.player
-        if self._infinite_sp_ms > 0:      # 무한 SP 발동 중 — 소모 없음(스킬 난사)
+        if self._infinite_sp_ms > 0:      # 무한 SP 발동 중(초인모드) — 소모 없음
             return True
+        if self._breaker_cheap_sp_ms > 0: # 귀멸의 존재: 완전무료 대신 아주 미세하게 소모
+            cost *= 0.08
         cost *= (1.0 - p.total_sp_reduce)
         if p.stamina < cost:
             now = pygame.time.get_ticks()
@@ -4032,16 +4037,18 @@ class Game:
     _ARCHER_RANGE = 8
     _ICE_ARROW_SUBCLASSES = ('crossbow_master', 'twin_bow')
 
-    def _find_homing_target(self, mode='nearest'):
-        """사거리 내에서 시야가 확보된(벽에 막히지 않은) 적을 찾는다.
-        mode='nearest': 가장 가까운 적. mode='random': 임의의 적(일발필중용)."""
+    def _find_homing_target(self, mode='nearest', require_los=True):
+        """사거리 내 적을 찾는다. mode='nearest': 가장 가까운 적(석궁마스터 확정타).
+        mode='random': 임의의 적(일발필중). require_los=False면 벽 뒤 대상도 허용
+        (석궁마스터의 확정 명중 셔레이드 — '어디 있는지 안다'는 컨셉)."""
         cands = []
         for e in self.dungeon.enemies:
             if not e.is_alive():
                 continue
             d = max(abs(e.x - self.player.x), abs(e.y - self.player.y))
             if d <= self._ARCHER_RANGE and \
-                    self.dungeon._has_los(self.player.x, self.player.y, e.x, e.y):
+                    (not require_los or
+                     self.dungeon._has_los(self.player.x, self.player.y, e.x, e.y)):
                 cands.append((d, e))
         if not cands:
             return None
@@ -4082,7 +4089,8 @@ class Game:
         # 석궁 마스터: 회피 장전(W) 직후 사격은 주변 적을 자동 조준하는 유도탄
         primed = sub == 'crossbow_master' and getattr(self, '_cbm_primed_ms', 0) > 0
         if primed or deadeye:
-            tgt = self._find_homing_target('nearest' if primed else 'random')
+            tgt = self._find_homing_target('nearest' if primed else 'random',
+                                           require_los=not primed)
             if tgt is not None:
                 self._fire_homing_arrow(tgt, ice)
                 return True
@@ -8670,8 +8678,8 @@ class Game:
         return result
 
     def _skill_ultimate_breaker(self):
-        """귀멸의 존재(전사 R): 15초간 SP 무제한 — 모든 스킬을 무한 난사."""
-        self._infinite_sp_ms = max(self._infinite_sp_ms, 15000.0)
+        """귀멸의 존재(전사 R): 15초간 SP 소모 대폭 감소(완전 무료는 아님) — 스킬을 마음껏 굴린다."""
+        self._breaker_cheap_sp_ms = max(self._breaker_cheap_sp_ms, 15000.0)
         self.player.stamina = self.player.stamina_max
         px, py = self.player.x, self.player.y
         for _ in range(4):
