@@ -298,6 +298,8 @@ class Game:
         self._cbm_primed_ms:   float = 0.0       # 석궁 마스터 회피 장전(다음 1타 확정 크리+기절)
         self._cbm_primed_stun: int   = 1200
         self._archer_deadeye_ms: float = 0.0     # 궁수 궁극기 "일발필중": 자동조준 + SP 소모 급감
+        self._windmill_ms:     float = 0.0       # 궁수 궁극기 "화살 바람개비" 지속시간(30초)
+        self._windmill_tick_ms: float = 0.0      # 다음 회전 사격 틱까지 남은 시간
         self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
 
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
@@ -1390,6 +1392,13 @@ class Game:
                 else:
                     self.player.stamina = min(self.player.stamina_max,
                                               self.player.stamina + dt * 0.022)
+                # 궁수 궁극기 "화살 바람개비": 30초간 주기적으로 회전 사격
+                if self._windmill_ms > 0:
+                    self._windmill_ms = max(0.0, self._windmill_ms - dt)
+                    self._windmill_tick_ms -= dt
+                    if self._windmill_tick_ms <= 0:
+                        self._windmill_tick_ms = 650.0
+                        self._windmill_tick()
             self._update_fade(dt)
             self._update_shake(dt)
             if self.camera:
@@ -8787,40 +8796,48 @@ class Game:
         return True
 
     def _skill_ultimate_arrow_windmill(self):
-        """화살 바람개비(궁수 Ctrl+R): 화살이 사방으로 회오리처럼 뿜어져 나가
-        시야 내 모든 적을 강타(crossbow_master/twin_bow는 얼음화살로 슬로우 추가)."""
+        """화살 바람개비(궁수 Ctrl+R): 30초간 화살이 사방으로 회오리처럼 계속 뿜어져 나가
+        시야 내 모든 적을 지속 강타(crossbow_master/twin_bow는 얼음화살로 슬로우 추가)."""
+        self._windmill_ms = 30000.0
+        self._windmill_tick_ms = 0.0     # 발동 즉시 첫 틱 발사
+        p = self.player
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.animator.add(BannerAnim(t('ult_windmill'), (240, 225, 150),
+                                     y=110, size=32, duration_ms=1600))
+        self._start_shake(6, 380)
+        self._start_punch_zoom(0.05, 150)
+        self._begin_ult('Ctrl_R', 30000.0)   # 쿨타임은 30초 지속 종료 후 시작
+        self.audio.play('skill_whirl')
+        self.messages.append((t('ult_windmill_msg'), 'warn'))
+        return True
+
+    def _windmill_tick(self):
+        """화살 바람개비 지속 효과 한 틱 — 회전 사격 연출 + 사거리 내 전체 적 타격."""
         p = self.player
         sub = getattr(p, 'subclass', None)
         ice = sub in self._ICE_ARROW_SUBCLASSES
         col = (150, 220, 255) if ice else (240, 225, 150)
-        shots = 16
+        shots = 12
+        spin = (pygame.time.get_ticks() * 0.25) % 360
         for i in range(shots):
-            ang = math.radians(360 / shots * i)
+            ang = math.radians(360 / shots * i + spin)
             ex = p.x + math.cos(ang) * self._ARCHER_RANGE
             ey = p.y + math.sin(ang) * self._ARCHER_RANGE
             self.animator.add(ArrowAnim(p.x, p.y, ex, ey, self._facing, color=col))
-        self.animator.particles.emit_levelup(p.x, p.y)
         targets = [e for e in self.dungeon.enemies
                    if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible
                    and max(abs(e.x - p.x), abs(e.y - p.y)) <= self._ARCHER_RANGE]
-        hits = 0
         for enemy in targets:
-            dmg = roll_damage(self._skill_atk, enemy.defense, 2.4)
+            dmg = roll_damage(self._skill_atk, enemy.defense, 0.9)
             enemy.take_damage(dmg)
             self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, col))
             self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
             if ice:
-                enemy.slowed_ms = max(getattr(enemy, 'slowed_ms', 0), 1800)
-            hits += 1
+                enemy.slowed_ms = max(getattr(enemy, 'slowed_ms', 0), 1200)
             if not enemy.is_alive():
                 self._on_enemy_killed(enemy)
-        self._start_shake(8, 480)
-        self._start_punch_zoom(0.05, 150)
-        self.skills.trigger('Ctrl_R')
-        self.audio.play('skill_whirl')
-        msg = t('ult_windmill_hit', hits) if hits else t('ult_windmill_miss')
-        self.messages.append((msg, 'warn'))
-        return True
+        if targets:
+            self.audio.play('bow_shoot')
 
     # ─────────────── 보스 처치 ────────────────────────────────────────
     def _check_boss_cleared(self):

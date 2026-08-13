@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.6 — Arrow Windmill duration
+
+- **Arrow Windmill** (Archer Ctrl+R) is now a **30-second channel**: arrows spin outward every ~0.6s, continuously striking every visible enemy, instead of a single instant burst.
+
 ## v2.17.5 — Archer ultimates rework
 
 - **Crossbow Master** — fixed the homing shot actually flying in a straight line instead of tracking its target (the target search and the arrow's flight direction weren't fully wired together); it now genuinely locks on and turns to face whatever it hits.
