@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.8 — Evasive Load now deals damage
+
+- **Crossbow Master — Evasive Load (W)** now slashes anything it rolls into or lands next to, dealing immediate damage on activation (previously it was a pure repositioning skill with no direct damage, unlike the other advanced classes' W skills). The guaranteed-crit follow-up shot is untouched.
+
 ## v2.17.7 — Crossbow Master fix & Annihilator nerf
 
 - **Crossbow Master** — the guaranteed-hit shot after *Evasive Load* (W) no longer requires line of sight to lock on; it was frequently finding no valid target (and silently falling back to a normal shot) once the roll put a wall between you and the enemy. Deadeye (Archer R) still requires line of sight, unchanged.

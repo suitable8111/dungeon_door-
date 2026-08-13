@@ -7208,17 +7208,20 @@ class Game:
         return True
 
     def _exec_roll_strike(self, slot):
-        """석궁 마스터 — 빠른 회피 구르기 후 '다음 공격 확정 치명타+기절' 장전."""
+        """석궁 마스터 — 빠른 회피 구르기로 스쳐 지나가며 베고(즉시 데미지),
+        구른 뒤 '다음 공격 확정 치명타+기절'을 장전한다."""
         lvl   = self._skill_levels.get('roll_strike', 1)
         stats = ALL_SKILL_DEFS['roll_strike']['upgrades'][lvl - 1]
         tiles = stats['tiles']
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         sx, sy = self.player.x, self.player.y
         moved = 0
+        blocker = None
         for _ in range(tiles):
             nx, ny = self.player.x + dx, self.player.y + dy
-            if self.dungeon.get_enemy_at(nx, ny):
-                break                                  # 적 앞에서 정지(관통 X, 회피용)
+            blocker = self.dungeon.get_enemy_at(nx, ny)
+            if blocker:
+                break                                  # 적 앞에서 정지(관통 X, 회피용) — 대신 스쳐 벤다
             if not self.dungeon.is_walkable(nx, ny):
                 break
             self.player.x, self.player.y = nx, ny
@@ -7227,7 +7230,21 @@ class Game:
             self.dungeon.update_visibility(self.player.x, self.player.y)
         self.camera.center_on(self.player.x, self.player.y)
         self.animator.particles.emit_dash_trail((sx, sy), (self.player.x, self.player.y))
-        # 다음 공격 장전: 확정 치명타 + 기절
+        # 구르며 스치는 일격: 앞을 막은 적 + 도착 지점 주변 적을 즉시 타격
+        px, py = self.player.x, self.player.y
+        struck = set()
+        if blocker is not None and blocker.is_alive():
+            struck.add(id(blocker))
+            self.animator.add(SlashAnim(px, py, blocker.x, blocker.y, (255, 200, 80)))
+            self._player_attack(blocker, dmg_mul=0.9)
+        for e in list(self.dungeon.enemies):
+            if e.is_alive() and id(e) not in struck and max(abs(e.x - px), abs(e.y - py)) <= 1:
+                struck.add(id(e))
+                self.animator.add(SlashAnim(px, py, e.x, e.y, (255, 200, 80)))
+                self._player_attack(e, dmg_mul=0.9)
+        if struck:
+            self.animator.particles.emit_basic_hit(px, py)
+        # 다음 공격 장전: 확정 치명타 + 기절 (구르기 자체의 스침 타격에는 적용 안 됨)
         self._cbm_primed_ms  = stats['primed_ms']
         self._cbm_primed_stun = stats['stun_ms']
         self._trigger_atk_anim()
