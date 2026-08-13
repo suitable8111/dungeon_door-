@@ -125,7 +125,9 @@ if _subclass and game.player is not None:
     from core.lang import t
     game.player.level = max(game.player.level, 40)
     if apply_subclass(game.player, _subclass):
+        game._apply_subclass_equips()   # 전직 전용 W/A/S/D 스킬 장착(안 하면 기본 스킬 그대로 남음)
         print(f"[TEST] 전직 적용: {_subclass} ({t(name_key(_subclass))}) — Lv{game.player.level}")
+        print(f"[TEST] 장착 스킬: {game._equipped_skills}")
     else:
         print(f"[TEST] 전직 실패: {_subclass} (base={game.player.char_class})")
 
