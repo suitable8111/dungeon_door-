@@ -4026,6 +4026,23 @@ class Game:
         self._atk_variant = 'shoot'
         self._trigger_atk_anim()                 # 활 당김 → 발사 프레임
         sub = getattr(self.player, 'subclass', None)
+        # 석궁 마스터: 회피 장전(W) 직후 사격은 주변 적을 자동 조준하는 유도탄
+        if sub == 'crossbow_master' and getattr(self, '_cbm_primed_ms', 0) > 0:
+            tgt, best = None, 999
+            for e in self.dungeon.enemies:
+                if not e.is_alive():
+                    continue
+                d = abs(e.x - self.player.x) + abs(e.y - self.player.y)
+                if d <= self._ARCHER_RANGE and d < best:
+                    tgt, best = e, d
+            if tgt is not None:
+                self.animator.add(ArrowAnim(self.player.x, self.player.y,
+                                            tgt.x, tgt.y, self._facing))
+                self.animator.particles.emit_basic_hit(tgt.x, tgt.y)
+                self.audio.play('bow_shoot')
+                self._player_attack(tgt)          # 장전 상태 → 확정 크리 + 기절, 소진
+                self._atk_cd_timer = self.player.atk_cooldown_ms
+                return True
         pierce = (sub == 'crossbow_master')       # 석궁: 라인 관통
         end = (self.player.x, self.player.y)
         targets = []
@@ -7054,6 +7071,10 @@ class Game:
         final = self._get_skill_final_stats(skill_id)
         cost = (self._SKILL_STAMINA_COST.get(sdef.get('category'), 20)
                 * final['stamina_mul'])
+        # 스피드 마법사: 이동기(점멸/대시) SP 대폭 절감 — 자유롭게 스팸
+        if (getattr(self.player, 'subclass', None) == 'speed_mage'
+                and sdef.get('category') == 'mobility'):
+            cost *= 0.15
         if not self._spend_stamina(cost):
             return False
 
@@ -7110,10 +7131,13 @@ class Game:
                 continue                                # 쌍검사: 관통 계속
             if not self.dungeon.is_walkable(nx, ny): break
             self.player.x, self.player.y = nx, ny; moved += 1
-        if dual:                                        # 착지 지점 주변 8칸 광역 마무리
+        if dual:                                        # 착지 지점 — 쌍검 십자 난무(광역)
             px, py = self.player.x, self.player.y
-            self.animator.add(WhirlAnim(px, py))
-            self.animator.particles.emit_power_hit(px, py)
+            blade = (150, 220, 255)                      # 쌍검 시그니처 시안색
+            for ox, oy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                           (1, 1), (-1, -1), (1, -1), (-1, 1)):
+                self.animator.add(SlashAnim(px, py, px + ox, py + oy, blade))
+            self.animator.particles.emit_basic_hit(px, py)
             for e in list(self.dungeon.enemies):
                 if (e.is_alive() and id(e) not in struck
                         and max(abs(e.x - px), abs(e.y - py)) <= 1):

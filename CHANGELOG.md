@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.17.3 — Skill fixes
+
+- **Fixed:** the new advanced-class skills were accidentally overwriting the **base Warrior's default W/D skills** — Warrior's *Flash Dash* and *Judgment* are back where they belong. (Dual Blade's W and Magic Swordsman's W are now clearly different skills.)
+- **Dual Blade** — *Flash Dash* landing now shows a **twin-blade cross flurry** (steel-blue slashes) instead of a magical burst, so it reads distinct from Magic Swordsman.
+- **Speed Mage** — *Flash Dash* now costs **almost no SP**, so you can dash around freely.
+- **Crossbow Master** — after *Evasive Load* (W), your next shot **homes onto the nearest enemy** (any direction) for a guaranteed critical + stun.
+
 ## v2.17.2 — Advanced class skills, reworked
 
 Each second-tier class now has a **signature skill** that plays to its identity:

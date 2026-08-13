@@ -53,7 +53,7 @@ ALL_SKILL_DEFS = {
     'roll_strike': {   # 석궁 마스터 전용 — 구르기 회피 후 다음 공격 확정 치명타+기절
         'name': '회피 장전', 'name_en': 'Evasive Load', 'name_ja': '回避装填',
         'name_zh': '闪避装填', 'name_ru': 'Уклон-заряд',
-        'slot_default': 'W',
+        'slot_default': None,
         'level_req': 5,
         'cooldown_ms': 4000,
         'color': (255, 200, 80),
@@ -93,7 +93,7 @@ ALL_SKILL_DEFS = {
     'elemental_burst': {   # 마검사 전용 — 주변 랜덤 원소 폭발(번개/불/물/바람)
         'name': '원소 폭발', 'name_en': 'Elemental Burst', 'name_ja': '元素爆発',
         'name_zh': '元素爆发', 'name_ru': 'Взрыв стихий',
-        'slot_default': 'W',
+        'slot_default': None,
         'level_req': 5,
         'cooldown_ms': 5000,
         'color': (200, 130, 250),
@@ -133,7 +133,7 @@ ALL_SKILL_DEFS = {
     'arcane_barrage': {   # 스피드 마법사 전용 — 전방 마법 볼트 초고속 연발
         'name': '비전 연발', 'name_en': 'Arcane Barrage', 'name_ja': '秘術連射',
         'name_zh': '奥术连射', 'name_ru': 'Чародейский залп',
-        'slot_default': 'D',
+        'slot_default': None,
         'level_req': 5,
         'cooldown_ms': 4000,
         'color': (120, 190, 255),
