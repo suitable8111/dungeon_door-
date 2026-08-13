@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.17.10 — Speed Mage blink restored, Mage gets Magic Vortex
+
+- **Speed Mage — W** is back to a true blink (walls ignored, instant teleport) instead of the Flash Dash dash added in an earlier patch; SP cost stays almost free.
+- **Mage — Ctrl+R: Magic Vortex** (new): summons a black hole for 30s that drags in every nearby enemy — anything pulled to the center is instantly absorbed and dies. When the vortex collapses, it detonates, dealing damage to everything still in range scaled by how many enemies it absorbed.
+
 ## v2.17.9 — Crossbow Master: always-homing shots
 
 - **Crossbow Master** — basic attack (Space) now **always** auto-locks onto the nearest enemy, not just right after Evasive Load (W). The guaranteed-crit+stun bonus still only applies during the primed window.

@@ -1158,6 +1158,16 @@ _CTRL_R_ULT_OVERRIDE = localize_defs({
         'desc_zh': '箭矢如旋风般四射，重击视野内所有敌人',
         'desc_ru': 'Стрелы вихрем разлетаются во все стороны, поражая всех видимых врагов',
     },
+    'mage': {
+        'name': '마법의 소용돌이', 'name_en': 'Magic Vortex', 'name_ja': '魔法の渦',
+        'name_zh': '魔法漩涡', 'name_ru': 'Магический вихрь',
+        'color': (180, 90, 230),
+        'desc': '30초간 블랙홀로 주변 적을 빨아들여 흡수한 적은 즉사, 종료 시 흡수한 수만큼 폭발 피해',
+        'desc_en': 'A 30s black hole drags in nearby enemies (absorbed ones die instantly); it detonates on end, dealing damage scaled by how many it absorbed',
+        'desc_ja': '30秒間ブラックホールが周囲の敵を引き込み、吸収された敵は即死。終了時に吸収数に応じた爆発ダメージ',
+        'desc_zh': '30秒黑洞吸入附近敌人（被吸收者即死），结束时依吸收数量释放爆炸伤害',
+        'desc_ru': '30с чёрная дыра затягивает врагов (поглощённые гибнут мгновенно); в конце — взрыв по числу поглощённых',
+    },
 })
 
 

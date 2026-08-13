@@ -300,6 +300,7 @@ class Game:
         self._archer_deadeye_ms: float = 0.0     # 궁수 궁극기 "일발필중": 자동조준 + SP 소모 급감
         self._windmill_ms:     float = 0.0       # 궁수 궁극기 "화살 바람개비" 지속시간(30초)
         self._windmill_tick_ms: float = 0.0      # 다음 회전 사격 틱까지 남은 시간
+        self._vortex = None                      # 마법사 궁극기 "마법의 소용돌이" 상태(dict) — None이면 비활성
         self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
 
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
@@ -1402,6 +1403,16 @@ class Game:
                     if self._windmill_tick_ms <= 0:
                         self._windmill_tick_ms = 650.0
                         self._windmill_tick()
+                # 마법사 궁극기 "마법의 소용돌이": 30초간 흡입 + 종료 시 폭발 방출
+                if self._vortex is not None:
+                    self._vortex['ms'] -= dt
+                    self._vortex['tick_ms'] -= dt
+                    if self._vortex['tick_ms'] <= 0:
+                        self._vortex['tick_ms'] = 450.0
+                        self._vortex_tick()
+                    if self._vortex['ms'] <= 0:
+                        self._vortex_release()
+                        self._vortex = None
             self._update_fade(dt)
             self._update_shake(dt)
             if self.camera:
@@ -1611,6 +1622,7 @@ class Game:
         self._dot_zones = []            # 층 이동 시 장판/소환수/폭탄 소멸
         self._summons = []
         self._bombs = []
+        self._vortex = None             # 층 이동 시 소용돌이도 소멸
         self._secret_found = False      # 이 층 비밀방 발견 연출 1회 플래그
         self._collapse_active = False   # 층 이동 시 붕괴 상태 해제
         self._collapse_t = 0.0
@@ -6782,8 +6794,8 @@ class Game:
         elif sub == 'magic_swordsman':
             self._equipped_skills['W'] = 'elemental_burst'  # 근처 랜덤 원소 폭발
         elif sub == 'speed_mage':
-            self._equipped_skills['W'] = 'flash_dash'       # 느린 점멸 대신 빠른 대시
             self._equipped_skills['D'] = 'arcane_barrage'   # 초고속 연발 볼트
+            # W는 기본 마법사의 점멸(arcane_blink) 그대로 — SP 소모만 대폭 절감(_use_skill 참고)
 
     def _do_advance(self, subclass_id):
         from core.subclasses import apply_subclass, name_key
@@ -7129,9 +7141,9 @@ class Game:
         final = self._get_skill_final_stats(skill_id)
         cost = (self._SKILL_STAMINA_COST.get(sdef.get('category'), 20)
                 * final['stamina_mul'])
-        # 스피드 마법사: 이동기(점멸/대시) 사실상 무료 — 끊임없이 연속 스팸 가능
+        # 스피드 마법사: 이동기(점멸 포함 blink/mobility) 사실상 무료 — 끊임없이 연속 스팸 가능
         if (getattr(self.player, 'subclass', None) == 'speed_mage'
-                and sdef.get('category') == 'mobility'):
+                and sdef.get('category') in ('mobility', 'blink')):
             cost *= 0.005
         if not self._spend_stamina(cost):
             return False
@@ -8710,6 +8722,8 @@ class Game:
                 result = self._skill_ultimate_superhuman()
             elif self.player.char_class == 'archer':
                 result = self._skill_ultimate_arrow_windmill()
+            elif self.player.char_class == 'mage':
+                result = self._skill_ultimate_vortex()
             else:
                 result = self._skill_ultimate_slash()
         else:
@@ -8887,6 +8901,82 @@ class Game:
                 self._on_enemy_killed(enemy)
         if targets:
             self.audio.play('bow_shoot')
+
+    # ─────────────── 마법사 궁극기: 마법의 소용돌이 ──────────────────────
+    _VORTEX_COL = (180, 90, 230)
+
+    def _skill_ultimate_vortex(self):
+        """마법의 소용돌이(마법사 Ctrl+R): 블랙홀을 소환해 30초간 주변 적을
+        중심으로 끌어당긴다 — 중심에 닿은 적은 흡수되어 즉사, 지속시간이
+        끝나면 흡수한 적의 수에 비례한 폭발 데미지를 방출한다."""
+        p = self.player
+        self._vortex = {'x': p.x, 'y': p.y, 'r': 4, 'ms': 30000.0,
+                        'tick_ms': 0.0, 'absorbed': 0}
+        self.animator.add(ShockwaveAnim(p.x, p.y, self._VORTEX_COL, rmax=4.5, dur=700))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.animator.add(BannerAnim(t('ult_vortex'), self._VORTEX_COL,
+                                     y=110, size=32, duration_ms=1600))
+        self._start_shake(6, 380)
+        self._start_punch_zoom(0.05, 150)
+        self._begin_ult('Ctrl_R', 30000.0)   # 쿨타임은 30초 지속 종료 후 시작
+        self.audio.play('skill_whirl')
+        self.messages.append((t('ult_vortex_msg'), 'warn'))
+        return True
+
+    def _vortex_tick(self):
+        """소용돌이 지속 효과 한 틱 — 반경 내 적을 중심으로 한 칸씩 끌어당기고
+        피해를 입히며, 중심에 도달한 적은 흡수되어 즉사한다."""
+        v = self._vortex
+        vx, vy, r = v['x'], v['y'], v['r']
+        self.animator.particles.emit_basic_hit(vx, vy)
+        for e in list(self.dungeon.enemies):
+            if not e.is_alive():
+                continue
+            if max(abs(e.x - vx), abs(e.y - vy)) > r:
+                continue
+            if e.x == vx and e.y == vy:            # 중심 도달 — 흡수(즉사)
+                e.take_damage(e.hp)
+                self.animator.particles.emit_death(e.x, e.y, self._VORTEX_COL)
+                v['absorbed'] += 1
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+                continue
+            ddx = (vx > e.x) - (vx < e.x)
+            ddy = (vy > e.y) - (vy < e.y)
+            nx, ny = e.x + ddx, e.y + ddy
+            if (self.dungeon.in_bounds(nx, ny) and self.dungeon.is_walkable(nx, ny)
+                    and not self.dungeon.get_enemy_at(nx, ny)):
+                e.x, e.y = nx, ny
+            dmg = roll_damage(self._skill_atk, e.defense, 0.4)
+            e.take_damage(dmg)
+            self.animator.add(HitFlashAnim(e.x, e.y, dmg, self._VORTEX_COL))
+            if not e.is_alive():
+                v['absorbed'] += 1
+                self._on_enemy_killed(e)
+
+    def _vortex_release(self):
+        """소용돌이 소멸 — 흡수한 적의 수에 비례한 폭발 데미지를 반경 내에 방출."""
+        v = self._vortex
+        vx, vy, r, absorbed = v['x'], v['y'], v['r'], v['absorbed']
+        self.animator.add(ShockwaveAnim(vx, vy, self._VORTEX_COL, rmax=r + 1.5, dur=650))
+        self.animator.particles.emit_levelup(vx, vy)
+        self._start_shake(8, 500)
+        self.audio.play('skill_whirl')
+        if absorbed <= 0:
+            self.messages.append((t('ult_vortex_release_empty'), 'info'))
+            return
+        mul = 0.5 * min(absorbed, 12)
+        hits = 0
+        for e in list(self.dungeon.enemies):
+            if e.is_alive() and max(abs(e.x - vx), abs(e.y - vy)) <= r:
+                dmg = roll_damage(self._skill_atk, e.defense, mul)
+                e.take_damage(dmg)
+                self.animator.add(HitFlashAnim(e.x, e.y, dmg, self._VORTEX_COL))
+                self.animator.particles.emit_basic_hit(e.x, e.y)
+                hits += 1
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+        self.messages.append((t('ult_vortex_release', absorbed, hits), 'good'))
 
     # ─────────────── 보스 처치 ────────────────────────────────────────
     def _check_boss_cleared(self):
@@ -9314,6 +9404,8 @@ class Game:
 
         # 마법사 화염 장판 (바닥 위, 적 아래)
         self._draw_dot_zones(cx, cy)
+        if self._vortex is not None:
+            self._draw_vortex(cx, cy)
 
         # 붕괴 경고 (곧 무너질 타일 균열/붉은 점멸)
         if self._collapse_active:
@@ -9586,6 +9678,33 @@ class Game:
                                                 min(255, a + 90)),
                                            (fx - sx, fy - sy), 2)
                     self._game_surf.blit(ov, (sx, sy))
+
+    def _draw_vortex(self, cx, cy):
+        """마법의 소용돌이 — 회전하는 어두운 블랙홀 + 보라색 흡입 소용돌이 링."""
+        v = self._vortex
+        if not self.dungeon.in_bounds(v['x'], v['y']) or \
+                not self.dungeon.tiles[v['y']][v['x']].visible:
+            return
+        ts = TILE_SIZE
+        tnow = pygame.time.get_ticks()
+        sx = int((v['x'] - cx) * ts + ts // 2)
+        sy = int((v['y'] - cy) * ts + ts // 2)
+        col = self._VORTEX_COL
+        core_r = int(ts * 0.55)
+        pygame.draw.circle(self._game_surf, (10, 5, 20), (sx, sy), core_r)
+        for i in range(3):
+            ang = tnow * 0.006 + i * (math.pi * 2 / 3)
+            rad = core_r + 3 + (i * 2)
+            for a_off in range(0, 300, 40):
+                ra = ang + math.radians(a_off)
+                px = sx + int(math.cos(ra) * rad)
+                py = sy + int(math.sin(ra) * rad)
+                pygame.draw.circle(self._game_surf, col, (px, py), 2)
+        fade = max(0.35, min(1.0, v['ms'] / 2000.0))
+        ring_a = int(90 * fade)
+        ring = pygame.Surface((ts * 2, ts * 2), pygame.SRCALPHA)
+        pygame.draw.circle(ring, (*col, ring_a), (ts, ts), core_r + 6, 2)
+        self._game_surf.blit(ring, (sx - ts, sy - ts))
 
     def _draw_cracked_wall(self, s, x, y, lit, th):
         """균열 벽 — 벽 위에 노란 금(균열) 표시로 '부술 수 있음'을 암시."""
