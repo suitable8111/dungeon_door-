@@ -4032,12 +4032,18 @@ class Game:
             for e in self.dungeon.enemies:
                 if not e.is_alive():
                     continue
-                d = abs(e.x - self.player.x) + abs(e.y - self.player.y)
-                if d <= self._ARCHER_RANGE and d < best:
+                # 체비쇼프 거리(대각선 포함 시야 반경) + 벽 뒤 대상 제외
+                d = max(abs(e.x - self.player.x), abs(e.y - self.player.y))
+                if d <= self._ARCHER_RANGE and d < best and \
+                        self.dungeon._has_los(self.player.x, self.player.y, e.x, e.y):
                     tgt, best = e, d
             if tgt is not None:
+                ddx, ddy = tgt.x - self.player.x, tgt.y - self.player.y
+                aim = ('right' if ddx >= 0 else 'left') if abs(ddx) >= abs(ddy) \
+                      else ('down' if ddy >= 0 else 'up')
+                self._facing = aim                # 유도탄이 실제로 겨냥한 방향으로 캐릭터도 회전
                 self.animator.add(ArrowAnim(self.player.x, self.player.y,
-                                            tgt.x, tgt.y, self._facing))
+                                            tgt.x, tgt.y, aim))
                 self.animator.particles.emit_basic_hit(tgt.x, tgt.y)
                 self.audio.play('bow_shoot')
                 self._player_attack(tgt)          # 장전 상태 → 확정 크리 + 기절, 소진
@@ -7071,10 +7077,10 @@ class Game:
         final = self._get_skill_final_stats(skill_id)
         cost = (self._SKILL_STAMINA_COST.get(sdef.get('category'), 20)
                 * final['stamina_mul'])
-        # 스피드 마법사: 이동기(점멸/대시) SP 대폭 절감 — 자유롭게 스팸
+        # 스피드 마법사: 이동기(점멸/대시) SP 거의 무료 — 자유롭게 연속 스팸
         if (getattr(self.player, 'subclass', None) == 'speed_mage'
                 and sdef.get('category') == 'mobility'):
-            cost *= 0.15
+            cost *= 0.03
         if not self._spend_stamina(cost):
             return False
 

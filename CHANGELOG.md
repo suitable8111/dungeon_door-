@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.17.4 — Homing shot & SP tuning
+
+- **Crossbow Master** — the post-*Evasive Load* homing shot now correctly **locks onto and flies toward the actual nearest target** (including diagonals), turns the character to face it, and won't lock onto enemies hidden behind walls.
+- **Speed Mage** — *Flash Dash* SP cost cut even further — practically free.
+
 ## v2.17.3 — Skill fixes
 
 - **Fixed:** the new advanced-class skills were accidentally overwriting the **base Warrior's default W/D skills** — Warrior's *Flash Dash* and *Judgment* are back where they belong. (Dual Blade's W and Magic Swordsman's W are now clearly different skills.)
