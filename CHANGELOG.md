@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.17.5 — Archer ultimates rework
+
+- **Crossbow Master** — fixed the homing shot actually flying in a straight line instead of tracking its target (the target search and the arrow's flight direction weren't fully wired together); it now genuinely locks on and turns to face whatever it hits.
+- **Archer** gets two new signature ultimates:
+  - **R — Deadeye**: for 14s, every basic shot auto-homes onto a random nearby enemy (no need to face them), and the basic-attack SP cost drops to almost nothing.
+  - **Ctrl+R — Arrow Windmill**: fires a spinning burst of arrows in every direction, striking every visible enemy at once.
+  - **Crossbow Master / Twin Bow** fire **ice arrows** for both ultimates — enemies hit get slowed.
+- **Speed Mage** — *Flash Dash* SP cost cut even further again.
+
 ## v2.17.4 — Homing shot & SP tuning
 
 - **Crossbow Master** — the post-*Evasive Load* homing shot now correctly **locks onto and flies toward the actual nearest target** (including diagonals), turns the character to face it, and won't lock onto enemies hidden behind walls.

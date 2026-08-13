@@ -1123,6 +1123,16 @@ _R_ULT_OVERRIDE = localize_defs({
         'desc_zh': '数秒完全无敌 + 移动攻击强化，挥击扩展为中距离范围',
         'desc_ru': 'Несколько секунд неуязвимости + ускорение; удары бьют по средней области',
     },
+    'archer': {
+        'name': '일발필중', 'name_en': 'Deadeye', 'name_ja': '一発必中',
+        'name_zh': '一发必中', 'name_ru': 'Смертельный выстрел',
+        'color': (240, 225, 150),
+        'desc': '14초간 사격이 주변 적을 자동으로 명중 — 기본공격 SP 소모 거의 없음',
+        'desc_en': '14s of auto-homing shots on nearby enemies — basic attack SP cost nearly gone',
+        'desc_ja': '14秒間、射撃が周囲の敵に自動命中 — 基本攻撃SP消費がほぼ無し',
+        'desc_zh': '14秒内射击自动命中附近敌人——基础攻击SP消耗几乎为零',
+        'desc_ru': '14с автонаведения на врагов рядом — базовая атака почти бесплатна по SP',
+    },
 })
 
 
@@ -1137,6 +1147,16 @@ _CTRL_R_ULT_OVERRIDE = localize_defs({
         'desc_ja': '60秒SP無限 + 全体50%ダメージ + スキル2倍 + 移動·攻撃速度最大',
         'desc_zh': '60秒无限SP + 全体50%伤害 + 技能双倍 + 移动攻速极大化',
         'desc_ru': '60с безлимит SP + 50% урона всем + двойной урон навыков + макс. скорость',
+    },
+    'archer': {
+        'name': '화살 바람개비', 'name_en': 'Arrow Windmill', 'name_ja': '矢の風車',
+        'name_zh': '箭矢风车', 'name_ru': 'Стрельная вертушка',
+        'color': (240, 225, 150),
+        'desc': '화살이 사방으로 회오리처럼 뿜어져 나가 시야 내 모든 적을 강타',
+        'desc_en': 'Arrows spray outward in a spinning burst, striking every visible enemy',
+        'desc_ja': '矢が四方へ渦のように放たれ、視界内の全ての敵を強打',
+        'desc_zh': '箭矢如旋风般四射，重击视野内所有敌人',
+        'desc_ru': 'Стрелы вихрем разлетаются во все стороны, поражая всех видимых врагов',
     },
 })
 

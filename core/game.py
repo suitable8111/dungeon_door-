@@ -297,6 +297,7 @@ class Game:
         self._cancel_bonus_ms: float = 0.0       # 드라이브 캔슬 데미지 보너스 창
         self._cbm_primed_ms:   float = 0.0       # 석궁 마스터 회피 장전(다음 1타 확정 크리+기절)
         self._cbm_primed_stun: int   = 1200
+        self._archer_deadeye_ms: float = 0.0     # 궁수 궁극기 "일발필중": 자동조준 + SP 소모 급감
         self._white_flash_ms:  float = 0.0       # 피니셔 임팩트 프레임
 
         # 스태미나 SP: 마지막 소모 후 지연을 두고 회복 (남발 억제)
@@ -1363,6 +1364,8 @@ class Game:
                 self._cancel_bonus_ms = max(0.0, self._cancel_bonus_ms - dt)
             if self._cbm_primed_ms > 0:
                 self._cbm_primed_ms = max(0.0, self._cbm_primed_ms - dt)
+            if self._archer_deadeye_ms > 0:
+                self._archer_deadeye_ms = max(0.0, self._archer_deadeye_ms - dt)
             if self._chain_window_ms > 0:
                 self._chain_window_ms = max(0.0, self._chain_window_ms - dt)
                 if self._chain_window_ms == 0:
@@ -4018,37 +4021,63 @@ class Game:
 
     # ── 궁수 기본 사격 (원거리 히트스캔 + 화살 연출) ────────────────────
     _ARCHER_RANGE = 8
+    _ICE_ARROW_SUBCLASSES = ('crossbow_master', 'twin_bow')
+
+    def _find_homing_target(self, mode='nearest'):
+        """사거리 내에서 시야가 확보된(벽에 막히지 않은) 적을 찾는다.
+        mode='nearest': 가장 가까운 적. mode='random': 임의의 적(일발필중용)."""
+        cands = []
+        for e in self.dungeon.enemies:
+            if not e.is_alive():
+                continue
+            d = max(abs(e.x - self.player.x), abs(e.y - self.player.y))
+            if d <= self._ARCHER_RANGE and \
+                    self.dungeon._has_los(self.player.x, self.player.y, e.x, e.y):
+                cands.append((d, e))
+        if not cands:
+            return None
+        if mode == 'random':
+            return random.choice(cands)[1]
+        cands.sort(key=lambda t: t[0])
+        return cands[0][1]
+
+    def _fire_homing_arrow(self, tgt, ice):
+        """유도 화살 한 발을 tgt에게 발사(방향 회전 + 명중 + 얼음 슬로우 옵션).
+        확정 치명타+기절 여부는 _player_attack이 _cbm_primed_ms 상태를 보고 자체 판단한다."""
+        ddx, ddy = tgt.x - self.player.x, tgt.y - self.player.y
+        aim = ('right' if ddx >= 0 else 'left') if abs(ddx) >= abs(ddy) \
+              else ('down' if ddy >= 0 else 'up')
+        self._facing = aim                # 유도탄이 실제로 겨냥한 방향으로 캐릭터도 회전
+        col = (150, 220, 255) if ice else (240, 225, 150)
+        self.animator.add(ArrowAnim(self.player.x, self.player.y,
+                                    tgt.x, tgt.y, aim, color=col))
+        self.animator.particles.emit_basic_hit(tgt.x, tgt.y)
+        self.audio.play('bow_shoot')
+        self._player_attack(tgt)
+        if ice and tgt.is_alive():
+            tgt.slowed_ms = max(getattr(tgt, 'slowed_ms', 0), 1400)
+        self._atk_cd_timer = self.player.atk_cooldown_ms
 
     def _archer_shoot(self):
-        if not self._spend_stamina(self._STAMINA_COST['slash']):
+        deadeye = getattr(self, '_archer_deadeye_ms', 0) > 0
+        cost = self._STAMINA_COST['slash']
+        if deadeye:
+            cost *= 0.05           # 궁극기 "일발필중": 기본공격 SP 소모 거의 무료
+        if not self._spend_stamina(cost):
             return False
         dx, dy = self._DIRS.get(self._facing, (0, 1))
         self._atk_variant = 'shoot'
         self._trigger_atk_anim()                 # 활 당김 → 발사 프레임
         sub = getattr(self.player, 'subclass', None)
+        ice = sub in self._ICE_ARROW_SUBCLASSES
         # 석궁 마스터: 회피 장전(W) 직후 사격은 주변 적을 자동 조준하는 유도탄
-        if sub == 'crossbow_master' and getattr(self, '_cbm_primed_ms', 0) > 0:
-            tgt, best = None, 999
-            for e in self.dungeon.enemies:
-                if not e.is_alive():
-                    continue
-                # 체비쇼프 거리(대각선 포함 시야 반경) + 벽 뒤 대상 제외
-                d = max(abs(e.x - self.player.x), abs(e.y - self.player.y))
-                if d <= self._ARCHER_RANGE and d < best and \
-                        self.dungeon._has_los(self.player.x, self.player.y, e.x, e.y):
-                    tgt, best = e, d
+        primed = sub == 'crossbow_master' and getattr(self, '_cbm_primed_ms', 0) > 0
+        if primed or deadeye:
+            tgt = self._find_homing_target('nearest' if primed else 'random')
             if tgt is not None:
-                ddx, ddy = tgt.x - self.player.x, tgt.y - self.player.y
-                aim = ('right' if ddx >= 0 else 'left') if abs(ddx) >= abs(ddy) \
-                      else ('down' if ddy >= 0 else 'up')
-                self._facing = aim                # 유도탄이 실제로 겨냥한 방향으로 캐릭터도 회전
-                self.animator.add(ArrowAnim(self.player.x, self.player.y,
-                                            tgt.x, tgt.y, aim))
-                self.animator.particles.emit_basic_hit(tgt.x, tgt.y)
-                self.audio.play('bow_shoot')
-                self._player_attack(tgt)          # 장전 상태 → 확정 크리 + 기절, 소진
-                self._atk_cd_timer = self.player.atk_cooldown_ms
+                self._fire_homing_arrow(tgt, ice)
                 return True
+            # 사거리 내 대상 없음 → 아래 일반 사격으로 폴백(장전 상태는 유지)
         pierce = (sub == 'crossbow_master')       # 석궁: 라인 관통
         end = (self.player.x, self.player.y)
         targets = []
@@ -7077,10 +7106,10 @@ class Game:
         final = self._get_skill_final_stats(skill_id)
         cost = (self._SKILL_STAMINA_COST.get(sdef.get('category'), 20)
                 * final['stamina_mul'])
-        # 스피드 마법사: 이동기(점멸/대시) SP 거의 무료 — 자유롭게 연속 스팸
+        # 스피드 마법사: 이동기(점멸/대시) 사실상 무료 — 끊임없이 연속 스팸 가능
         if (getattr(self.player, 'subclass', None) == 'speed_mage'
                 and sdef.get('category') == 'mobility'):
-            cost *= 0.03
+            cost *= 0.005
         if not self._spend_stamina(cost):
             return False
 
@@ -8614,11 +8643,15 @@ class Game:
                 result = self._skill_ultimate_inferno()
             elif self.player.char_class == 'axeman':
                 result = self._skill_ultimate_ragnarok()
+            elif self.player.char_class == 'archer':
+                result = self._skill_ultimate_deadeye()
             else:
                 result = self._skill_ultimate_breaker()
         elif key == 'Ctrl_R':
             if self.player.char_class == 'warrior':
                 result = self._skill_ultimate_superhuman()
+            elif self.player.char_class == 'archer':
+                result = self._skill_ultimate_arrow_windmill()
             else:
                 result = self._skill_ultimate_slash()
         else:
@@ -8642,6 +8675,29 @@ class Game:
         self._begin_ult('R', 15000.0)   # 쿨타임은 15초 지속 종료 후 시작
         self.audio.play('skill_whirl')
         self.messages.append((t('ult_kimetsu_msg'), 'good'))
+        return True
+
+    def _skill_ultimate_deadeye(self):
+        """일발필중(궁수 R): 14초간 기본 사격이 주변 적을 자동으로 맞추고
+        기본공격 SP 소모가 거의 사라진다."""
+        self._archer_deadeye_ms = max(self._archer_deadeye_ms, 14000.0)
+        p = self.player
+        px, py = p.x, p.y
+        sub = getattr(p, 'subclass', None)
+        ice = sub in self._ICE_ARROW_SUBCLASSES
+        col = (150, 220, 255) if ice else (240, 225, 150)
+        for ang in (0, 72, 144, 216, 288):
+            rad = math.radians(ang)
+            self.animator.add(ArrowAnim(px, py, px + math.cos(rad) * 2,
+                                        py + math.sin(rad) * 2, self._facing, color=col))
+        self.animator.particles.emit_levelup(px, py)
+        self.animator.add(BannerAnim(t('ult_deadeye'), col,
+                                     y=110, size=32, duration_ms=1600))
+        self._start_shake(4, 300)
+        self._start_punch_zoom(0.04, 120)
+        self._begin_ult('R', 14000.0)   # 쿨타임은 14초 지속 종료 후 시작
+        self.audio.play('skill_whirl')
+        self.messages.append((t('ult_deadeye_msg'), 'good'))
         return True
 
     def _skill_ultimate_superhuman(self):
@@ -8727,6 +8783,42 @@ class Game:
         self.skills.trigger('Ctrl_R')
         self.audio.play('crit')
         msg = t('ult_slash_hit', hits) if hits else t('ult_slash_miss')
+        self.messages.append((msg, 'warn'))
+        return True
+
+    def _skill_ultimate_arrow_windmill(self):
+        """화살 바람개비(궁수 Ctrl+R): 화살이 사방으로 회오리처럼 뿜어져 나가
+        시야 내 모든 적을 강타(crossbow_master/twin_bow는 얼음화살로 슬로우 추가)."""
+        p = self.player
+        sub = getattr(p, 'subclass', None)
+        ice = sub in self._ICE_ARROW_SUBCLASSES
+        col = (150, 220, 255) if ice else (240, 225, 150)
+        shots = 16
+        for i in range(shots):
+            ang = math.radians(360 / shots * i)
+            ex = p.x + math.cos(ang) * self._ARCHER_RANGE
+            ey = p.y + math.sin(ang) * self._ARCHER_RANGE
+            self.animator.add(ArrowAnim(p.x, p.y, ex, ey, self._facing, color=col))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        targets = [e for e in self.dungeon.enemies
+                   if e.is_alive() and self.dungeon.tiles[e.y][e.x].visible
+                   and max(abs(e.x - p.x), abs(e.y - p.y)) <= self._ARCHER_RANGE]
+        hits = 0
+        for enemy in targets:
+            dmg = roll_damage(self._skill_atk, enemy.defense, 2.4)
+            enemy.take_damage(dmg)
+            self.animator.add(HitFlashAnim(enemy.x, enemy.y, dmg, col))
+            self.animator.particles.emit_basic_hit(enemy.x, enemy.y)
+            if ice:
+                enemy.slowed_ms = max(getattr(enemy, 'slowed_ms', 0), 1800)
+            hits += 1
+            if not enemy.is_alive():
+                self._on_enemy_killed(enemy)
+        self._start_shake(8, 480)
+        self._start_punch_zoom(0.05, 150)
+        self.skills.trigger('Ctrl_R')
+        self.audio.play('skill_whirl')
+        msg = t('ult_windmill_hit', hits) if hits else t('ult_windmill_miss')
         self.messages.append((msg, 'warn'))
         return True
 
