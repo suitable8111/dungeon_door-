@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.17.9 — Crossbow Master: always-homing shots
+
+- **Crossbow Master** — basic attack (Space) now **always** auto-locks onto the nearest enemy, not just right after Evasive Load (W). The guaranteed-crit+stun bonus still only applies during the primed window.
+- **Crossbow Master — Power Shot (D)** now auto-aims at the nearest enemy too (including diagonals — it precisely tracks the real angle instead of snapping to a wrong cardinal direction) and fires ice arrows that slow.
+
 ## v2.17.8 — Evasive Load now deals damage
 
 - **Crossbow Master — Evasive Load (W)** now slashes anything it rolls into or lands next to, dealing immediate damage on activation (previously it was a pure repositioning skill with no direct damage, unlike the other advanced classes' W skills). The guaranteed-crit follow-up shot is untouched.

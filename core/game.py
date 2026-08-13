@@ -4057,12 +4057,16 @@ class Game:
         cands.sort(key=lambda t: t[0])
         return cands[0][1]
 
+    def _aim_dir_to(self, tx, ty):
+        """플레이어 기준 (tx,ty) 방향을 4방향 문자열로 환산."""
+        ddx, ddy = tx - self.player.x, ty - self.player.y
+        return ('right' if ddx >= 0 else 'left') if abs(ddx) >= abs(ddy) \
+               else ('down' if ddy >= 0 else 'up')
+
     def _fire_homing_arrow(self, tgt, ice):
         """유도 화살 한 발을 tgt에게 발사(방향 회전 + 명중 + 얼음 슬로우 옵션).
         확정 치명타+기절 여부는 _player_attack이 _cbm_primed_ms 상태를 보고 자체 판단한다."""
-        ddx, ddy = tgt.x - self.player.x, tgt.y - self.player.y
-        aim = ('right' if ddx >= 0 else 'left') if abs(ddx) >= abs(ddy) \
-              else ('down' if ddy >= 0 else 'up')
+        aim = self._aim_dir_to(tgt.x, tgt.y)
         self._facing = aim                # 유도탄이 실제로 겨냥한 방향으로 캐릭터도 회전
         col = (150, 220, 255) if ice else (240, 225, 150)
         self.animator.add(ArrowAnim(self.player.x, self.player.y,
@@ -4088,9 +4092,11 @@ class Game:
         ice = sub in self._ICE_ARROW_SUBCLASSES
         # 석궁 마스터: 회피 장전(W) 직후 사격은 주변 적을 자동 조준하는 유도탄
         primed = sub == 'crossbow_master' and getattr(self, '_cbm_primed_ms', 0) > 0
-        if primed or deadeye:
-            tgt = self._find_homing_target('nearest' if primed else 'random',
-                                           require_los=not primed)
+        # 석궁 마스터: 기본 사격 자체가 항상 유도탄(장전 중이면 확정 크리+기절 추가)
+        auto_home = primed or deadeye or sub == 'crossbow_master'
+        if auto_home:
+            mode = 'nearest' if (primed or sub == 'crossbow_master') else 'random'
+            tgt = self._find_homing_target(mode, require_los=not primed)
             if tgt is not None:
                 self._fire_homing_arrow(tgt, ice)
                 return True
@@ -7753,26 +7759,44 @@ class Game:
         lvl = self._skill_levels.get('power_shot', 1)
         stats = ALL_SKILL_DEFS['power_shot']['upgrades'][lvl - 1]
         rng, mul = stats['range'], stats['mul']
-        dx, dy = self._DIRS.get(self._facing, (0, 1))
-        end = (self.player.x, self.player.y)
+        sub = getattr(self.player, 'subclass', None)
+        ice = sub == 'crossbow_master'   # 석궁마스터의 유도 강사격만 얼음화살
+        px, py = self.player.x, self.player.y
+        ux, uy = self._DIRS.get(self._facing, (0, 1))
+        # 석궁 마스터: 관통 강사격도 유도탄처럼 가장 가까운 적을 향해 정밀 조준
+        # (대각선 위치도 실수 방향벡터로 정확히 관통하도록 계산)
+        if sub == 'crossbow_master':
+            tgt = self._find_homing_target('nearest', require_los=False)
+            if tgt is not None:
+                self._facing = self._aim_dir_to(tgt.x, tgt.y)   # 캐릭터 연출 회전
+                tdx, tdy = tgt.x - px, tgt.y - py
+                dist = max(1.0, math.hypot(tdx, tdy))
+                ux, uy = tdx / dist, tdy / dist
+        end = (px, py)
         hits = 0
+        hit_ids = set()
+        fx, fy = float(px), float(py)
         for i in range(1, rng + 1):
-            nx, ny = self.player.x + dx * i, self.player.y + dy * i
+            fx += ux; fy += uy
+            nx, ny = round(fx), round(fy)
             if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].block_sight:
                 break
             end = (nx, ny)
             e = self.dungeon.get_enemy_at(nx, ny)
-            if e:
+            if e and id(e) not in hit_ids:
+                hit_ids.add(id(e))
                 dmg = roll_damage(self._skill_atk, e.defense, mul)
                 e.take_damage(dmg)
                 self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 170, 60)))
                 self.animator.particles.emit_power_hit(nx, ny)
+                if ice and e.is_alive():
+                    e.slowed_ms = max(getattr(e, 'slowed_ms', 0), 1400)
                 hits += 1
                 if not e.is_alive():
                     self._on_enemy_killed(e)
                 # 관통 — 멈추지 않고 계속 진행
-        self.animator.add(ArrowAnim(self.player.x, self.player.y,
-                                    end[0], end[1], self._facing, (255, 190, 90)))
+        col = (150, 220, 255) if ice else (255, 190, 90)
+        self.animator.add(ArrowAnim(px, py, end[0], end[1], self._facing, col))
         self._trigger_atk_anim()
         self._start_shake(2, 130)
         self._gain_skill_xp('power_shot', max(1, hits))
