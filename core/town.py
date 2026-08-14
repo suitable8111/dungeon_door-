@@ -124,6 +124,18 @@ class TownScene:
                                   'tx': fx, 'ty': fy, 'wait': 0.0, 'radius': 0,
                                   'facing': 1, 'moving': False})
                 break
+        # 마을 안내인 — 포탈 바로 앞 상주 (E로 초보자 안내: 사냥/생활/던전 팁)
+        px_, py_ = self.spawn_pos
+        for (gx, gy) in ((px_ + 1, py_), (px_ - 1, py_), (px_, py_ - 1),
+                         (px_ + 2, py_), (px_ - 2, py_)):
+            if (self.dungeon.is_walkable(gx, gy)
+                    and (gx, gy) not in (self.portal_pos, self.spawn_pos)):
+                self.npcs.append({'id': 'guide', 'x': gx, 'y': gy,
+                                  'name_key': 'guide_keeper',
+                                  'home': (gx, gy), 'fx': gx * ts, 'fy': gy * ts,
+                                  'tx': gx, 'ty': gy, 'wait': 0.0, 'radius': 0,
+                                  'facing': -1 if gx > px_ else 1, 'moving': False})
+                break
         # 퀘스트 시민 5명 — 배회
         qids = ['villager_boy', 'villager_farmer', 'villager_granny',
                 'villager_hunter', 'villager_scholar']
@@ -537,7 +549,8 @@ class TownScene:
                    'villager_farmer': self._draw_farmer,
                    'villager_granny': self._draw_granny,
                    'villager_hunter': self._draw_hunter,
-                   'villager_scholar': self._draw_scholar}
+                   'villager_scholar': self._draw_scholar,
+                   'guide': self._draw_guide}
 
         def _draw_one(target, dx, dy, npc_id):
             if USE_MC_NPC and npc_id == 'chest':
@@ -1378,6 +1391,20 @@ class TownScene:
         pygame.draw.rect(s, (40, 40, 80), (cx - 3, cy - 17, 6, 5))
         pygame.draw.rect(s, (200, 180, 130), (cx + 5, cy - 4, 6, 8))  # 책
         pygame.draw.line(s, (120, 90, 60), (cx + 8, cy - 4), (cx + 8, cy + 4), 1)
+
+    @staticmethod
+    def _draw_guide(s, x, y, tk):
+        """마을 안내인 — 포탈 바로 앞에서 초보자를 맞이하는 상주 NPC."""
+        bob = int(math.sin(tk * 0.0026 + 5) * 1.2)
+        cx, cy = x + 16, y + 16 + bob
+        pygame.draw.circle(s, (60, 130, 95), (cx, cy + 2), 8)       # 초록 외투
+        pygame.draw.circle(s, (232, 196, 164), (cx, cy - 8), 5)     # 얼굴
+        pygame.draw.polygon(s, (40, 96, 68),                         # 여행자 모자
+                            [(cx - 7, cy - 10), (cx + 7, cy - 10), (cx, cy - 18)])
+        pygame.draw.rect(s, (150, 110, 60), (cx - 9, cy - 2, 3, 12))  # 지팡이
+        pygame.draw.rect(s, (222, 200, 150), (cx + 4, cy - 3, 7, 9))  # 안내 지도
+        pygame.draw.line(s, (120, 90, 60), (cx + 6, cy), (cx + 9, cy), 1)
+        pygame.draw.line(s, (120, 90, 60), (cx + 6, cy + 3), (cx + 9, cy + 3), 1)
 
     @staticmethod
     def _draw_merchant_npc(s, x, y, tk):

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.13 — Town Guide NPC
+
+- New **Town Guide** NPC now stands right next to the portal in town — talk to them (E) for beginner tips. Each conversation cycles to the next tip (movement/combat, dungeon basics, shops & enchanting, advancement, farming/fishing/ranching, quests, storage), looping back to the start once you've heard them all.
+
 ## v2.17.12 — Fishing: size records & Fish Codex
 
 - Every fish you catch now has a **random length/weight** (biased toward smaller, with a chance of a big one), shown right on the catch screen.

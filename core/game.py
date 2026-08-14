@@ -475,6 +475,7 @@ class Game:
         self._farm_menu_idx = 0      # 농사 팝업 커서
         self._altar_idx = 0          # 고대 제단 메뉴 커서
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
+        self._guide_tip_idx = 0      # 마을 안내인 — 다음에 들려줄 팁 순번
         self._rank_lb_idx = 0        # 랭킹: 현재 리더보드 탭
         self._rank_mode = 'global'   # 랭킹: 전세계/친구
         self._advance_idx = 0        # 전직 선택 커서
@@ -5329,7 +5330,7 @@ class Game:
         npc = self._town.npc_near(self.player.x, self.player.y) if self._town else None
         _INTERACT_IDS = ('chest', 'inn', 'merchant', 'smith', 'home_board',
                          'home_chest', 'altar', 'angler', 'party_board',
-                         'ranking_board', 'advance_master')
+                         'ranking_board', 'advance_master', 'guide')
         interactive = npc and (npc['id'] in _INTERACT_IDS or 'quest' in npc)
         if not interactive:
             # 상호작용 NPC가 없으면 밭칸 위에서 E → 농사 팝업 / 강둑에서 E → 낚시
@@ -5382,6 +5383,8 @@ class Game:
             self._open_ranking()
         elif npc['id'] == 'advance_master':
             self._open_advance()
+        elif npc['id'] == 'guide':
+            self._open_guide_dialog()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -6351,6 +6354,25 @@ class Game:
     def _smith_cost(self, item) -> int:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
         return 40 + item.enhance_level * 35
+
+    # ═════════════════ 마을 안내인 (초보자 팁) ═════════════════════════
+    # 순서대로: 조작/전투 → 던전 진행 → 성장(강화·전직) → 생활(농사·낚시·목장) → 기타
+    GUIDE_TIP_KEYS = (
+        'guide_tip_move', 'guide_tip_attack', 'guide_tip_skill', 'guide_tip_ultimate',
+        'guide_tip_dungeon', 'guide_tip_shop', 'guide_tip_enchant', 'guide_tip_advance',
+        'guide_tip_farm', 'guide_tip_fish', 'guide_tip_ranch',
+        'guide_tip_quest', 'guide_tip_storage',
+    )
+
+    def _open_guide_dialog(self):
+        """마을 안내인 — 말을 걸 때마다 다음 순번의 초보자 팁을 하나씩 안내."""
+        key = self.GUIDE_TIP_KEYS[self._guide_tip_idx % len(self.GUIDE_TIP_KEYS)]
+        self._guide_tip_idx += 1
+        self._dialog = {'qid': None, 'mode': 'info',
+                        'npc_name': t('guide_keeper'),
+                        'text': t(key), 'start': pygame.time.get_ticks()}
+        self.state = 'dialog'
+        self.audio.play('menu_select')
 
     # ═════════════════ 퀘스트 (시민 의뢰) ═════════════════════════════
     def _town_visible_givers(self) -> set:
