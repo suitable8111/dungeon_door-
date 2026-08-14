@@ -1104,14 +1104,21 @@ _R_ULT_OVERRIDE = localize_defs({
         'desc_ru': '15с сильно сниженной стоимости SP — навыки почти без затрат (не бесплатно)',
     },
     'mage': {
-        'name': '인페르노', 'name_en': 'Inferno', 'name_ja': 'インフェルノ',
-        'name_zh': '炼狱', 'name_ru': 'Инферно',
-        'color': (255, 110, 35),
-        'desc': '화면 전역에 화염 장판 + 전 적 점화 + 정령 소환',
-        'desc_en': 'Blanket the screen in flame zones, ignite all enemies, summon spirits',
-        'desc_ja': '画面全域に炎の地帯 + 全敵点火 + 精霊召喚',
-        'desc_zh': '全屏火焰地带 + 点燃全敌 + 召唤精灵',
-        'desc_ru': 'Зоны огня по всему экрану + поджог всех врагов + призывы',
+        'name': '마법의 소용돌이', 'name_en': 'Magic Vortex', 'name_ja': '魔法の渦',
+        'name_zh': '魔法漩涡', 'name_ru': 'Магический вихрь',
+        'color': (180, 90, 230),
+        'desc': '플레이어를 따라다니는 블랙홀로 30초간 주변 적을 빨아들여 흡수한 적은 즉사,'
+                ' 종료 시(또는 R 재입력 시 조기 붕괴) 흡수한 수만큼 폭발 피해',
+        'desc_en': 'A black hole follows you for 30s, dragging in nearby enemies (absorbed ones die'
+                   ' instantly); it detonates on end (or early if you press R again), dealing'
+                   ' damage scaled by how many it absorbed',
+        'desc_ja': 'プレイヤーに追従するブラックホールが30秒間周囲の敵を引き込み、吸収された敵は即死。'
+                   '終了時(またはRを再入力で早期崩壊)に吸収数に応じた爆発ダメージ',
+        'desc_zh': '跟随玩家的黑洞在30秒内吸入附近敌人（被吸收者即死），结束时'
+                   '（或再次按R提前崩溃）依吸收数量释放爆炸伤害',
+        'desc_ru': 'Чёрная дыра следует за вами и 30с затягивает врагов (поглощённые гибнут'
+                   ' мгновенно); взрывается по истечении времени (или раньше при повторном R)'
+                   ' с уроном по числу поглощённых',
     },
     'axeman': {
         'name': '라그나로크', 'name_en': 'Ragnarok', 'name_ja': 'ラグナロク',
@@ -1159,14 +1166,14 @@ _CTRL_R_ULT_OVERRIDE = localize_defs({
         'desc_ru': 'Стрелы вихрем разлетаются во все стороны, поражая всех видимых врагов',
     },
     'mage': {
-        'name': '마법의 소용돌이', 'name_en': 'Magic Vortex', 'name_ja': '魔法の渦',
-        'name_zh': '魔法漩涡', 'name_ru': 'Магический вихрь',
-        'color': (180, 90, 230),
-        'desc': '30초간 블랙홀로 주변 적을 빨아들여 흡수한 적은 즉사, 종료 시 흡수한 수만큼 폭발 피해',
-        'desc_en': 'A 30s black hole drags in nearby enemies (absorbed ones die instantly); it detonates on end, dealing damage scaled by how many it absorbed',
-        'desc_ja': '30秒間ブラックホールが周囲の敵を引き込み、吸収された敵は即死。終了時に吸収数に応じた爆発ダメージ',
-        'desc_zh': '30秒黑洞吸入附近敌人（被吸收者即死），结束时依吸收数量释放爆炸伤害',
-        'desc_ru': '30с чёрная дыра затягивает врагов (поглощённые гибнут мгновенно); в конце — взрыв по числу поглощённых',
+        'name': '인페르노', 'name_en': 'Inferno', 'name_ja': 'インフェルノ',
+        'name_zh': '炼狱', 'name_ru': 'Инферно',
+        'color': (255, 110, 35),
+        'desc': '화면 전역에 화염 장판 + 전 적 점화 + 정령 소환',
+        'desc_en': 'Blanket the screen in flame zones, ignite all enemies, summon spirits',
+        'desc_ja': '画面全域に炎の地帯 + 全敵点火 + 精霊召喚',
+        'desc_zh': '全屏火焰地带 + 点燃全敌 + 召唤精灵',
+        'desc_ru': 'Зоны огня по всему экрану + поджог всех врагов + призывы',
     },
 })
 

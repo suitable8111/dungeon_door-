@@ -1405,6 +1405,7 @@ class Game:
                         self._windmill_tick()
                 # 마법사 궁극기 "마법의 소용돌이": 30초간 흡입 + 종료 시 폭발 방출
                 if self._vortex is not None:
+                    self._vortex['x'], self._vortex['y'] = self.player.x, self.player.y
                     self._vortex['ms'] -= dt
                     self._vortex['tick_ms'] -= dt
                     if self._vortex['tick_ms'] <= 0:
@@ -8692,6 +8693,14 @@ class Game:
         # 오의 창이 열려 있으면 R키를 오의 발동으로 우선 처리
         if key == 'R' and self._arcane_window_ms > 0:
             return self._try_arcane_art()
+        # 마법의 소용돌이 발동 중 같은 키를 다시 누르면 조기 붕괴(즉시 터뜨리기)
+        if self._vortex is not None and key == self._vortex.get('key'):
+            self._vortex_release()
+            self._vortex = None
+            if self._ult_active is not None and self._ult_active['key'] == key:
+                self.skills.trigger(key)
+                self._ult_active = None
+            return True
         # 지속형 궁극기 발동 중이면 재발동 불가(쿨타임은 종료 후 시작)
         if self._ult_active is not None:
             self.messages.append((t('ult_active_wait', self._ult_active['name'],
@@ -8710,7 +8719,7 @@ class Game:
             return False
         if key == 'R':
             if self.player.char_class == 'mage':
-                result = self._skill_ultimate_inferno()
+                result = self._skill_ultimate_vortex(key)
             elif self.player.char_class == 'axeman':
                 result = self._skill_ultimate_ragnarok()
             elif self.player.char_class == 'archer':
@@ -8723,7 +8732,7 @@ class Game:
             elif self.player.char_class == 'archer':
                 result = self._skill_ultimate_arrow_windmill()
             elif self.player.char_class == 'mage':
-                result = self._skill_ultimate_vortex()
+                result = self._skill_ultimate_inferno()
             else:
                 result = self._skill_ultimate_slash()
         else:
@@ -8905,20 +8914,21 @@ class Game:
     # ─────────────── 마법사 궁극기: 마법의 소용돌이 ──────────────────────
     _VORTEX_COL = (180, 90, 230)
 
-    def _skill_ultimate_vortex(self):
-        """마법의 소용돌이(마법사 Ctrl+R): 블랙홀을 소환해 30초간 주변 적을
-        중심으로 끌어당긴다 — 중심에 닿은 적은 흡수되어 즉사, 지속시간이
-        끝나면 흡수한 적의 수에 비례한 폭발 데미지를 방출한다."""
+    def _skill_ultimate_vortex(self, key='R'):
+        """마법의 소용돌이(마법사 R): 플레이어를 따라다니는 블랙홀을 소환해 30초간
+        주변 적을 중심으로 끌어당긴다 — 중심에 닿은 적은 흡수되어 즉사, 지속시간이
+        끝나거나(혹은 같은 키를 다시 눌러 조기 붕괴시키면) 흡수한 적 수에 비례한
+        폭발 데미지를 방출한다."""
         p = self.player
         self._vortex = {'x': p.x, 'y': p.y, 'r': 4, 'ms': 30000.0,
-                        'tick_ms': 0.0, 'absorbed': 0}
+                        'tick_ms': 0.0, 'absorbed': 0, 'key': key}
         self.animator.add(ShockwaveAnim(p.x, p.y, self._VORTEX_COL, rmax=4.5, dur=700))
         self.animator.particles.emit_levelup(p.x, p.y)
         self.animator.add(BannerAnim(t('ult_vortex'), self._VORTEX_COL,
                                      y=110, size=32, duration_ms=1600))
         self._start_shake(6, 380)
         self._start_punch_zoom(0.05, 150)
-        self._begin_ult('Ctrl_R', 30000.0)   # 쿨타임은 30초 지속 종료 후 시작
+        self._begin_ult(key, 30000.0)   # 쿨타임은 30초 지속 종료 후(또는 조기 붕괴 시) 시작
         self.audio.play('skill_whirl')
         self.messages.append((t('ult_vortex_msg'), 'warn'))
         return True
@@ -8944,6 +8954,13 @@ class Game:
             ddx = (vx > e.x) - (vx < e.x)
             ddy = (vy > e.y) - (vy < e.y)
             nx, ny = e.x + ddx, e.y + ddy
+            if nx == vx and ny == vy:               # 이번 틱에 중심 도달 — 즉시 흡수
+                e.take_damage(e.hp)
+                self.animator.particles.emit_death(e.x, e.y, self._VORTEX_COL)
+                v['absorbed'] += 1
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+                continue
             if (self.dungeon.in_bounds(nx, ny) and self.dungeon.is_walkable(nx, ny)
                     and not self.dungeon.get_enemy_at(nx, ny)):
                 e.x, e.y = nx, ny
