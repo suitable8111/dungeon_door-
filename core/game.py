@@ -2775,6 +2775,9 @@ class Game:
                         and self.state == 'playing' and not self._in_town:
                     self._start_collapse()             # [TEST] 붕괴 추격 발동
                     self.messages.append(('[TEST] 붕괴 시작 (C)', 'bad'))
+                elif event.key == pygame.K_c and self.state == 'angler':
+                    self.state = 'fish_codex'          # 물고기 도감 열람
+                    self.audio.play('menu_select')
                 elif event.key == pygame.K_b and self.state in ('playing', 'storage', 'inn'):
                     self._open_pet_status()          # 펫 상태창 (B)
                 elif event.key == pygame.K_v and self.state == 'playing' and not self._in_town:
@@ -2814,6 +2817,8 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
+                elif self.state == 'fish_codex':
+                    self.state = 'angler'              # 도감은 낚시 노인 메뉴로 복귀
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
                                     'altar', 'angler', 'fishing', 'ranch_menu',
                                     'ranking', 'advance'):
@@ -5896,6 +5901,15 @@ class Game:
     FISH_SPECIES = (('minnow', 0, 12, 42), ('carp', 0, 18, 34),
                     ('trout', 1, 42, 16), ('koi', 1, 60, 8),
                     ('golden_koi', 2, 130, 4), ('ancient_fish', 3, 320, 1))
+    # 어종별 길이(cm)/무게(kg) 범위 — 잡을 때마다 이 범위 내에서 랜덤(치우친 분포)
+    FISH_SIZE_RANGE = {
+        'minnow':       (4.0, 9.0,    0.01, 0.05),
+        'carp':         (20.0, 55.0,  0.5,  4.5),
+        'trout':        (25.0, 45.0,  0.3,  1.8),
+        'koi':          (30.0, 70.0,  1.0,  6.0),
+        'golden_koi':   (40.0, 90.0,  2.0,  9.5),
+        'ancient_fish': (80.0, 220.0, 15.0, 120.0),
+    }
     FISH_GRADE_COL = {0: (176, 200, 214), 1: (120, 206, 150),
                       2: (242, 200, 108), 3: (212, 150, 236)}
     _FISH_POINTS = {0: 1, 1: 3, 2: 8, 3: 20}      # 등급별 교환 포인트
@@ -5993,8 +6007,16 @@ class Game:
                   'pending': (key, grade, gold), 'grade': grade})
         self.audio.play('button')
 
+    def _roll_fish_size(self, key):
+        """어종별 길이(cm)/무게(kg)를 치우친 분포로 랜덤 산출 — 대부분 소형, 가끔 대물."""
+        lo_l, hi_l, lo_w, hi_w = self.FISH_SIZE_RANGE[key]
+        frac = random.triangular(0.0, 1.0, 0.22)
+        length = round(lo_l + (hi_l - lo_l) * frac, 1)
+        weight = round(lo_w + (hi_w - lo_w) * frac, 2)
+        return length, weight
+
     def _fish_land(self, key, grade, gold):
-        """릴 감기 성공 — 보상 지급(골드/카운터/구운 생선) + 결과 화면."""
+        """릴 감기 성공 — 보상 지급(골드/카운터/구운 생선) + 크기 기록 + 결과 화면."""
         from core.save_load import save_records
         f = self._fish
         self.player.gold += gold
@@ -6005,12 +6027,23 @@ class Game:
         self._ach_unlock('ACH_FISH_FIRST')       # 첫 낚시
         self._ach_stat('fish')                   # 물고기 50마리 카운터
         self._check_life_master()
+        # 크기(길이/무게) 산출 + 도감 최고기록 갱신
+        length, weight = self._roll_fish_size(key)
+        best = self._records.setdefault('fish_best', {})
+        prev = best.get(key)
+        new_record = prev is None or weight > prev.get('wt', 0)
+        if new_record:
+            best[key] = {'len': length, 'wt': weight}
+        f['len'] = length; f['wt'] = weight; f['new_record'] = new_record
         # 채집품: 구운 생선을 인벤토리에 지급(고급 어종은 특상 생선구이)
         f['food'] = self._give_inventory_item('deluxe_fish' if grade >= 2 else 'grilled_fish')
         if f['food']:
             self.messages.append((t('fish_food_get', f['food']), 'info'))
         f['phase'] = 'result'; f['result'] = key; f['grade'] = grade; f['gold'] = gold
-        if grade >= 2:
+        if new_record:
+            self.animator.add(BannerAnim(t('fish_new_record'), (255, 224, 110), size=24))
+            self.audio.play('levelup')
+        elif grade >= 2:
             self.animator.add(BannerAnim(t('fish_grade_' + str(grade)),
                                          self.FISH_GRADE_COL[grade], size=24))
             self.audio.play('levelup')
@@ -6142,6 +6175,7 @@ class Game:
             col = (150, 240, 170) if flash else (110, 200, 140)
         else:
             res = f.get('result')
+            size_line = None
             if res == 'miss':
                 msg, col = t('fish_miss'), (200, 150, 150)
             elif res == 'early':
@@ -6152,6 +6186,17 @@ class Game:
                 grade = f.get('grade', 0)
                 col = self.FISH_GRADE_COL.get(grade, (220, 230, 240))
                 msg = t('fish_got', t('fish_' + res), f.get('gold', 0))
+                size_line = (t('fish_new_record_tag') if f.get('new_record') else '') + \
+                            t('fish_size', f.get('len', 0), f.get('wt', 0))
+            mt = big.render(msg, True, col)
+            s.blit(mt, (bx + (bw - mt.get_width()) // 2, by + bh - 54))
+            if size_line:
+                szcol = (255, 224, 110) if f.get('new_record') else (170, 195, 210)
+                sz = self.hud.font_sm.render(size_line, True, szcol)
+                s.blit(sz, (bx + (bw - sz.get_width()) // 2, by + bh - 32))
+            hint = self.hud.font_sm.render(t('fish_hint_menu'), True, (120, 150, 170))
+            s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
+            return
         mt = big.render(msg, True, col)
         s.blit(mt, (bx + (bw - mt.get_width()) // 2, by + bh - 40))
         hint = self.hud.font_sm.render(t('fish_hint_menu'), True, (120, 150, 170))
@@ -6193,9 +6238,47 @@ class Game:
         else:
             done = self.hud.font_sm.render(t('angler_done'), True, (180, 210, 200))
             s.blit(done, (bx + (bw - done.get_width()) // 2, yb + 8))
+        codex_hint = self.hud.font_sm.render(t('angler_codex_hint'), True, (150, 200, 190))
+        s.blit(codex_hint, (bx + (bw - codex_hint.get_width()) // 2, by + bh - 30))
         hint = self.hud.font_sm.render(t('angler_hint'), True, (120, 150, 160))
         s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
 
+    def _render_fish_codex(self):
+        """물고기 도감 — 어종별 보유 수·최고 길이/무게. 미확인 어종은 '???'."""
+        counts = self._fish_counts()
+        best = self._records.get('fish_best') or {}
+        s = self.screen
+        bw, bh = 330, 258
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        pygame.draw.rect(s, (16, 20, 26), (bx, by, bw, bh), border_radius=7)
+        pygame.draw.rect(s, (150, 190, 210), (bx, by, bw, bh), 2, border_radius=7)
+        title = self.hud.font_sm.render(t('fish_codex_title'), True, (210, 228, 240))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 8))
+        discovered = sum(1 for s0 in self.FISH_SPECIES if counts[s0[0]] > 0)
+        prog = self.hud.font_sm.render(
+            t('fish_codex_progress', discovered, len(self.FISH_SPECIES)), True, (150, 200, 190))
+        s.blit(prog, (bx + (bw - prog.get_width()) // 2, by + 24))
+        pygame.draw.line(s, (54, 66, 78), (bx + 12, by + 42), (bx + bw - 12, by + 42), 1)
+        row_h = 30
+        for i, s0 in enumerate(self.FISH_SPECIES):
+            key, grade = s0[0], s0[1]
+            ry = by + 48 + i * row_h
+            caught = counts[key] > 0
+            col = self.FISH_GRADE_COL[grade] if caught else (90, 96, 104)
+            pygame.draw.circle(s, col, (bx + 22, ry + 9), 6)
+            name = t('fish_' + key) if caught else t('fish_codex_unknown')
+            nm = self.hud.font_sm.render(name, True, col if caught else (120, 124, 130))
+            s.blit(nm, (bx + 34, ry))
+            if caught:
+                sub_txt = t('fish_codex_caught', counts[key])
+                b = best.get(key)
+                if b:
+                    sub_txt += '  ' + t('fish_codex_best', b['len'], b['wt'])
+                sub = self.hud.font_sm.render(sub_txt, True, (150, 165, 175))
+                s.blit(sub, (bx + 34, ry + 14))
+        hint = self.hud.font_sm.render(t('fish_codex_hint'), True, (120, 150, 160))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
 
     _RELIC_ICON = {'atk': (232, 96, 84), 'def': (110, 168, 236), 'eva': (150, 220, 150)}
 
@@ -9318,6 +9401,8 @@ class Game:
             self._render_altar()
         elif self.state == 'angler':
             self._render_angler()
+        elif self.state == 'fish_codex':
+            self._render_fish_codex()
         elif self.state == 'fishing':
             self._render_fishing()
         elif self.state == 'ranch_menu':

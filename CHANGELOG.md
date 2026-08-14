@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.17.12 — Fishing: size records & Fish Codex
+
+- Every fish you catch now has a **random length/weight** (biased toward smaller, with a chance of a big one), shown right on the catch screen.
+- Landing your **biggest-ever catch** of a species now flags a **🏆 NEW RECORD** banner.
+- New **Fish Codex** (press **C** at the old angler's trade menu): shows every species — undiscovered ones are hidden as **???** — with catch count and personal-best length/weight once discovered, plus overall completion progress.
+
 ## v2.17.11 — Magic Vortex follows you, keys swapped
 
 - **Magic Vortex** now follows the mage instead of staying fixed where it was cast, and pressing its key again while it's active detonates it early (same payoff, just on demand instead of waiting out the full 30s).
