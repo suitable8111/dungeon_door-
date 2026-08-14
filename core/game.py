@@ -475,7 +475,9 @@ class Game:
         self._farm_menu_idx = 0      # 농사 팝업 커서
         self._altar_idx = 0          # 고대 제단 메뉴 커서
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
-        self._guide_tip_idx = 0      # 마을 안내인 — 다음에 들려줄 팁 순번
+        self._guide_level = 0         # 마을 안내인 메뉴: 0=대분류 목록, 1=소분류(팁) 목록
+        self._guide_cat_idx = 0       # 대분류 커서
+        self._guide_topic_idx = 0     # 소분류 커서
         self._rank_lb_idx = 0        # 랭킹: 현재 리더보드 탭
         self._rank_mode = 'global'   # 랭킹: 전세계/친구
         self._advance_idx = 0        # 전직 선택 커서
@@ -2820,6 +2822,11 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'fish_codex':
                     self.state = 'angler'              # 도감은 낚시 노인 메뉴로 복귀
+                elif self.state == 'guide':
+                    if self._guide_level == 1:
+                        self._guide_level = 0           # 소분류 → 대분류로 복귀
+                    else:
+                        self.state = 'playing'
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
                                     'altar', 'angler', 'fishing', 'ranch_menu',
                                     'ranking', 'advance'):
@@ -2865,6 +2872,8 @@ class Game:
                 self._handle_altar_action(action)
             elif self.state == 'angler':
                 self._handle_angler_action(action)
+            elif self.state == 'guide':
+                self._handle_guide_action(action)
             elif self.state == 'fishing':
                 self._handle_fishing_action(action)
             elif self.state == 'ranch_menu':
@@ -5384,7 +5393,7 @@ class Game:
         elif npc['id'] == 'advance_master':
             self._open_advance()
         elif npc['id'] == 'guide':
-            self._open_guide_dialog()
+            self._open_guide_menu()
         elif 'quest' in npc:
             self._open_quest_dialog(npc['id'])
 
@@ -6355,24 +6364,96 @@ class Game:
         """대장장이 강화 비용 — 강화 단계가 오를수록 비싸진다."""
         return 40 + item.enhance_level * 35
 
-    # ═════════════════ 마을 안내인 (초보자 팁) ═════════════════════════
-    # 순서대로: 조작/전투 → 던전 진행 → 성장(강화·전직) → 생활(농사·낚시·목장) → 기타
-    GUIDE_TIP_KEYS = (
-        'guide_tip_move', 'guide_tip_attack', 'guide_tip_skill', 'guide_tip_ultimate',
-        'guide_tip_dungeon', 'guide_tip_shop', 'guide_tip_enchant', 'guide_tip_advance',
-        'guide_tip_farm', 'guide_tip_fish', 'guide_tip_ranch',
-        'guide_tip_quest', 'guide_tip_storage',
+    # ═════════════════ 마을 안내인 (초보자 팁 — 대분류/소분류 메뉴) ═════════
+    # 대분류 5개 × 소분류(팁) — (대분류 이름키, [(소분류 이름키, 팁 본문키), ...])
+    GUIDE_CATEGORIES = (
+        ('guide_cat_controls', (('guide_topic_move', 'guide_tip_move'),
+                                ('guide_topic_attack', 'guide_tip_attack'))),
+        ('guide_cat_combat',   (('guide_topic_skill', 'guide_tip_skill'),
+                                ('guide_topic_ultimate', 'guide_tip_ultimate'))),
+        ('guide_cat_dungeon',  (('guide_topic_dungeon', 'guide_tip_dungeon'),
+                                ('guide_topic_shop', 'guide_tip_shop'),
+                                ('guide_topic_enchant', 'guide_tip_enchant'),
+                                ('guide_topic_advance', 'guide_tip_advance'))),
+        ('guide_cat_life',     (('guide_topic_farm', 'guide_tip_farm'),
+                                ('guide_topic_fish', 'guide_tip_fish'),
+                                ('guide_topic_ranch', 'guide_tip_ranch'))),
+        ('guide_cat_town',     (('guide_topic_quest', 'guide_tip_quest'),
+                                ('guide_topic_storage', 'guide_tip_storage'))),
     )
 
-    def _open_guide_dialog(self):
-        """마을 안내인 — 말을 걸 때마다 다음 순번의 초보자 팁을 하나씩 안내."""
-        key = self.GUIDE_TIP_KEYS[self._guide_tip_idx % len(self.GUIDE_TIP_KEYS)]
-        self._guide_tip_idx += 1
-        self._dialog = {'qid': None, 'mode': 'info',
-                        'npc_name': t('guide_keeper'),
-                        'text': t(key), 'start': pygame.time.get_ticks()}
-        self.state = 'dialog'
-        self.audio.play('menu_select')
+    def _open_guide_menu(self):
+        """마을 안내인 — 대분류(카테고리) → 소분류(팁) 2단 메뉴를 연다."""
+        self._guide_level = 0
+        self._guide_cat_idx = 0
+        self._guide_topic_idx = 0
+        self.state = 'guide'
+        self.audio.play('shop_open')
+
+    def _handle_guide_action(self, action):
+        ty = action['type']
+        n_cat = len(self.GUIDE_CATEGORIES)
+        if self._guide_level == 0:
+            if ty == 'move' and action.get('dy'):
+                self._guide_cat_idx = (self._guide_cat_idx + action['dy']) % n_cat
+                self.audio.play('menu_select')
+            elif ty in ('confirm', 'attack', 'interact'):
+                self._guide_level = 1
+                self._guide_topic_idx = 0
+                self.audio.play('menu_select')
+        else:
+            topics = self.GUIDE_CATEGORIES[self._guide_cat_idx][1]
+            if ty == 'move' and action.get('dy'):
+                self._guide_topic_idx = (self._guide_topic_idx + action['dy']) % len(topics)
+                self.audio.play('menu_select')
+
+    def _render_guide_menu(self):
+        """마을 안내인 메뉴 — 대분류 목록 또는 (대분류 안의) 소분류 목록 + 팁 본문."""
+        s = self.screen
+        bw, bh = 380, 280
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA); panel.fill((16, 18, 26, 242))
+        s.blit(panel, (bx, by))
+        pygame.draw.rect(s, (140, 190, 150), (bx, by, bw, bh), 2, border_radius=8)
+        title = self.hud.font_md.render(t('guide_keeper'), True, (200, 230, 210))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 10))
+        pygame.draw.line(s, (54, 70, 62), (bx + 14, by + 34), (bx + bw - 14, by + 34), 1)
+        if self._guide_level == 0:
+            for i, (cat_key, _topics) in enumerate(self.GUIDE_CATEGORIES):
+                sel = i == self._guide_cat_idx
+                ry = by + 44 + i * 32
+                if sel:
+                    pygame.draw.rect(s, (40, 62, 52), (bx + 14, ry - 3, bw - 28, 27), border_radius=5)
+                col = (255, 235, 160) if sel else (200, 210, 205)
+                line = f"{i + 1}. {t(cat_key)}"
+                ln = self.hud.font_sm.render(line, True, col)
+                s.blit(ln, (bx + 26, ry))
+            hint = self.hud.font_sm.render(t('guide_hint_top'), True, (130, 160, 145))
+            s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 20))
+        else:
+            cat_key, topics = self.GUIDE_CATEGORIES[self._guide_cat_idx]
+            sub = self.hud.font_sm.render(f"{self._guide_cat_idx + 1}. {t(cat_key)}", True, (170, 210, 190))
+            s.blit(sub, (bx + 14, by + 40))
+            list_y = by + 62
+            for i, (topic_key, _tip_key) in enumerate(topics):
+                sel = i == self._guide_topic_idx
+                ry = list_y + i * 24
+                if sel:
+                    pygame.draw.rect(s, (40, 62, 52), (bx + 14, ry - 2, bw - 28, 21), border_radius=4)
+                col = (255, 235, 160) if sel else (200, 210, 205)
+                line = f"{self._guide_cat_idx + 1}-{i + 1}. {t(topic_key)}"
+                ln = self.hud.font_sm.render(line, True, col)
+                s.blit(ln, (bx + 26, ry))
+            pygame.draw.line(s, (54, 70, 62), (bx + 14, list_y + len(topics) * 24 + 4,),
+                             (bx + bw - 14, list_y + len(topics) * 24 + 4), 1)
+            _, tip_key = topics[self._guide_topic_idx]
+            ty = list_y + len(topics) * 24 + 14
+            for line in self._wrap_text(t(tip_key), self.hud.font_sm, bw - 40):
+                ls = self.hud.font_sm.render(line, True, (215, 220, 225))
+                s.blit(ls, (bx + 20, ty)); ty += 18
+            hint = self.hud.font_sm.render(t('guide_hint_sub'), True, (130, 160, 145))
+            s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
 
     # ═════════════════ 퀘스트 (시민 의뢰) ═════════════════════════════
     def _town_visible_givers(self) -> set:
@@ -9423,6 +9504,8 @@ class Game:
             self._render_altar()
         elif self.state == 'angler':
             self._render_angler()
+        elif self.state == 'guide':
+            self._render_guide_menu()
         elif self.state == 'fish_codex':
             self._render_fish_codex()
         elif self.state == 'fishing':

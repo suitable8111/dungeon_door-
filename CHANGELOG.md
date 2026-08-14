@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.14 — Town Guide menu, categorized
+
+- The **Town Guide** is now a proper categorized menu instead of a random-feeling one-line-at-a-time chat: pick a numbered major category (1–5: Controls, Combat, Dungeon & Growth, Life, Town), then a numbered topic within it (e.g. "3-2. Shop & Enhance"), with the full tip shown right there. Fully localized in all 5 languages.
+
 ## v2.17.13 — Town Guide NPC
 
 - New **Town Guide** NPC now stands right next to the portal in town — talk to them (E) for beginner tips. Each conversation cycles to the next tip (movement/combat, dungeon basics, shops & enchanting, advancement, farming/fishing/ranching, quests, storage), looping back to the start once you've heard them all.
