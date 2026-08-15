@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.16 — Bounty Marker (floor 20+)
+
+- New **Bounty Marker** system: starting floor 20, every non-boss floor spawns one enemy wrapped in a pulsing red aura with a marker overhead — the dungeon door to the next floor stays sealed until it's defeated. The bounty target is tougher (+60% HP) but pays out (3x gold) when it falls. A one-time in-game explainer appears the first time you hit floor 20.
+
 ## v2.17.15 — Farming & Ranching get the fishing treatment
 
 - **Crops and livestock now have size/quality too**: every harvest or collection rolls a weight (crops in kg, livestock produce in g/kg/L) biased toward normal-sized with a chance of a big one, grants a **quality-based gold bonus** (Normal/Good/Excellent/Legendary), and tracks your **personal best** per crop/animal — beating your record pops a 🏆 NEW RECORD banner just like fishing.

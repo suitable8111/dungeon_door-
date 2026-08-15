@@ -379,6 +379,9 @@ class Game:
         self._respawn_timer_ms = 0      # 다음 리스폰까지 남은 시간
         self._RESPAWN_INTERVAL = 10000  # 리스폰 주기 (ms)
 
+        # 현상금 마커 (20층+, 비-보스 층): 처치해야 던전 문이 열림
+        self._door_locked = False
+
         # 스킬 레벨 / XP (skill_id 키)
         self._skill_levels: dict[str, int] = {sid: 1 for sid in ALL_SKILL_DEFS}
         self._skill_xp:     dict[str, int] = {sid: 0 for sid in ALL_SKILL_DEFS}
@@ -2581,6 +2584,7 @@ class Game:
 
         # 파괴 가능 프롭 + 보물 고블린 (리스폰 카운트 산정 전에 스폰)
         self._spawn_floor_props()
+        self._spawn_bounty_marker()
 
         # co-op: 결정론적 생성이라 양쪽 적 목록이 동일 → 인덱스로 안정적 net_id 부여
         if self._coop_dungeon:
@@ -2652,6 +2656,34 @@ class Game:
                 dungeon.enemies.append(Enemy(pos[0], pos[1], d))
                 self.messages.append((t('goblin_spawn'), 'warn'))
                 self.audio.play('shop_open')
+
+    _BOUNTY_FLOOR = 20             # 이 층부터 비-보스 층에 현상금 마커 등장
+    _BOUNTY_HP_MUL = 1.6
+    _BOUNTY_GOLD_MUL = 3.0
+
+    def _spawn_bounty_marker(self):
+        """20층부터 비-보스 층: 적 하나를 '현상금 마커'로 지정 — 처치해야 던전 문이 열린다."""
+        self._door_locked = False
+        if self._in_town or self.dungeon.is_boss_floor or self.floor < self._BOUNTY_FLOOR:
+            return
+        candidates = [e for e in self.dungeon.enemies
+                     if e.is_alive() and not e.is_prop and not e.flee]
+        if not candidates:
+            return
+        target = random.choice(candidates)
+        target.is_bounty = True
+        target.max_hp = int(target.max_hp * self._BOUNTY_HP_MUL)
+        target.hp = target.max_hp
+        target.gold_drop = int(target.gold_drop * self._BOUNTY_GOLD_MUL)
+        self._door_locked = True
+        if not self._records.get('bounty_intro_seen', False):
+            self._records['bounty_intro_seen'] = True
+            self.messages.append((t('bounty_intro_1'), 'warn'))
+            self.messages.append((t('bounty_intro_2'), 'info'))
+            self.animator.add(BannerAnim(t('bounty_intro_banner'), (235, 90, 70),
+                                         y=100, size=28, duration_ms=2400))
+            self.audio.play('boss_appear')
+        self.messages.append((t('bounty_marked', target.name), 'warn'))
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
@@ -3885,6 +3917,11 @@ class Game:
 
         # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
         if target_tile.tile_type == TileType.DOOR:
+            # 현상금 마커 처치 전에는 문이 잠김 (붕괴 탈출 중에는 예외)
+            if self._door_locked and not self._collapse_active:
+                self.messages.append((t('bounty_door_locked'), 'warn'))
+                self.audio.play('no_gold')
+                return True
             # co-op: 다음 층 하강도 호스트 주도(같은 시드로 동시 생성). 클라는 대기.
             if self._coop_dungeon and self.net is not None:
                 if self.net.is_host:
@@ -4539,6 +4576,13 @@ class Game:
             return
         gold = int(enemy.gold_drop * self._gold_mult)   # NG+ 영구 골드 배율
         self._run_kills += 1
+        # 현상금 마커 처치 — 던전 문 잠금 해제
+        if enemy.is_bounty:
+            self._door_locked = False
+            self.messages.append((t('bounty_cleared', enemy.name), 'good'))
+            self.animator.add(BannerAnim(t('bounty_cleared_banner'), (255, 200, 90),
+                                         y=110, size=26, duration_ms=1800))
+            self.audio.play('levelup')
         # 펫 강화석 드롭 (해금 후): 일반 3% · 보스/엘리트 30%
         if self.player.is_pet_unlocked:
             drop_p = 0.30 if (enemy.is_boss or enemy.elite) else 0.03
@@ -10733,6 +10777,16 @@ class Game:
             pygame.draw.ellipse(self._game_surf, aura,
                                 (x + 3 - pulse, y + ts - 9 - pulse // 2,
                                  ts - 6 + pulse * 2, 8 + pulse), 2)
+        # 현상금 마커: 전신 붉은 맥동 링 + 머리 위 현상금 마크
+        if enemy.is_bounty:
+            pulse = int(3 * math.sin(ticks * 0.01))
+            pygame.draw.circle(self._game_surf, (255, 70, 60),
+                               (x + ts // 2, y + ts // 2), ts // 2 + 4 + pulse, 2)
+            mx, my = x + ts // 2, y - 11
+            pygame.draw.polygon(self._game_surf, (255, 90, 60),
+                                [(mx, my - 6), (mx + 5, my), (mx, my + 6), (mx - 5, my)])
+            pygame.draw.polygon(self._game_surf, (255, 205, 120),
+                                [(mx, my - 3), (mx + 2, my), (mx, my + 3), (mx - 2, my)])
         # 스프라이트는 항상 실제 색으로 그린 뒤, 피격 시 흰색을 가산 블렌드해
         # '흰 실루엣' 플래시로 만든다. (col=흰색을 넘기면 checker 무늬가
         #  흰/회 체커보드 네모로 보이는 아티팩트가 있었음)

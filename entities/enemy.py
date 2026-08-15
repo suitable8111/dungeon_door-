@@ -60,6 +60,7 @@ class Enemy(Entity):
         # 예고 중인 보스 스킬: {'skill', 'ms', 'tx', 'ty'} — 위험 구역 표시용
         self._pending_skill = None
 
+        self.is_bounty    = False  # 현상금 마커(20층+, 처치해야 던전 문이 열림)
         self.staggered_ms = 0
         self.slowed_ms    = 0     # 둔화(펫 디버프) 잔여 시간
         self.slow_pct     = 0.0   # 둔화율 (0~1)
