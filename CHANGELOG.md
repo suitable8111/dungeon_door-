@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.17.15 — Farming & Ranching get the fishing treatment
+
+- **Crops and livestock now have size/quality too**: every harvest or collection rolls a weight (crops in kg, livestock produce in g/kg/L) biased toward normal-sized with a chance of a big one, grants a **quality-based gold bonus** (Normal/Good/Excellent/Legendary), and tracks your **personal best** per crop/animal — beating your record pops a 🏆 NEW RECORD banner just like fishing.
+- The **Fish Codex is now the Life Codex** — press **C** from the angler, farm plot, or ranch pen menus to open it, with three switchable tabs (Fish / Crops / Ranch), each showing discovery progress, catch counts, and personal-best records.
+
 ## v2.17.14 — Town Guide menu, categorized
 
 - The **Town Guide** is now a proper categorized menu instead of a random-feeling one-line-at-a-time chat: pick a numbered major category (1–5: Controls, Combat, Dungeon & Growth, Life, Town), then a numbered topic within it (e.g. "3-2. Shop & Enhance"), with the full tip shown right there. Fully localized in all 5 languages.

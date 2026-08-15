@@ -475,6 +475,7 @@ class Game:
         self._farm_menu_idx = 0      # 농사 팝업 커서
         self._altar_idx = 0          # 고대 제단 메뉴 커서
         self._angler_idx = 0         # 낚시 노인 교환 메뉴 커서
+        self._codex_tab = 0           # 생활 도감 탭: 0=물고기 1=작물 2=목장
         self._guide_level = 0         # 마을 안내인 메뉴: 0=대분류 목록, 1=소분류(팁) 목록
         self._guide_cat_idx = 0       # 대분류 커서
         self._guide_topic_idx = 0     # 소분류 커서
@@ -2778,8 +2779,10 @@ class Game:
                         and self.state == 'playing' and not self._in_town:
                     self._start_collapse()             # [TEST] 붕괴 추격 발동
                     self.messages.append(('[TEST] 붕괴 시작 (C)', 'bad'))
-                elif event.key == pygame.K_c and self.state == 'angler':
-                    self.state = 'fish_codex'          # 물고기 도감 열람
+                elif event.key == pygame.K_c and self.state in ('angler', 'farm_menu', 'ranch_menu'):
+                    # 생활 도감 열람 — 어느 메뉴에서 눌렀는지에 따라 해당 탭으로 진입
+                    self._codex_tab = {'angler': 0, 'farm_menu': 1, 'ranch_menu': 2}[self.state]
+                    self.state = 'life_codex'
                     self.audio.play('menu_select')
                 elif event.key == pygame.K_b and self.state in ('playing', 'storage', 'inn'):
                     self._open_pet_status()          # 펫 상태창 (B)
@@ -2820,8 +2823,8 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'shop':
                     self.state = 'playing'
-                elif self.state == 'fish_codex':
-                    self.state = 'angler'              # 도감은 낚시 노인 메뉴로 복귀
+                elif self.state == 'life_codex':
+                    self.state = 'playing'              # 생활 도감은 바로 플레이로 복귀
                 elif self.state == 'guide':
                     if self._guide_level == 1:
                         self._guide_level = 0           # 소분류 → 대분류로 복귀
@@ -2874,6 +2877,8 @@ class Game:
                 self._handle_angler_action(action)
             elif self.state == 'guide':
                 self._handle_guide_action(action)
+            elif self.state == 'life_codex':
+                self._handle_life_codex_action(action)
             elif self.state == 'fishing':
                 self._handle_fishing_action(action)
             elif self.state == 'ranch_menu':
@@ -5522,27 +5527,57 @@ class Game:
         return next((c for (k, c, p, g) in self.LIVESTOCK if k == animal), 60)
 
     def _ranch_collect(self, pen):
-        """생산물 수확 — 아이템(채집품) + 골드, 가축은 남아 재생산(먹이 필요)."""
+        """생산물 수확 — 크기/품질 등급 산출 + 아이템(채집품) + 골드, 가축은 남아 재생산(먹이 필요)."""
         animal = pen['animal']
         spec = next((s for s in self.LIVESTOCK if s[0] == animal), None)
         if not spec:
             return
         _k, _c, pkey, pgold = spec
-        gold = int(pgold * getattr(self, '_gold_mult', 1.0))
+        # 크기(생산물 단위) + 품질 등급 산출 — 클수록 등급↑ → 골드 배율↑, 최고기록 갱신
+        lo, hi, unit = self.LIVESTOCK_SIZE_RANGE.get(animal, (0.1, 1.0, 'kg'))
+        size, frac = self._roll_skewed(lo, hi)
+        size = round(size, 1 if unit == 'g' else 2)
+        grade = self._size_grade(frac)
+        best = self._records.setdefault('ranch_best', {})
+        prev = best.get(animal)
+        new_record = prev is None or size > prev.get('size', 0)
+        if new_record:
+            best[animal] = {'size': size, 'unit': unit, 'grade': grade}
+        gold = int(pgold * getattr(self, '_gold_mult', 1.0) * self._SIZE_GRADE_MUL[grade])
         self.player.gold += gold
         self._gold_flash_ms = 220
         added = self._give_inventory_item(pkey)
         pen['fed'] = False; pen['stage'] = 0          # 재생산 위해 다시 먹이 필요
         self._records['ranch_total'] = int(self._records.get('ranch_total', 0)) + 1
+        counts = self._ranch_counts(); counts[animal] += 1
         self._ach_unlock('ACH_RANCH_FIRST')      # 첫 목장 수확
         self._check_life_master()
         if added:
             self.messages.append((t('ranch_collect_item', added, gold), 'good'))
         else:
             self.messages.append((t('ranch_collect', t('animal_' + animal), gold), 'good'))
-        self.animator.add(BannerAnim(t('ranch_collect_banner'), (230, 210, 120), size=22))
+        size_line = (t('life_new_record_tag') if new_record else '') + \
+                    t('ranch_size', size, unit)
+        self.messages.append((size_line, 'good' if new_record else 'info'))
+        if new_record:
+            self.animator.add(BannerAnim(t('life_new_record'), (255, 224, 110), size=24))
+            self.audio.play('levelup')
+        elif grade >= 2:
+            self.animator.add(BannerAnim(t('ranch_grade_' + str(grade)),
+                                         self.SIZE_GRADE_COL[grade], size=22))
+            self.audio.play('levelup')
+        else:
+            self.animator.add(BannerAnim(t('ranch_collect_banner'), (230, 210, 120), size=22))
+            self.audio.play('buy')
         self.animator.particles.emit_levelup(self.player.x, self.player.y)
-        self.audio.play('buy')
+
+    def _ranch_counts(self) -> dict:
+        c = self._records.get('ranch_caught')
+        if not isinstance(c, dict):
+            c = {}
+        counts = {k: int(c.get(k, 0)) for (k, *_r) in self.LIVESTOCK}
+        self._records['ranch_caught'] = counts
+        return counts
 
     def _render_ranch_menu(self):
         if self._ranch_menu_pen is None or not self._town:
@@ -5552,7 +5587,7 @@ class Game:
         s = self.screen
         empty = not pen.get('animal')
         bw = 236
-        bh = 52 + len(opts) * 26 + 22
+        bh = 52 + len(opts) * 26 + 40
         bx = GAME_X + (GAME_W - bw) // 2
         by = GAME_Y + (GAME_H - bh) // 2
         pygame.draw.rect(s, (26, 20, 12), (bx, by, bw, bh), border_radius=6)
@@ -5585,8 +5620,10 @@ class Game:
             lbl = self.hud.font_sm.render(label, True, col)
             s.blit(lbl, (bx + 28, y + 4))
             y += 26
+        codex_hint = self.hud.font_sm.render(t('life_codex_hint'), True, (150, 130, 90))
+        s.blit(codex_hint, (bx + (bw - codex_hint.get_width()) // 2, by + bh - 33))
         hint = self.hud.font_sm.render(t('ranch_menu_hint'), True, (140, 122, 92))
-        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
 
     # ── 농사 팝업 메뉴 (씨앗뿌리기/물주기/수확하기/뽑고버리기) ──────────
     FARM_ACTIONS = ('plant', 'water', 'harvest', 'uproot')
@@ -5595,6 +5632,9 @@ class Game:
     _CROP_SEED = {'wheat': 'seed_wheat', 'tomato': 'seed_tomato',
                   'pumpkin': 'seed_pumpkin', 'carrot': 'seed_carrot'}
     _SEED_CROP = {v: k for k, v in _CROP_SEED.items()}
+    # 작물별 수확 무게(kg) 범위 — 수확할 때마다 이 범위 내에서 치우친 분포로 랜덤
+    CROP_SIZE_RANGE = {'wheat': (0.05, 0.3), 'tomato': (0.05, 0.4),
+                       'pumpkin': (1.0, 20.0), 'carrot': (0.02, 0.25)}
 
     # ── 목장(가축 사육) ─────────────────────────────────────────────────────
     # (key, 구입가, 생산물 아이템, 생산 골드) — 가축 그림은 town._draw_animal 재사용
@@ -5605,6 +5645,9 @@ class Game:
     _LIVESTOCK_COL = {'chicken': (238, 232, 214), 'sheep': (226, 226, 230),
                       'pig': (232, 176, 180), 'cow': (86, 74, 66)}
     RANCH_ACTIONS = ('feed', 'collect', 'sell')
+    # 가축별 생산물 크기 범위 + 단위 — 수확할 때마다 치우친 분포로 랜덤
+    LIVESTOCK_SIZE_RANGE = {'chicken': (40.0, 90.0, 'g'), 'sheep': (2.0, 12.0, 'kg'),
+                            'pig': (1.5, 10.0, 'kg'), 'cow': (1.0, 8.0, 'L')}
 
     # ── 희귀식물(고대 제단) ────────────────────────────────────────────────
     # 수확 시 낮은 확률로 등장 → 영구 스탯 강화 재료 & 고대 무기 교환 재료.
@@ -5717,11 +5760,22 @@ class Game:
         self.state = 'playing'                              # 액션 후 메뉴 닫기
 
     def _farm_harvest(self, plot, crop):
-        """수확 — 치유 아이템(수확물) 인벤 지급 + 소액 골드 + 농사 진척(퀘스트형)."""
+        """수확 — 무게/품질 등급 산출 + 치유 아이템(수확물) 인벤 지급 + 골드 + 농사 진척."""
         from core.town import CROPS
         from entities.item import Item
         val = next((v for (cid, c, v) in CROPS if cid == crop), 30)
-        gold = int(val * getattr(self, '_gold_mult', 1.0) * 0.5)
+        # 무게(kg) + 품질 등급 산출 — 무거울수록 등급↑ → 골드 배율↑, 최고기록 갱신
+        lo, hi = self.CROP_SIZE_RANGE.get(crop, (0.1, 1.0))
+        weight, frac = self._roll_skewed(lo, hi)
+        weight = round(weight, 2)
+        grade = self._size_grade(frac)
+        best = self._records.setdefault('farm_best', {})
+        prev = best.get(crop)
+        new_record = prev is None or weight > prev.get('wt', 0)
+        if new_record:
+            best[crop] = {'wt': weight, 'grade': grade}
+        counts = self._farm_counts(); counts[crop] += 1
+        gold = int(val * getattr(self, '_gold_mult', 1.0) * 0.5 * self._SIZE_GRADE_MUL[grade])
         self.player.gold += gold
         self._gold_flash_ms = 220
         pkey = self._CROP_PRODUCE.get(crop)
@@ -5736,14 +5790,34 @@ class Game:
             self.messages.append((t('farm_harvest_item', added, gold), 'good'))
         else:
             self.messages.append((t('farm_harvest', t('crop_' + crop), gold), 'good'))
+        size_line = (t('life_new_record_tag') if new_record else '') + \
+                    t('farm_size', weight)
+        self.messages.append((size_line, 'good' if new_record else 'info'))
         # 채집품: 씨앗을 인벤토리에 지급 (밭에서 다시 심을 수 있음)
         seed = self._give_inventory_item(self._CROP_SEED.get(crop))
         if seed:
             self.messages.append((t('farm_seed_get', seed), 'info'))
         self.animator.particles.emit_levelup(self.player.x, self.player.y)
-        self.audio.play('buy')
+        if new_record:
+            self.animator.add(BannerAnim(t('life_new_record'), (255, 224, 110), size=24))
+            self.audio.play('levelup')
+        elif grade >= 2:
+            self.animator.add(BannerAnim(t('farm_grade_' + str(grade)),
+                                         self.SIZE_GRADE_COL[grade], size=22))
+            self.audio.play('levelup')
+        else:
+            self.audio.play('buy')
         self._farm_quest_progress()
         self._roll_rare_plant(crop, val)
+
+    def _farm_counts(self) -> dict:
+        from core.town import CROPS
+        c = self._records.get('farm_harvested')
+        if not isinstance(c, dict):
+            c = {}
+        counts = {cid: int(c.get(cid, 0)) for (cid, _col, _val) in CROPS}
+        self._records['farm_harvested'] = counts
+        return counts
 
     def _roll_rare_plant(self, crop, val):
         """수확 시 낮은 확률로 희귀식물 획득 — 작물 가치가 높을수록 확률↑."""
@@ -5778,7 +5852,7 @@ class Game:
             return
         plot = self._town.farm[self._farm_menu_plot]
         s = self.screen
-        bw, bh = 214, 160
+        bw, bh = 214, 178
         bx = GAME_X + (GAME_W - bw) // 2
         by = GAME_Y + (GAME_H - bh) // 2
         pygame.draw.rect(s, (16, 22, 12), (bx, by, bw, bh), border_radius=6)
@@ -5809,8 +5883,10 @@ class Game:
             lbl = self.hud.font_sm.render(labels[act], True, col)
             s.blit(lbl, (bx + 28, y + 6))
             y += 28
+        codex_hint = self.hud.font_sm.render(t('life_codex_hint'), True, (110, 150, 100))
+        s.blit(codex_hint, (bx + (bw - codex_hint.get_width()) // 2, by + bh - 32))
         hint = self.hud.font_sm.render(t('farm_menu_hint'), True, (110, 130, 100))
-        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
 
     # ── 고대 제단 — 희귀식물 영구강화 & 고대 무기 교환 ────────────────────
     def _open_altar(self):
@@ -6018,6 +6094,26 @@ class Game:
                   'band_c': random.uniform(0.24, 0.76), 'band_w': band_w,
                   'pending': (key, grade, gold), 'grade': grade})
         self.audio.play('button')
+
+    # 생활 콘텐츠(낚시/농사/목장) 공용 — 결과물 크기 등급 (0~3) 표시색/골드 배율
+    SIZE_GRADE_COL = {0: (190, 195, 200), 1: (120, 206, 150),
+                      2: (242, 200, 108), 3: (222, 140, 235)}
+    _SIZE_GRADE_MUL = (1.0, 1.3, 1.7, 2.5)
+
+    @staticmethod
+    def _roll_skewed(lo, hi, mode_frac=0.22):
+        """[lo,hi] 구간에서 치우친 분포로 값을 뽑는다 — 대부분 소형, 가끔 대물.
+        반환: (값, 0~1 사이의 상대 위치 프랙션) — 프랙션은 등급 산정에 사용."""
+        frac = random.triangular(0.0, 1.0, mode_frac)
+        return lo + (hi - lo) * frac, frac
+
+    @staticmethod
+    def _size_grade(frac: float) -> int:
+        """크기 프랙션(0~1) → 품질 등급(0 일반·1 상급·2 특상·3 전설)."""
+        if frac >= 0.92: return 3
+        if frac >= 0.75: return 2
+        if frac >= 0.45: return 1
+        return 0
 
     def _roll_fish_size(self, key):
         """어종별 길이(cm)/무게(kg)를 치우친 분포로 랜덤 산출 — 대부분 소형, 가끔 대물."""
@@ -6250,46 +6346,104 @@ class Game:
         else:
             done = self.hud.font_sm.render(t('angler_done'), True, (180, 210, 200))
             s.blit(done, (bx + (bw - done.get_width()) // 2, yb + 8))
-        codex_hint = self.hud.font_sm.render(t('angler_codex_hint'), True, (150, 200, 190))
+        codex_hint = self.hud.font_sm.render(t('life_codex_hint'), True, (150, 200, 190))
         s.blit(codex_hint, (bx + (bw - codex_hint.get_width()) // 2, by + bh - 30))
         hint = self.hud.font_sm.render(t('angler_hint'), True, (120, 150, 160))
         s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 17))
 
-    def _render_fish_codex(self):
-        """물고기 도감 — 어종별 보유 수·최고 길이/무게. 미확인 어종은 '???'."""
-        counts = self._fish_counts()
-        best = self._records.get('fish_best') or {}
+    def _codex_tab_rows(self, tab):
+        """탭(0=물고기,1=작물,2=목장)별 도감 행을 통일된 형식으로 반환:
+        [(표시이름, 보유여부, 점색, 부가텍스트_또는_None), ...]"""
+        rows = []
+        if tab == 0:
+            counts = self._fish_counts()
+            best = self._records.get('fish_best') or {}
+            for key, grade, *_r in self.FISH_SPECIES:
+                caught = counts[key] > 0
+                col = self.FISH_GRADE_COL[grade] if caught else (90, 96, 104)
+                name = t('fish_' + key) if caught else t('fish_codex_unknown')
+                sub = None
+                if caught:
+                    sub = t('fish_codex_caught', counts[key])
+                    b = best.get(key)
+                    if b:
+                        sub += '  ' + t('fish_codex_best', b['len'], b['wt'])
+                rows.append((name, caught, col, sub))
+        elif tab == 1:
+            from core.town import CROPS
+            counts = self._farm_counts()
+            best = self._records.get('farm_best') or {}
+            for cid, _col, _val in CROPS:
+                caught = counts[cid] > 0
+                b = best.get(cid)
+                grade = b['grade'] if (caught and b) else 0
+                col = self.SIZE_GRADE_COL[grade] if caught else (90, 96, 104)
+                name = t('crop_' + cid) if caught else t('fish_codex_unknown')
+                sub = None
+                if caught:
+                    sub = t('fish_codex_caught', counts[cid])
+                    if b:
+                        sub += '  ' + t('farm_codex_best', b['wt'])
+                rows.append((name, caught, col, sub))
+        else:
+            counts = self._ranch_counts()
+            best = self._records.get('ranch_best') or {}
+            for k, *_r in self.LIVESTOCK:
+                caught = counts[k] > 0
+                b = best.get(k)
+                grade = b['grade'] if (caught and b) else 0
+                col = self.SIZE_GRADE_COL[grade] if caught else (90, 96, 104)
+                name = t('animal_' + k) if caught else t('fish_codex_unknown')
+                sub = None
+                if caught:
+                    sub = t('fish_codex_caught', counts[k])
+                    if b:
+                        sub += '  ' + t('ranch_codex_best', b['size'], b['unit'])
+                rows.append((name, caught, col, sub))
+        return rows
+
+    def _handle_life_codex_action(self, action):
+        if action['type'] == 'move' and action.get('dx'):
+            self._codex_tab = (self._codex_tab + action['dx']) % 3
+            self.audio.play('menu_select')
+
+    def _render_life_codex(self):
+        """생활 도감 — 물고기/작물/목장 3탭. 미확인 항목은 '???'로 가려짐."""
+        rows = self._codex_tab_rows(self._codex_tab)
         s = self.screen
-        bw, bh = 330, 258
+        bw, bh = 330, 270
         bx = GAME_X + (GAME_W - bw) // 2
         by = GAME_Y + (GAME_H - bh) // 2
         pygame.draw.rect(s, (16, 20, 26), (bx, by, bw, bh), border_radius=7)
         pygame.draw.rect(s, (150, 190, 210), (bx, by, bw, bh), 2, border_radius=7)
-        title = self.hud.font_sm.render(t('fish_codex_title'), True, (210, 228, 240))
+        title = self.hud.font_sm.render(t('life_codex_title'), True, (210, 228, 240))
         s.blit(title, (bx + (bw - title.get_width()) // 2, by + 8))
-        discovered = sum(1 for s0 in self.FISH_SPECIES if counts[s0[0]] > 0)
+        # 탭 3개
+        tab_keys = ('life_codex_tab_fish', 'life_codex_tab_farm', 'life_codex_tab_ranch')
+        tab_w = (bw - 24) // 3
+        for i, tk in enumerate(tab_keys):
+            tx = bx + 12 + i * tab_w
+            sel = i == self._codex_tab
+            if sel:
+                pygame.draw.rect(s, (40, 62, 70), (tx, by + 24, tab_w - 4, 20), border_radius=4)
+            col = (255, 235, 160) if sel else (150, 165, 175)
+            ts_ = self.hud.font_sm.render(t(tk), True, col)
+            s.blit(ts_, (tx + (tab_w - 4 - ts_.get_width()) // 2, by + 26))
+        discovered = sum(1 for r in rows if r[1])
         prog = self.hud.font_sm.render(
-            t('fish_codex_progress', discovered, len(self.FISH_SPECIES)), True, (150, 200, 190))
-        s.blit(prog, (bx + (bw - prog.get_width()) // 2, by + 24))
-        pygame.draw.line(s, (54, 66, 78), (bx + 12, by + 42), (bx + bw - 12, by + 42), 1)
+            t('fish_codex_progress', discovered, len(rows)), True, (150, 200, 190))
+        s.blit(prog, (bx + (bw - prog.get_width()) // 2, by + 48))
+        pygame.draw.line(s, (54, 66, 78), (bx + 12, by + 64), (bx + bw - 12, by + 64), 1)
         row_h = 30
-        for i, s0 in enumerate(self.FISH_SPECIES):
-            key, grade = s0[0], s0[1]
-            ry = by + 48 + i * row_h
-            caught = counts[key] > 0
-            col = self.FISH_GRADE_COL[grade] if caught else (90, 96, 104)
+        for i, (name, caught, col, sub) in enumerate(rows):
+            ry = by + 70 + i * row_h
             pygame.draw.circle(s, col, (bx + 22, ry + 9), 6)
-            name = t('fish_' + key) if caught else t('fish_codex_unknown')
             nm = self.hud.font_sm.render(name, True, col if caught else (120, 124, 130))
             s.blit(nm, (bx + 34, ry))
-            if caught:
-                sub_txt = t('fish_codex_caught', counts[key])
-                b = best.get(key)
-                if b:
-                    sub_txt += '  ' + t('fish_codex_best', b['len'], b['wt'])
-                sub = self.hud.font_sm.render(sub_txt, True, (150, 165, 175))
-                s.blit(sub, (bx + 34, ry + 14))
-        hint = self.hud.font_sm.render(t('fish_codex_hint'), True, (120, 150, 160))
+            if sub:
+                subs = self.hud.font_sm.render(sub, True, (150, 165, 175))
+                s.blit(subs, (bx + 34, ry + 14))
+        hint = self.hud.font_sm.render(t('life_codex_nav_hint'), True, (120, 150, 160))
         s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 16))
 
     _RELIC_ICON = {'atk': (232, 96, 84), 'def': (110, 168, 236), 'eva': (150, 220, 150)}
@@ -9506,8 +9660,8 @@ class Game:
             self._render_angler()
         elif self.state == 'guide':
             self._render_guide_menu()
-        elif self.state == 'fish_codex':
-            self._render_fish_codex()
+        elif self.state == 'life_codex':
+            self._render_life_codex()
         elif self.state == 'fishing':
             self._render_fishing()
         elif self.state == 'ranch_menu':
