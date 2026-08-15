@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.17.18 — Escalating dungeon door gates (50/100/200/500/700/900)
+## v2.18.0 — Escalating dungeon door gates (50/100/200/500/700/900)
 
 Six new door-gate types layer on top of the floor-20 Bounty Marker, each introduced once and then recurring on every non-boss floor past that point:
 - **Floor 50 — Execution Chamber**: defeat 70% of the floor's monsters.
