@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.17 — Bounty door explains itself
+
+- Bumping into a sealed bounty door now opens a proper town-style dialog box (the "Sealed Door" itself) instead of a one-line toast — it explains the rule and describes exactly what the bounty target looks like (pulsing red ring + diamond mark overhead), fully localized.
+
 ## v2.17.16 — Bounty Marker (floor 20+)
 
 - New **Bounty Marker** system: starting floor 20, every non-boss floor spawns one enemy wrapped in a pulsing red aura with a marker overhead — the dungeon door to the next floor stays sealed until it's defeated. The bounty target is tougher (+60% HP) but pays out (3x gold) when it falls. A one-time in-game explainer appears the first time you hit floor 20.

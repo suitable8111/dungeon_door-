@@ -2685,6 +2685,15 @@ class Game:
             self.audio.play('boss_appear')
         self.messages.append((t('bounty_marked', target.name), 'warn'))
 
+    def _open_bounty_locked_dialog(self):
+        """잠긴 던전 문에 부딪혔을 때 — 마을 대화창과 같은 스타일로 상세 설명."""
+        self._dialog = {'qid': None, 'mode': 'info',
+                        'npc_name': t('bounty_door_name'),
+                        'text': t('bounty_door_locked_detail'),
+                        'start': pygame.time.get_ticks()}
+        self.state = 'dialog'
+        self.audio.play('menu_select')
+
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
         for event in pygame.event.get():
@@ -3919,8 +3928,7 @@ class Game:
         if target_tile.tile_type == TileType.DOOR:
             # 현상금 마커 처치 전에는 문이 잠김 (붕괴 탈출 중에는 예외)
             if self._door_locked and not self._collapse_active:
-                self.messages.append((t('bounty_door_locked'), 'warn'))
-                self.audio.play('no_gold')
+                self._open_bounty_locked_dialog()
                 return True
             # co-op: 다음 층 하강도 호스트 주도(같은 시드로 동시 생성). 클라는 대기.
             if self._coop_dungeon and self.net is not None:
