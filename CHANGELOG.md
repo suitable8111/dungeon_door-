@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.17.18 — Escalating dungeon door gates (50/100/200/500/700/900)
+
+Six new door-gate types layer on top of the floor-20 Bounty Marker, each introduced once and then recurring on every non-boss floor past that point:
+- **Floor 50 — Execution Chamber**: defeat 70% of the floor's monsters.
+- **Floor 100 — Sealed Choice**: pick 1 of 3 sealed sigils (blind) for a random blessing — or a risky curse that trades HP for a big attack buff.
+- **Floor 200 — Double Bounty**: two bounty targets marked at once, both must fall.
+- **Floor 500 — Room of Survival**: hold out for 45 seconds while monsters spawn faster.
+- **Floor 700 — Arena Gate**: land 5 Drive Cancels in combat.
+- **Floor 900 — Trial of the Abyss**: the finale — 2 bounty kills AND 80% of the floor cleared, simultaneously.
+
+Each gate now shows a live progress readout at the top of the screen, and bumping a locked door opens a detailed, town-dialog-style explanation specific to that gate.
+
 ## v2.17.17 — Bounty door explains itself
 
 - Bumping into a sealed bounty door now opens a proper town-style dialog box (the "Sealed Door" itself) instead of a one-line toast — it explains the rule and describes exactly what the bounty target looks like (pulsing red ring + diamond mark overhead), fully localized.

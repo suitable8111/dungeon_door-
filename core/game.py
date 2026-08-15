@@ -379,8 +379,9 @@ class Game:
         self._respawn_timer_ms = 0      # 다음 리스폰까지 남은 시간
         self._RESPAWN_INTERVAL = 10000  # 리스폰 주기 (ms)
 
-        # 현상금 마커 (20층+, 비-보스 층): 처치해야 던전 문이 열림
+        # 던전 문 관문 (20층+, 비-보스 층): 층수 구간별로 다른 조건이 있어야 통과
         self._door_locked = False
+        self._gate = None      # 활성 관문 상태 dict, 없으면 None
 
         # 스킬 레벨 / XP (skill_id 키)
         self._skill_levels: dict[str, int] = {sid: 1 for sid in ALL_SKILL_DEFS}
@@ -1421,6 +1422,13 @@ class Game:
                     if self._vortex['ms'] <= 0:
                         self._vortex_release()
                         self._vortex = None
+                # 던전 문 관문 "생존의 방": 타이머 감소
+                if (self._gate is not None and self._gate['type'] == 'survival'
+                        and self._door_locked):
+                    self._gate['ms'] -= dt
+                    if self._gate['ms'] <= 0:
+                        self._gate['ms'] = 0
+                        self._check_gate_cleared()
             self._update_fade(dt)
             self._update_shake(dt)
             if self.camera:
@@ -2584,7 +2592,6 @@ class Game:
 
         # 파괴 가능 프롭 + 보물 고블린 (리스폰 카운트 산정 전에 스폰)
         self._spawn_floor_props()
-        self._spawn_bounty_marker()
 
         # co-op: 결정론적 생성이라 양쪽 적 목록이 동일 → 인덱스로 안정적 net_id 부여
         if self._coop_dungeon:
@@ -2599,6 +2606,8 @@ class Game:
         self._respawn_max      = sum(1 for e in self.dungeon.enemies
                                      if not e.is_boss and not e.is_prop and not e.flee)
         self._respawn_timer_ms = self._RESPAWN_INTERVAL
+        # 던전 문 관문 설정 (리스폰 기준치 확정 후 — '생존의 방'이 기준치를 증폭시킨다)
+        self._spawn_door_gate()
 
     def _emit_goblin_sparkle(self, enemy):
         """보물 고블린 주변 금색 반짝임 파티클 (순수 연출)."""
@@ -2657,42 +2666,295 @@ class Game:
                 self.messages.append((t('goblin_spawn'), 'warn'))
                 self.audio.play('shop_open')
 
-    _BOUNTY_FLOOR = 20             # 이 층부터 비-보스 층에 현상금 마커 등장
+    # ── 던전 문 관문: 층수 구간별로 다른 통과 조건 ──────────────────────
     _BOUNTY_HP_MUL = 1.6
     _BOUNTY_GOLD_MUL = 3.0
+    _GATE_SURVIVAL_MS = 45000.0
+    _GATE_DRIVE_NEED = 5
+    # (최소 층수, 관문 종류) — floor 이상인 첫 항목을 사용(높은 층 우선)
+    _GATE_TIERS = ((900, 'abyss_trial'), (700, 'drive'), (500, 'survival'),
+                  (200, 'dual_bounty'), (100, 'blind_choice'), (50, 'kill_quota'),
+                  (20, 'bounty'))
 
-    def _spawn_bounty_marker(self):
-        """20층부터 비-보스 층: 적 하나를 '현상금 마커'로 지정 — 처치해야 던전 문이 열린다."""
+    def _gate_type_for_floor(self, floor):
+        for min_floor, gtype in self._GATE_TIERS:
+            if floor >= min_floor:
+                return gtype
+        return None
+
+    def _spawn_door_gate(self):
+        """비-보스 층 진입 시 층수에 맞는 던전 문 관문을 설정한다."""
         self._door_locked = False
-        if self._in_town or self.dungeon.is_boss_floor or self.floor < self._BOUNTY_FLOOR:
+        self._gate = None
+        if self._in_town or self.dungeon.is_boss_floor:
             return
-        candidates = [e for e in self.dungeon.enemies
-                     if e.is_alive() and not e.is_prop and not e.flee]
-        if not candidates:
+        gtype = self._gate_type_for_floor(self.floor)
+        if gtype is None:
             return
-        target = random.choice(candidates)
-        target.is_bounty = True
-        target.max_hp = int(target.max_hp * self._BOUNTY_HP_MUL)
-        target.hp = target.max_hp
-        target.gold_drop = int(target.gold_drop * self._BOUNTY_GOLD_MUL)
+        ok = {
+            'bounty':       lambda: self._gate_setup_bounty(1),
+            'dual_bounty':  lambda: self._gate_setup_bounty(2),
+            'kill_quota':   self._gate_setup_kill_quota,
+            'blind_choice': self._gate_setup_blind_choice,
+            'survival':     self._gate_setup_survival,
+            'drive':        self._gate_setup_drive,
+            'abyss_trial':  self._gate_setup_abyss_trial,
+        }[gtype]()
+        if not ok:
+            return
         self._door_locked = True
-        if not self._records.get('bounty_intro_seen', False):
-            self._records['bounty_intro_seen'] = True
-            self.messages.append((t('bounty_intro_1'), 'warn'))
-            self.messages.append((t('bounty_intro_2'), 'info'))
-            self.animator.add(BannerAnim(t('bounty_intro_banner'), (235, 90, 70),
+        intro_key = f'gate_intro_seen_{gtype}'
+        if not self._records.get(intro_key, False):
+            self._records[intro_key] = True
+            self.messages.append((t(f'gate_intro_1_{gtype}'), 'warn'))
+            self.messages.append((t(f'gate_intro_2_{gtype}'), 'info'))
+            self.animator.add(BannerAnim(t(f'gate_intro_banner_{gtype}'), (235, 90, 70),
                                          y=100, size=28, duration_ms=2400))
             self.audio.play('boss_appear')
-        self.messages.append((t('bounty_marked', target.name), 'warn'))
 
-    def _open_bounty_locked_dialog(self):
-        """잠긴 던전 문에 부딪혔을 때 — 마을 대화창과 같은 스타일로 상세 설명."""
+    def _gate_pick_bounty_targets(self, count):
+        """살아있는 적 중 count마리를 골라 현상금 마커로 지정(HP/골드 증폭)."""
+        candidates = [e for e in self.dungeon.enemies
+                     if e.is_alive() and not e.is_prop and not e.flee]
+        if len(candidates) < count:
+            return None
+        targets = random.sample(candidates, count)
+        for tgt in targets:
+            tgt.is_bounty = True
+            tgt.max_hp = int(tgt.max_hp * self._BOUNTY_HP_MUL)
+            tgt.hp = tgt.max_hp
+            tgt.gold_drop = int(tgt.gold_drop * self._BOUNTY_GOLD_MUL)
+        return targets
+
+    def _gate_setup_bounty(self, count):
+        targets = self._gate_pick_bounty_targets(count)
+        if not targets:
+            return False
+        self._gate = {'type': 'bounty' if count == 1 else 'dual_bounty', 'remaining': count}
+        names = ' / '.join(tg.name for tg in targets)
+        key = 'bounty_marked' if count == 1 else 'bounty_marked_multi'
+        self.messages.append((t(key, names), 'warn'))
+        return True
+
+    def _gate_setup_kill_quota(self):
+        total = sum(1 for e in self.dungeon.enemies
+                   if e.is_alive() and not e.is_prop and not e.flee)
+        if total < 1:
+            return False
+        need = max(1, math.ceil(total * 0.7))
+        self._gate = {'type': 'kill_quota', 'need': need, 'done': 0}
+        self.messages.append((t('gate_quota_marked', need), 'warn'))
+        return True
+
+    def _gate_setup_blind_choice(self):
+        self._gate = {'type': 'blind_choice', 'resolved': False}
+        return True
+
+    def _gate_setup_survival(self):
+        self._gate = {'type': 'survival', 'ms': self._GATE_SURVIVAL_MS,
+                      'orig_max': self._respawn_max, 'orig_interval': self._RESPAWN_INTERVAL}
+        self._respawn_max = int(self._respawn_max * 1.6) + 2
+        self._RESPAWN_INTERVAL = max(2500, int(self._RESPAWN_INTERVAL * 0.5))
+        return True
+
+    def _gate_setup_drive(self):
+        self._gate = {'type': 'drive', 'need': self._GATE_DRIVE_NEED, 'done': 0}
+        return True
+
+    def _gate_setup_abyss_trial(self):
+        total = sum(1 for e in self.dungeon.enemies
+                   if e.is_alive() and not e.is_prop and not e.flee)
+        targets = self._gate_pick_bounty_targets(2)
+        if not targets or total < 3:
+            return False
+        need = max(1, math.ceil(total * 0.8))
+        self._gate = {'type': 'abyss_trial', 'remaining': 2, 'need': need, 'done': 0}
+        names = ' / '.join(tg.name for tg in targets)
+        self.messages.append((t('gate_abyss_marked', names, need), 'warn'))
+        return True
+
+    def _gate_on_kill(self, enemy):
+        """적 처치 시 관문 진행도 갱신."""
+        g = self._gate
+        if g is None or enemy.is_prop or not self._door_locked:
+            return
+        gtype = g['type']
+        if enemy.is_bounty and gtype in ('bounty', 'dual_bounty', 'abyss_trial'):
+            g['remaining'] = max(0, g.get('remaining', 1) - 1)
+            self.messages.append((t('bounty_cleared', enemy.name), 'good'))
+        if gtype in ('kill_quota', 'abyss_trial'):
+            g['done'] = g.get('done', 0) + 1
+        self._check_gate_cleared()
+
+    def _check_gate_cleared(self):
+        g = self._gate
+        if g is None or not self._door_locked:
+            return
+        gtype = g['type']
+        if gtype in ('bounty', 'dual_bounty'):
+            cleared = g['remaining'] <= 0
+        elif gtype in ('kill_quota', 'drive'):
+            cleared = g['done'] >= g['need']
+        elif gtype == 'survival':
+            cleared = g['ms'] <= 0
+        elif gtype == 'abyss_trial':
+            cleared = g['remaining'] <= 0 and g['done'] >= g['need']
+        elif gtype == 'blind_choice':
+            cleared = g.get('resolved', False)
+        else:
+            cleared = False
+        if cleared:
+            self._unlock_gate()
+
+    def _unlock_gate(self):
+        g = self._gate
+        if g and g['type'] == 'survival':
+            self._respawn_max = g.get('orig_max', self._respawn_max)
+            self._RESPAWN_INTERVAL = g.get('orig_interval', self._RESPAWN_INTERVAL)
+        self._door_locked = False
+        self.messages.append((t('gate_cleared_msg'), 'good'))
+        self.animator.add(BannerAnim(t('bounty_cleared_banner'), (255, 200, 90),
+                                     y=110, size=26, duration_ms=1800))
+        self.audio.play('levelup')
+
+    def _open_gate_locked_dialog(self):
+        """잠긴 던전 문에 부딪혔을 때 — 마을 대화창과 같은 스타일로 관문별 상세 설명."""
+        g = self._gate
+        gtype = g['type'] if g else 'bounty'
+        args = ()
+        if gtype in ('kill_quota', 'drive'):
+            args = (g['done'], g['need'])
+        elif gtype == 'dual_bounty':
+            args = (g['remaining'],)
+        elif gtype == 'survival':
+            args = (max(0, int(g['ms'] / 1000)) + 1,)
+        elif gtype == 'abyss_trial':
+            args = (g['remaining'], g['done'], g['need'])
         self._dialog = {'qid': None, 'mode': 'info',
                         'npc_name': t('bounty_door_name'),
-                        'text': t('bounty_door_locked_detail'),
+                        'text': t(f'gate_detail_{gtype}', *args),
                         'start': pygame.time.get_ticks()}
         self.state = 'dialog'
         self.audio.play('menu_select')
+
+    # ── 봉인된 선택 (100층+): 3택1 블라인드 픽 ──────────────────────────
+    _GATE_CHOICE_EFFECTS = ('atk_buff', 'full_heal', 'gold_bonus', 'sp_refill', 'risky_power')
+
+    def _open_gate_choice(self):
+        g = self._gate
+        g['options'] = random.sample(self._GATE_CHOICE_EFFECTS, 3)
+        g['cursor'] = 0
+        self.state = 'gate_choice'
+        self.audio.play('shop_open')
+
+    def _handle_gate_choice_action(self, action):
+        g = self._gate
+        if g is None:
+            return
+        ty = action['type']
+        if ty == 'move' and action.get('dx'):
+            g['cursor'] = (g['cursor'] + action['dx']) % 3
+            self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            effect = g['options'][g['cursor']]
+            msg = self._gate_choice_apply(effect)
+            g['resolved'] = True
+            self.messages.append((msg, 'good'))
+            self._unlock_gate()
+            self.state = 'playing'
+
+    def _gate_choice_apply(self, effect):
+        p = self.player
+        if effect == 'atk_buff':
+            p.atk_bonus_pct = max(p.atk_bonus_pct, 0.25)
+            p.atk_bonus_ms = max(p.atk_bonus_ms, 30000)
+            return t('gate_choice_result_atk_buff')
+        if effect == 'full_heal':
+            p.hp = p.max_hp
+            return t('gate_choice_result_full_heal')
+        if effect == 'gold_bonus':
+            bonus = 50 + self.floor * 3
+            p.gold += bonus
+            self._gold_flash_ms = 220
+            return t('gate_choice_result_gold_bonus', bonus)
+        if effect == 'sp_refill':
+            p.stamina = p.stamina_max
+            return t('gate_choice_result_sp_refill')
+        # risky_power: 즉시 체력 30% 소모 대신 강력한 공격 버프
+        dmg = max(1, int(p.max_hp * 0.3))
+        p.hp = max(1, p.hp - dmg)
+        p.atk_bonus_pct = max(p.atk_bonus_pct, 0.5)
+        p.atk_bonus_ms = max(p.atk_bonus_ms, 45000)
+        return t('gate_choice_result_risky', dmg)
+
+    def _render_gate_choice(self):
+        """봉인된 선택 — 3개의 봉인 문양 중 하나를 블라인드로 고른다."""
+        g = self._gate
+        s = self.screen
+        bw, bh = 360, 180
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA); panel.fill((18, 14, 26, 245))
+        s.blit(panel, (bx, by))
+        pygame.draw.rect(s, (200, 140, 230), (bx, by, bw, bh), 2, border_radius=8)
+        title = self.hud.font_md.render(t('gate_choice_title'), True, (224, 198, 246))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 10))
+        sub = self.hud.font_sm.render(t('gate_choice_sub'), True, (170, 160, 190))
+        s.blit(sub, (bx + (bw - sub.get_width()) // 2, by + 36))
+        box_w, box_h, gap = 90, 90, 16
+        total_w = box_w * 3 + gap * 2
+        ox = bx + (bw - total_w) // 2
+        oy = by + 62
+        ticks = pygame.time.get_ticks()
+        for i in range(3):
+            cx = ox + i * (box_w + gap)
+            sel = i == g.get('cursor', 0)
+            col = (235, 200, 110) if sel else (140, 120, 160)
+            if sel:
+                pygame.draw.rect(s, (46, 34, 56), (cx, oy, box_w, box_h), border_radius=8)
+            pygame.draw.rect(s, col, (cx, oy, box_w, box_h), 2, border_radius=8)
+            pulse = int(3 * math.sin(ticks * 0.006 + i))
+            pygame.draw.circle(s, col, (cx + box_w // 2, oy + box_h // 2), 22 + pulse, 2)
+            num = self.hud.font_lg.render(str(i + 1), True, col)
+            s.blit(num, (cx + box_w // 2 - num.get_width() // 2,
+                        oy + box_h // 2 - num.get_height() // 2))
+        hint = self.hud.font_sm.render(t('gate_choice_hint'), True, (150, 140, 170))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 20))
+
+    def _draw_gate_status(self):
+        """상단에 현재 던전 문 관문의 진행 상태를 표시."""
+        g = self._gate
+        if g is None:
+            return
+        gtype = g['type']
+        if gtype in ('bounty', 'dual_bounty'):
+            label = t('gate_status_bounty', g['remaining'])
+            frac = None
+        elif gtype in ('kill_quota', 'drive'):
+            label = t('gate_status_progress', g['done'], g['need'])
+            frac = min(1.0, g['done'] / max(1, g['need']))
+        elif gtype == 'survival':
+            label = t('gate_status_survival', max(0, int(g['ms'] / 1000)) + 1)
+            frac = 1.0 - max(0.0, min(1.0, g['ms'] / self._GATE_SURVIVAL_MS))
+        elif gtype == 'abyss_trial':
+            label = t('gate_status_abyss', g['remaining'], g['done'], g['need'])
+            frac = min(1.0, g['done'] / max(1, g['need']))
+        else:
+            return
+        col = (255, 110, 90)
+        f = self.hud.font_sm
+        ts_ = f.render('🔒 ' + label, True, col)
+        bw = max(180, ts_.get_width() + 28)
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (78 if self._ult_active is not None else 40)
+        panel = pygame.Surface((bw, 30), pygame.SRCALPHA)
+        panel.fill((20, 10, 10, 200))
+        self.screen.blit(panel, (bx, by))
+        pygame.draw.rect(self.screen, col, (bx, by, bw, 30), 2, border_radius=6)
+        self.screen.blit(ts_, (bx + (bw - ts_.get_width()) // 2, by + 3))
+        if frac is not None:
+            pygame.draw.rect(self.screen, (40, 20, 20), (bx + 6, by + 23, bw - 12, 4), border_radius=2)
+            pygame.draw.rect(self.screen, col, (bx + 6, by + 23, int((bw - 12) * frac), 4), border_radius=2)
 
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
@@ -2920,6 +3182,8 @@ class Game:
                 self._handle_guide_action(action)
             elif self.state == 'life_codex':
                 self._handle_life_codex_action(action)
+            elif self.state == 'gate_choice':
+                self._handle_gate_choice_action(action)
             elif self.state == 'fishing':
                 self._handle_fishing_action(action)
             elif self.state == 'ranch_menu':
@@ -3926,9 +4190,13 @@ class Game:
 
         # 벽 문: 이동 전에 처리 (blocked=False지만 사실상 벽 안쪽)
         if target_tile.tile_type == TileType.DOOR:
-            # 현상금 마커 처치 전에는 문이 잠김 (붕괴 탈출 중에는 예외)
+            # 관문 조건 충족 전에는 문이 잠김 (붕괴 탈출 중에는 예외)
             if self._door_locked and not self._collapse_active:
-                self._open_bounty_locked_dialog()
+                if self._gate and self._gate['type'] == 'blind_choice' \
+                        and not self._gate.get('resolved'):
+                    self._open_gate_choice()
+                else:
+                    self._open_gate_locked_dialog()
                 return True
             # co-op: 다음 층 하강도 호스트 주도(같은 시드로 동시 생성). 클라는 대기.
             if self._coop_dungeon and self.net is not None:
@@ -4584,13 +4852,7 @@ class Game:
             return
         gold = int(enemy.gold_drop * self._gold_mult)   # NG+ 영구 골드 배율
         self._run_kills += 1
-        # 현상금 마커 처치 — 던전 문 잠금 해제
-        if enemy.is_bounty:
-            self._door_locked = False
-            self.messages.append((t('bounty_cleared', enemy.name), 'good'))
-            self.animator.add(BannerAnim(t('bounty_cleared_banner'), (255, 200, 90),
-                                         y=110, size=26, duration_ms=1800))
-            self.audio.play('levelup')
+        self._gate_on_kill(enemy)   # 던전 문 관문 진행도 갱신(현상금/처치율)
         # 펫 강화석 드롭 (해금 후): 일반 3% · 보스/엘리트 30%
         if self.player.is_pet_unlocked:
             drop_p = 0.30 if (enemy.is_boss or enemy.elite) else 0.03
@@ -7481,6 +7743,12 @@ class Game:
                                       'CANCEL!', (120, 230, 255)))
         self._start_punch_zoom(0.035, 90)
         self.audio.play('cancel')
+        # 던전 문 관문 "투기의 문": 드라이브 캔슬 누적 횟수로 진행
+        if self._gate is not None and self._gate['type'] == 'drive' and self._door_locked:
+            self._gate['done'] += 1
+            self.messages.append((t('gate_drive_progress', self._gate['done'],
+                                    self._gate['need']), 'info'))
+            self._check_gate_cleared()
 
     # W/A/S/D 스킬 쿨다운 시스템 비활성화 — SP(스태미나) 소모 체제로 전환.
     # True로 되돌리면 기존 쿨다운 게이트가 다시 활성화된다.
@@ -9681,6 +9949,9 @@ class Game:
         # 발동 중 궁극기 — 이름 + 남은 시간 라벨
         if self._ult_active is not None:
             self._draw_ult_active()
+        # 던전 문 관문 진행 상태 (잠긴 동안만)
+        if self._door_locked and self._gate is not None:
+            self._draw_gate_status()
         # 게임 중 '친구 참가' 코드 입력 오버레이
         if self._mp_join_open:
             self._draw_join_overlay()
@@ -9714,6 +9985,8 @@ class Game:
             self._render_guide_menu()
         elif self.state == 'life_codex':
             self._render_life_codex()
+        elif self.state == 'gate_choice':
+            self._render_gate_choice()
         elif self.state == 'fishing':
             self._render_fishing()
         elif self.state == 'ranch_menu':
