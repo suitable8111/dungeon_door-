@@ -1429,6 +1429,17 @@ class Game:
                     if self._gate['ms'] <= 0:
                         self._gate['ms'] = 0
                         self._check_gate_cleared()
+                # 다이나믹 BGM: 근처 적 수를 전투 긴장도(0~1)로 환산해 레이어 크로스페이드
+                if self.audio.bgm:
+                    if not self._in_town and self.dungeon and self.dungeon.enemies:
+                        nearby = sum(1 for e in self.dungeon.enemies
+                                    if e.is_alive() and not e.is_prop
+                                    and max(abs(e.x - self.player.x),
+                                           abs(e.y - self.player.y)) <= 8)
+                        self.audio.bgm.set_intensity(min(1.0, nearby / 4))
+                    else:
+                        self.audio.bgm.set_intensity(0.0)
+                    self.audio.bgm.update(dt)
             self._update_fade(dt)
             self._update_shake(dt)
             if self.camera:

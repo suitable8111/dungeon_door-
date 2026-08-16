@@ -64,6 +64,14 @@ def _noise(ms, vol=0.3, rate=44100):
     return [max(-32767, min(32767, int(32767 * vol * (1 - i/n) * (random.random()*2-1)))) for i in range(n)]
 
 
+def _fit_len(frames, n):
+    """frames를 정확히 n 샘플로 자르거나 무음으로 채운다 — 다이나믹 레이어 동기화용
+    (두 레이어의 재생 길이가 한 샘플이라도 다르면 루프를 반복할수록 어긋난다)."""
+    if len(frames) >= n:
+        return frames[:n]
+    return frames + [0] * (n - len(frames))
+
+
 def _square(freq, ms, vol=0.3, rate=44100):
     return _note(freq, ms, vol, 'square', rate)
 
@@ -85,11 +93,21 @@ class BGMPlayer:
     def __init__(self, rate, channels):
         self._rate    = rate
         self._ch      = channels
+        # 레이어드 채널(7,8)까지 확보 — 기본 채널 풀(보통 8개, 0~7)이 모자랄 수 있음
+        if pygame.mixer.get_num_channels() < 9:
+            pygame.mixer.set_num_channels(9)
         self._channel = pygame.mixer.Channel(6)
         self._current = None
         self._vol     = 0.5
         self._sounds  = {}
         self._pending: str | None = None
+        # ── 다이나믹(레이어드) 테마 — 평상시/전투 레이어를 완벽히 동기화해 동시 루프 ──
+        self._layer_calm_ch   = pygame.mixer.Channel(7)
+        self._layer_combat_ch = pygame.mixer.Channel(8)
+        self._layered   = {}          # name -> {'calm': Sound, 'combat': Sound}
+        self._layered_active: str | None = None
+        self._intensity        = 0.0  # 실제 적용 중인 값(부드럽게 보간)
+        self._intensity_target = 0.0
         self._build()
 
     def _build(self):
@@ -114,6 +132,9 @@ class BGMPlayer:
             ]
             for i, fn in enumerate(_builders):
                 self._sounds[f'theme_{i}'] = fn(r, ch)
+            # 다이나믹 레이어드 테마 프로토타입 (theme_0만 우선 적용)
+            calm, combat = self._theme_0_layers(r, ch)
+            self._layered['theme_0'] = {'calm': calm, 'combat': combat}
         except Exception:
             pass
 
@@ -140,6 +161,33 @@ class BGMPlayer:
                      (261.6,500),(0,300),(220,400),(0,200),(293.7,700),(0,400),(220,900),(0,700)], 0.05,'sine',r)
         pad  = _seq([(110,5500),(0,200),(82.4,4000),(0,200),(98,3500)], 0.04,'sine',r)
         return _wave(_mix(bass, mel, pad, _seq([(55,13500)],0.03,'saw',r)), ch)
+
+    @staticmethod
+    def _theme_0_layers(r, ch):
+        """버려진 지하 감옥 — 다이나믹 2레이어 프로토타입(평상시/전투).
+        두 레이어는 동일한 앵커(drone)로 길이를 고정한 뒤 _fit_len으로 완전히
+        동일한 샘플 수로 맞춰, 두 채널이 영원히 동기화되어 루프되도록 한다."""
+        drone = _seq([(55, 13500)], 0.03, 'saw', r)   # 두 레이어 공용 길이 앵커
+        target_n = len(drone)
+
+        # ── 평상시 레이어: 기존 theme_0과 동일 ──
+        bass = _seq([(110,500),(0,150),(110,350),(0,100),(82.4,600),(0,300),(98,400),(0,250),
+                     (110,400),(0,100),(146.8,350),(0,100),(110,450),(0,150),(82.4,700),(0,300)], 0.09,'tri',r)
+        mel  = _seq([(220,800),(0,300),(261.6,600),(0,500),(196,600),(0,800),
+                     (261.6,500),(0,300),(220,400),(0,200),(293.7,700),(0,400),(220,900),(0,700)], 0.05,'sine',r)
+        pad  = _seq([(110,5500),(0,200),(82.4,4000),(0,200),(98,3500)], 0.04,'sine',r)
+        calm_mix = _fit_len(_mix(bass, mel, pad, drone), target_n)
+
+        # ── 전투 레이어: calm 위에 겹쳐 재생될 긴박한 추가 성분(같은 길이로 고정) ──
+        pulse = _seq(([(55,120),(0,80),(55,120),(0,180)]) * 30, 0.11, 'square', r)
+        urgent_mel = _seq(([(440,250),(0,80),(392,250),(0,80),(349.2,300),(0,150),
+                            (440,250),(0,80),(466,350),(0,300)]) * 6, 0.06, 'saw', r)
+        hits = []
+        for _ in range(9):
+            hits += _noise(90, 0.12, r) + [0] * int(r * 1.4)
+        combat_mix = _fit_len(_mix(pulse, urgent_mel, hits, drone), target_n)
+
+        return _wave(calm_mix, ch), _wave(combat_mix, ch)
 
     @staticmethod
     def _theme_1(r, ch):
@@ -383,44 +431,39 @@ class BGMPlayer:
 
     @staticmethod
     def _town(r, ch):
-        # 평화로운 마을 — 느긋한 파스토랄 (F 장조, 부드러운 sine, ~11초 루프)
-        mel_a = [(349, 700), (392, 500), (440, 700), (0, 300), (392, 600), (349, 700), (0, 500),
-                 (262, 700), (294, 500), (349, 900), (0, 700)]
-        mel_b = [(440, 600), (392, 600), (349, 700), (0, 400), (294, 600), (262, 800), (0, 400),
-                 (349, 500), (392, 500), (349, 1000), (0, 800)]
-        mel   = _seq(mel_a + mel_b, 0.07, 'sine', r)
-        bass  = _seq([(87.3, 1400), (0, 300), (131, 1200), (0, 300), (98, 1400), (0, 300),
-                      (116.5, 1200), (0, 500)], 0.06, 'sine', r)
-        pad   = _seq([(175, 3600), (0, 200), (220, 3600), (0, 200), (196, 4000), (0, 200)],
-                     0.03, 'saw', r)
-        # 이따금 지저귀는 새소리 느낌
-        chirp = _seq([(880, 120), (0, 1400), (988, 100), (0, 1600), (784, 140), (0, 2000)],
-                     0.02, 'sine', r)
-        return _wave(_mix(mel, bass, pad, chirp), ch)
+        # 떠돌이 장터 — 통통 튀는 저음 리듬으로 북적이는 마을 (~5.6초 루프)
+        bass = _seq(([(130.8, 220), (0, 80), (130.8, 200), (0, 100), (174.6, 220), (0, 80),
+                     (196, 220), (0, 80)]) * 2, 0.08, 'tri', r)
+        mel_a = [(392, 350), (0, 80), (440, 350), (0, 80), (493.9, 400), (0, 150),
+                 (440, 350), (0, 80), (392, 500), (0, 300)]
+        mel_b = [(349.2, 350), (0, 80), (392, 350), (0, 80), (440, 450), (0, 200),
+                 (392, 350), (0, 100), (349.2, 600), (0, 400)]
+        mel = _seq(mel_a + mel_b, 0.08, 'tri', r)
+        pad = _seq([(196, 2600), (0, 150), (261.6, 2600), (0, 150)], 0.03, 'saw', r)
+        bell = _seq([(1046.5, 90), (0, 700), (784, 90), (0, 900), (880, 90), (0, 1100)], 0.02, 'sine', r)
+        return _wave(_mix(bass, mel, pad, bell), ch)
 
     @staticmethod
     def _menu(r, ch):
-        # 극적인 메뉴 BGM (~12초 루프)
-        mel_a  = [(220,500),(0,100),(220,350),(0,150),(262,600),(0,300),(196,800),(0,500)]
-        mel_b  = [(220,400),(0,200),(261.6,400),(0,200),(293.7,500),(0,300),(220,700),(0,500)]
-        mel_c  = [(246.9,600),(0,200),(220,500),(0,200),(196,700),(0,400),(165,1000),(0,600)]
-        mel    = _seq(mel_a + mel_b + mel_c, 0.09, 'tri', r)
-
-        bass_a = [(110,1200),(0,200),(82.4,1000),(0,200)]
-        bass_b = [(98,1000),(0,200),(110,800),(0,200),(82.4,1200),(0,400)]
-        bass   = _seq(bass_a + bass_b + bass_a, 0.08, 'sine', r)
-
-        pad    = _seq([(165,4500),(0,200),(147,4500),(0,200),(165,3000)], 0.04, 'saw', r)
-
-        # 고음 반짝임 레이어
-        spark  = _seq([(660,300),(0,300),(660,200),(0,400),(523,500),(0,400),
-                       (660,200),(0,700),(523,400),(0,900)], 0.03, 'sine', r)
-
-        return _wave(_mix(mel, bass, pad, spark), ch)
+        # 음침한 옥좌 — 프리지안 반음 긴장감의 절제된 다크 드론 (~18초 루프)
+        sub = _seq([(41.2, 18000)], 0.05, 'sine', r)              # E1 초저음
+        bass = _seq([(82.4, 2600), (0, 700), (87.3, 2200), (0, 900),
+                     (82.4, 3000), (0, 1200)], 0.10, 'tri', r)
+        mel = _seq([(164.8, 2200), (0, 1400), (174.6, 1800), (0, 1600),  # E→F 반음(프리지안 긴장)
+                    (164.8, 2600), (0, 2000), (0, 1200),
+                    (123.5, 2400), (0, 1800)], 0.05, 'sine', r)
+        dissonance = _seq([(164.8, 6000), (0, 500), (174.6, 5000), (0, 500)], 0.022, 'sine', r)
+        return _wave(_mix(sub, bass, mel, dissonance), ch)
 
     # ---- 공개 API ------------------------------------------------
 
     def play(self, name):
+        if name in self._layered:
+            self._play_layered(name)
+            return
+        if self._layered_active is not None:
+            self._stop_layered()
+
         # 페이드아웃 완료 시 대기 중인 트랙을 메인 스레드에서 시작
         if self._pending and not self._channel.get_busy():
             pending = self._pending
@@ -448,13 +491,58 @@ class BGMPlayer:
             self._channel.set_volume(self._vol)
             self._channel.play(s, loops=-1, fade_ms=self._FADE_MS)
 
+    # ── 다이나믹(레이어드) 테마 ──────────────────────────────────────
+    def _play_layered(self, name):
+        """평상시/전투 레이어를 완벽히 동기화된 상태로 동시에 재생 시작."""
+        if self._layered_active == name:
+            return
+        self._pending = None
+        self._current = None
+        self._channel.fadeout(self._FADE_MS)
+        layers = self._layered[name]
+        self._layered_active = name
+        self._intensity = 0.0
+        self._intensity_target = 0.0
+        self._layer_calm_ch.set_volume(self._vol)
+        self._layer_combat_ch.set_volume(0.0)
+        self._layer_calm_ch.play(layers['calm'], loops=-1)
+        self._layer_combat_ch.play(layers['combat'], loops=-1)
+
+    def _stop_layered(self):
+        if self._layered_active is None:
+            return
+        self._layer_calm_ch.fadeout(self._FADE_MS)
+        self._layer_combat_ch.fadeout(self._FADE_MS)
+        self._layered_active = None
+
+    def set_intensity(self, value: float):
+        """다이나믹 테마의 전투 긴장도 목표치(0~1) — update()가 매 프레임 부드럽게 보간한다."""
+        self._intensity_target = max(0.0, min(1.0, value))
+
+    def update(self, dt_ms):
+        """매 프레임 호출 — 긴장도를 목표치로 보간해 레이어 볼륨(전투 레이어 in/out)에 반영."""
+        if self._layered_active is None:
+            return
+        ease = min(1.0, dt_ms / 1500.0)   # 약 1.5초에 걸쳐 목표치에 도달
+        self._intensity += (self._intensity_target - self._intensity) * ease
+        calm_v = self._vol * (1.0 - 0.5 * self._intensity)   # 평상시 레이어는 절반까지만 낮춤
+        combat_v = self._vol * self._intensity
+        self._layer_calm_ch.set_volume(calm_v)
+        self._layer_combat_ch.set_volume(combat_v)
+
     def stop(self):
         self._pending = None
         self._current = None
         self._channel.fadeout(self._FADE_MS)
+        self._stop_layered()
 
     def set_volume(self, vol):
         self._vol = max(0.0, min(1.0, vol))
+        if self._layered_active is not None:
+            calm_v = self._vol * (1.0 - 0.5 * self._intensity)
+            combat_v = self._vol * self._intensity
+            self._layer_calm_ch.set_volume(calm_v)
+            self._layer_combat_ch.set_volume(combat_v)
         self._channel.set_volume(self._vol)
 
 

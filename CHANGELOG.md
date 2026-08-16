@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.18.1 — New menu/town music + dynamic combat music (prototype)
+
+- **Main menu theme replaced**: a darker, more subdued "Ominous Throne" composition (deep sub-bass drone, Phrygian half-step tension) instead of the previous bright/heroic theme.
+- **Town theme replaced**: a livelier "Wandering Market" — bouncier low end and a busier melody for a more bustling home-base feel.
+- **Dynamic combat music (prototype, floor theme 0 only)**: the dungeon soundtrack now layers a calm ambient track and a tense combat track simultaneously, live-crossfading between them based on how many enemies are nearby — music organically intensifies as a fight builds and settles back down once it's over, instead of jumping between fixed tracks. More themes will get this treatment in a follow-up.
+
 ## v2.18.0 — Escalating dungeon door gates (50/100/200/500/700/900)
 
 Six new door-gate types layer on top of the floor-20 Bounty Marker, each introduced once and then recurring on every non-boss floor past that point:
