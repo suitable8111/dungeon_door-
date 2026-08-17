@@ -1429,9 +1429,16 @@ class Game:
                     if self._gate['ms'] <= 0:
                         self._gate['ms'] = 0
                         self._check_gate_cleared()
-                # 다이나믹 BGM: 근처 적 수를 전투 긴장도(0~1)로 환산해 레이어 크로스페이드
+                # 다이나믹 BGM: 상황에 맞는 지표를 전투 긴장도(0~1)로 환산해 레이어 크로스페이드
                 if self.audio.bgm:
-                    if not self._in_town and self.dungeon and self.dungeon.enemies:
+                    boss = getattr(self.dungeon, 'boss', None)
+                    if self._in_town:
+                        self.audio.bgm.set_intensity(0.0)
+                    elif (self.dungeon.is_boss_floor and boss is not None and boss.is_alive()):
+                        # 보스전: 체력이 낮을수록 발악 레이어가 스며든다
+                        hp_frac = boss.hp / max(1, boss.max_hp)
+                        self.audio.bgm.set_intensity(max(0.0, min(1.0, 1.0 - hp_frac)))
+                    elif self.dungeon and self.dungeon.enemies:
                         nearby = sum(1 for e in self.dungeon.enemies
                                     if e.is_alive() and not e.is_prop
                                     and max(abs(e.x - self.player.x),

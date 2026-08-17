@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.18.2 — Dynamic combat music, all dungeon themes + boss fights
+
+- **Dynamic combat music now covers every dungeon theme (all 20) and boss fights**, not just the one prototype theme — each has its own calm/combat layer pair that live-crossfades based on nearby enemy count (or, during a boss fight, how low the boss's HP is — the music gets more frantic as the boss nears death).
+- **First launch after this update will take a bit longer** (music is synthesized in code, no audio files shipped) — after that one-time cost, it's cached and loads instantly on every future launch.
+
 ## v2.18.1 — New menu/town music + dynamic combat music (prototype)
 
 - **Main menu theme replaced**: a darker, more subdued "Ominous Throne" composition (deep sub-bass drone, Phrygian half-step tension) instead of the previous bright/heroic theme.

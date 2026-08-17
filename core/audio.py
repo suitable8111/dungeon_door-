@@ -1,8 +1,17 @@
-"""절차적 사운드 + BGM (외부 파일·numpy 불필요)."""
+"""절차적 사운드 + BGM (외부 파일·numpy 불필요).
+
+BGM은 매번 순수 Python으로 합성하므로(수십 초 소요) 최초 1회 생성 후
+사용자 데이터 폴더에 wav로 캐싱한다 — 배포물에는 오디오 파일을 넣지
+않는 절차적 설계를 유지하면서, 두 번째 실행부터는 즉시 로드되게 한다."""
 import math
+import os
 import random
 import struct
+import wave as _wavemod
 import pygame
+
+# 합성 로직을 바꾸면 올려서 캐시를 무효화한다(구버전 wav가 남아있지 않도록).
+_CACHE_VERSION = 1
 
 # ─────────────────────────────────────────────────────
 #  내부 유틸리티
@@ -17,6 +26,21 @@ def _wave(mono, channels=2):
     else:
         data = list(mono)
     return pygame.mixer.Sound(buffer=struct.pack(f'<{len(data)}h', *data))
+
+
+def _bgm_cache_dir():
+    from core.save_load import _get_data_dir
+    d = os.path.join(_get_data_dir(), 'bgm_cache')
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _save_sound_wav(sound, path, rate, channels):
+    with _wavemod.open(path, 'wb') as f:
+        f.setnchannels(channels)
+        f.setsampwidth(2)
+        f.setframerate(rate)
+        f.writeframes(sound.get_raw())
 
 
 def _note(freq, ms, vol=0.5, wave='sine', rate=44100):
@@ -110,17 +134,38 @@ class BGMPlayer:
         self._intensity_target = 0.0
         self._build()
 
+    # 테마별 근음(Hz) — 각 테마 베이스 라인의 첫 음. 전투 레이어를 이 근음 기준으로
+    # 파생시켜 calm 레이어와 화성적으로 어울리게 한다.
+    _THEME_ROOTS = [110, 73.4, 65.4, 82.4, 123.5, 92.5, 73.4, 110, 98, 65.4,
+                    123.5, 82.4, 73.4, 92.5, 98, 55, 73.4, 123.5, 55, 55]
+
+    def _cached_or_build(self, key, builder):
+        """builder()가 만드는 Sound를 사용자 데이터 폴더에 wav로 캐싱한다.
+        합성 자체가 순수 Python이라 수십 초가 걸릴 수 있어, 최초 실행 이후로는
+        캐시에서 즉시 로드되게 한다(배포물엔 오디오 파일을 넣지 않는다)."""
+        path = os.path.join(_bgm_cache_dir(), f'{key}_v{_CACHE_VERSION}.wav')
+        if os.path.exists(path):
+            try:
+                return pygame.mixer.Sound(path)
+            except Exception:
+                pass
+        sound = builder()
+        try:
+            _save_sound_wav(sound, path, self._rate, self._ch)
+        except Exception:
+            pass
+        return sound
+
     def _build(self):
-        import os
         if os.environ.get('DD_NO_BGM'):
             return                       # 헤드리스 테스트: 절차 BGM 생성 생략(고속화)
         r, ch = self._rate, self._ch
         try:
             self._sounds = {
-                'menu':   self._menu(r, ch),
-                'boss':   self._boss(r, ch),
-                'shop':   self._shop(r, ch),
-                'town':   self._town(r, ch),
+                'menu':   self._cached_or_build('menu', lambda: self._menu(r, ch)),
+                'boss':   self._cached_or_build('boss', lambda: self._boss(r, ch)),
+                'shop':   self._cached_or_build('shop', lambda: self._shop(r, ch)),
+                'town':   self._cached_or_build('town', lambda: self._town(r, ch)),
             }
             # 테마 BGM — 20개 (50층 단위)
             _builders = [
@@ -131,12 +176,74 @@ class BGMPlayer:
                 self._theme_16, self._theme_17, self._theme_18, self._theme_19,
             ]
             for i, fn in enumerate(_builders):
-                self._sounds[f'theme_{i}'] = fn(r, ch)
-            # 다이나믹 레이어드 테마 프로토타입 (theme_0만 우선 적용)
-            calm, combat = self._theme_0_layers(r, ch)
-            self._layered['theme_0'] = {'calm': calm, 'combat': combat}
+                calm_sound = self._cached_or_build(f'theme_{i}', lambda fn=fn: fn(r, ch))
+                self._sounds[f'theme_{i}'] = calm_sound
+                if i == 0:
+                    # theme_0은 수작업 전투 레이어(_theme_0_combat, 사용자 검수 완료본)
+                    combat_sound = self._cached_or_build(
+                        'theme_0_combat', lambda: self._theme_0_combat(r, ch))
+                    self._layered['theme_0'] = {'calm': calm_sound, 'combat': combat_sound}
+                    continue
+                target_n = len(calm_sound.get_raw()) // 2 // ch  # calm과 완전히 같은 길이로 맞춤
+                root = self._THEME_ROOTS[i]
+                combat_sound = self._cached_or_build(
+                    f'theme_{i}_combat',
+                    lambda root=root, tn=target_n: _wave(self._derive_combat_layer(r, root, tn), ch))
+                self._layered[f'theme_{i}'] = {'calm': calm_sound, 'combat': combat_sound}
+            # 보스전 3번째 레이어 — 체력이 낮을수록 스며드는 발악(enrage) 레이어
+            boss_sound = self._sounds['boss']
+            boss_n = len(boss_sound.get_raw()) // 2 // ch
+            enrage_sound = self._cached_or_build(
+                'boss_enrage', lambda: _wave(self._boss_enrage_layer(r, boss_n), ch))
+            self._layered['boss'] = {'calm': boss_sound, 'combat': enrage_sound}
         except Exception:
             pass
+
+    @staticmethod
+    def _derive_combat_layer(r, root, target_n):
+        """공용 전투 레이어 파생기 — 테마 근음을 기준으로 긴박한 펄스+타격+상승
+        모티프를 만들어 어떤 테마의 calm 레이어와 겹쳐도 화성적으로 어울리게 한다.
+        각 성분은 target_n을 살짝 넘길 만큼만 반복 생성한다(불필요한 초과 합성 방지 — 안
+        그러면 _fit_len이 잘라버릴 몫까지 다 만들어서 테마 20개분이 누적되면 매우 느려진다)."""
+        target_ms = target_n / r * 1000
+        fifth   = root * 1.5
+        minor3  = root * 2 * 1.189      # 옥타브 위 단3도(마이너 텐션)
+        octave  = root * 2
+
+        pulse_unit = [(root, 110), (0, 70), (root, 110), (0, 70),
+                      (fifth, 110), (0, 70), (root, 110), (0, 160)]
+        pulse_reps = max(1, int(target_ms / sum(ms for _, ms in pulse_unit)) + 1)
+        pulse = _seq(pulse_unit * pulse_reps, 0.10, 'square', r)
+
+        urgent_unit = [(octave, 180), (0, 60), (minor3, 180), (0, 60),
+                       (fifth * 2, 220), (0, 100), (octave, 160), (0, 260)]
+        urgent_reps = max(1, int(target_ms / sum(ms for _, ms in urgent_unit)) + 1)
+        urgent = _seq(urgent_unit * urgent_reps, 0.05, 'saw', r)
+
+        hits = []
+        reps = max(1, int(target_n / r / 1.3) + 1)
+        for _ in range(reps):
+            hits += _noise(80, 0.10, r) + [0] * int(r * 1.2)
+        return _fit_len(_mix(pulse, urgent, hits), target_n)
+
+    @staticmethod
+    def _boss_enrage_layer(r, target_n):
+        """보스 발악 레이어 — 체력이 낮아질수록 스며드는 광란의 추가 성분(target_n 근접량만 생성)."""
+        target_ms = target_n / r * 1000
+        pulse_unit = [(110, 70), (0, 30), (155, 70), (0, 30),
+                      (110, 70), (0, 30), (207, 70), (0, 50)]
+        pulse_reps = max(1, int(target_ms / sum(ms for _, ms in pulse_unit)) + 1)
+        pulse = _seq(pulse_unit * pulse_reps, 0.13, 'square', r)
+
+        shriek_unit = [(880, 120), (0, 60), (932, 120), (0, 60)]
+        shriek_reps = max(1, int(target_ms / sum(ms for _, ms in shriek_unit)) + 1)
+        shriek = _seq(shriek_unit * shriek_reps, 0.05, 'saw', r)
+
+        hits = []
+        reps = max(1, int(target_n / r / 0.9) + 1)
+        for _ in range(reps):
+            hits += _noise(70, 0.14, r) + [0] * int(r * 0.8)
+        return _fit_len(_mix(pulse, shriek, hits), target_n)
 
     # ── 공통 빌더 헬퍼 ──────────────────────────────────────────────
     @staticmethod
@@ -163,31 +270,19 @@ class BGMPlayer:
         return _wave(_mix(bass, mel, pad, _seq([(55,13500)],0.03,'saw',r)), ch)
 
     @staticmethod
-    def _theme_0_layers(r, ch):
-        """버려진 지하 감옥 — 다이나믹 2레이어 프로토타입(평상시/전투).
-        두 레이어는 동일한 앵커(drone)로 길이를 고정한 뒤 _fit_len으로 완전히
-        동일한 샘플 수로 맞춰, 두 채널이 영원히 동기화되어 루프되도록 한다."""
-        drone = _seq([(55, 13500)], 0.03, 'saw', r)   # 두 레이어 공용 길이 앵커
-        target_n = len(drone)
-
-        # ── 평상시 레이어: 기존 theme_0과 동일 ──
-        bass = _seq([(110,500),(0,150),(110,350),(0,100),(82.4,600),(0,300),(98,400),(0,250),
-                     (110,400),(0,100),(146.8,350),(0,100),(110,450),(0,150),(82.4,700),(0,300)], 0.09,'tri',r)
-        mel  = _seq([(220,800),(0,300),(261.6,600),(0,500),(196,600),(0,800),
-                     (261.6,500),(0,300),(220,400),(0,200),(293.7,700),(0,400),(220,900),(0,700)], 0.05,'sine',r)
-        pad  = _seq([(110,5500),(0,200),(82.4,4000),(0,200),(98,3500)], 0.04,'sine',r)
-        calm_mix = _fit_len(_mix(bass, mel, pad, drone), target_n)
-
-        # ── 전투 레이어: calm 위에 겹쳐 재생될 긴박한 추가 성분(같은 길이로 고정) ──
+    def _theme_0_combat(r, ch):
+        """버려진 지하 감옥의 전투 레이어(수작업, 사용자 검수 완료본).
+        theme_0의 drone(13500ms)과 동일 길이라 self._sounds['theme_0']를 그대로
+        평상시 레이어로 재사용할 수 있다(재계산 불필요)."""
+        target_n = int(r * 13.5)  # theme_0의 drone(55Hz, 13500ms)과 동일 길이
         pulse = _seq(([(55,120),(0,80),(55,120),(0,180)]) * 30, 0.11, 'square', r)
         urgent_mel = _seq(([(440,250),(0,80),(392,250),(0,80),(349.2,300),(0,150),
                             (440,250),(0,80),(466,350),(0,300)]) * 6, 0.06, 'saw', r)
         hits = []
         for _ in range(9):
             hits += _noise(90, 0.12, r) + [0] * int(r * 1.4)
-        combat_mix = _fit_len(_mix(pulse, urgent_mel, hits, drone), target_n)
-
-        return _wave(calm_mix, ch), _wave(combat_mix, ch)
+        combat_mix = _fit_len(_mix(pulse, urgent_mel, hits), target_n)
+        return _wave(combat_mix, ch)
 
     @staticmethod
     def _theme_1(r, ch):

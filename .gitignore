@@ -9,6 +9,8 @@ save_slot*.json
 # 테스트 모드 격리 기록 (test_main.py)
 records_test.json
 storage_test.json
+# 절차적 BGM 합성 캐시(최초 실행 시 자동 생성, 수십 MB)
+bgm_cache/
 
 # ── 대용량 소스 미디어 (트레일러 원본 녹화 등) ─────────────────────────────
 assets/steam/game_trailer*.mov
