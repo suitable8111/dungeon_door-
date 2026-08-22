@@ -73,7 +73,8 @@ def list_cards() -> list:
             cards.append({'slot': slot, 'exists': False})
     return cards
 
-_DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'en'}
+_DEFAULT_SETTINGS = {'bgm_vol': 0.5, 'sfx_vol': 0.8, 'fullscreen': False, 'language': 'en',
+                     'tips': True}
 _DEFAULT_RECORDS  = {
     'best_floor': 0, 'best_kills': 0, 'best_gold': 0, 'total_runs': 0,
     # ── 정복 일지 / 마스터 정산 (교차-런 프로필) ──

@@ -1003,6 +1003,7 @@ class HUD:
                 'mp_join': t('pause_mp_join'),
                 'bgm':  f"{t('pause_bgm')}    {int(settings['bgm_vol']*100):3d}%",
                 'sfx':  f"{t('pause_sfx')}    {int(settings['sfx_vol']*100):3d}%",
+                'tips': f"{t('pause_tips')}    {t('pause_fs_on') if settings.get('tips', True) else t('pause_fs_off')}",
                 'fs':   f"{t('pause_fs')}    {fs_val}",
                 'lang': f"{t('pause_lang')}    {lang_val}",
                 'title': t('pause_title_'),
@@ -1014,7 +1015,7 @@ class HUD:
         item_colors = {
             None: WHITE, 'save': (100, 220, 130),
             'mp_copy': (255, 226, 120), 'mp_join': (140, 200, 255),
-            'bgm': LIGHT_GRAY, 'sfx': LIGHT_GRAY, 'fs': LIGHT_GRAY,
+            'bgm': LIGHT_GRAY, 'sfx': LIGHT_GRAY, 'tips': LIGHT_GRAY, 'fs': LIGHT_GRAY,
             'lang': (120, 200, 255), 'title': LIGHT_GRAY, 'quit': (200, 80, 80),
         }
 
@@ -1041,7 +1042,7 @@ class HUD:
             elif tag == 'save' and is_sel:
                 h = self.font_sm.render(t('save_hint'), True, (60, 180, 90))
                 screen.blit(h, (bx + bw - h.get_width() - 14, iy + 7))
-            elif tag in ('fs', 'lang') and is_sel:
+            elif tag in ('fs', 'lang', 'tips') and is_sel:
                 h = self.font_sm.render(t('adj_hint'), True, GRAY)
                 screen.blit(h, (bx + bw - h.get_width() - 14, iy + 7))
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.18.3 — New-player onboarding: contextual tutorial tips
+
+- **Contextual tutorial tips** for new players: instead of dumping a wall of hint text into the message log on floor 1 (which most players never read), the game now shows a clear tip card at the bottom of the screen *the first time each situation comes up* — your first move, your first enemy, your first usable skill, your first time low on HP, spotting the exit door, and picking up your first item. Each tip appears only once, ever.
+- Tips can be toggled off anytime in the pause menu (**Tutorial Tips: ON/OFF**). With tips off, the old one-line hint summary shows on floor 1 instead. Fully localized in all 5 languages.
+
 ## v2.18.2 — Dynamic combat music, all dungeon themes + boss fights
 
 - **Dynamic combat music now covers every dungeon theme (all 20) and boss fights**, not just the one prototype theme — each has its own calm/combat layer pair that live-crossfades based on nearby enemy count (or, during a boss fight, how low the boss's HP is — the music gets more frantic as the boss nears death).

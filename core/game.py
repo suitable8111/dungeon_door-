@@ -436,6 +436,10 @@ class Game:
         # 일시정지
         self._pause_sel = 0
 
+        # 신규 유저 온보딩: 상황별 튜토리얼 팁 (평생 1회, records에 seen 저장)
+        self._tut_active = None      # 현재 표시 중인 팁 dict {key,title,body,ms} 또는 None
+        self._tut_queue  = []        # 대기 중 팁 (동시 발동 시 순차 표시)
+
         # 기록 / 정복 일지 / 마스터 정산
         self._run_kills = 0
         self._records   = load_records()
@@ -1486,6 +1490,8 @@ class Game:
                     if not self._in_town:
                         self._update_conveyor(world_dt)
                         self._update_hazards(world_dt)
+                        self._tut_check_context()   # 상황별 튜토리얼 팁 발동
+                    self._update_tutorial(dt)       # 팁 표시 시간/큐 갱신
                     # 방어구 파손 경고 소비 (Player.take_damage가 기록)
                     for _broken in self.player.just_broken:
                         self.messages.append((t('armor_broken', _broken.name), 'bad'))
@@ -2575,11 +2581,14 @@ class Game:
                                           or {'skin': 0, 'hair': 0, 'haircol': 0})
             self._apply_relic_bonus()
             self.messages.append((t('welcome'), 'good'))
-            self.messages.append((t('wasd_hint'), 'info'))
-            _hint = {'archer': 'archer_hint', 'mage': 'mage_hint',
-                     'axeman': 'axeman_hint'}.get(
-                self.player.char_class, 'combat_hint')
-            self.messages.append((t(_hint), 'info'))
+            # 팁이 켜져 있으면 상황별 튜토리얼 카드가 안내를 대신하므로 로그 덤프는 생략.
+            # 팁이 꺼져 있으면(숙련 유저) 기존 한 줄 요약 힌트만 남긴다.
+            if not self._settings.get('tips', True):
+                self.messages.append((t('wasd_hint'), 'info'))
+                _hint = {'archer': 'archer_hint', 'mage': 'mage_hint',
+                         'axeman': 'axeman_hint'}.get(
+                    self.player.char_class, 'combat_hint')
+                self.messages.append((t(_hint), 'info'))
         else:
             self.player.x, self.player.y = start
             self.messages.append((t('floor_arrive', self.floor), 'good'))
@@ -2974,6 +2983,45 @@ class Game:
             pygame.draw.rect(self.screen, (40, 20, 20), (bx + 6, by + 23, bw - 12, 4), border_radius=2)
             pygame.draw.rect(self.screen, col, (bx + 6, by + 23, int((bw - 12) * frac), 4), border_radius=2)
 
+    def _draw_tutorial(self):
+        """신규 유저 온보딩 팁 카드 — 화면 하단 중앙에 제목+본문(등장/퇴장 페이드)."""
+        tp = self._tut_active
+        if tp is None:
+            return
+        title = tp['title']
+        body_lines = self._wrap_text(tp['body'], self.hud.font_sm, 400)
+        # 등장 0.3s 페이드 인 / 마지막 0.6s 페이드 아웃
+        elapsed = self._TUT_MS - tp['ms']
+        if elapsed < 300:
+            alpha = elapsed / 300
+        elif tp['ms'] < 600:
+            alpha = tp['ms'] / 600
+        else:
+            alpha = 1.0
+        a = int(255 * max(0.0, min(1.0, alpha)))
+        if a < 6:
+            return
+        bw = 440
+        bh = 44 + len(body_lines) * 18 + 14
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + GAME_H - bh - 18
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA)
+        panel.fill((16, 18, 30, int(a * 0.86)))
+        self.screen.blit(panel, (bx, by))
+        pygame.draw.rect(self.screen, (150, 190, 240, a), (bx, by, bw, bh), 2, border_radius=8)
+        # 좌측 전구 아이콘(💡 대체 — 노란 원)
+        pygame.draw.circle(self.screen, (255, 220, 110), (bx + 20, by + 22), 8)
+        pygame.draw.circle(self.screen, (255, 245, 190), (bx + 20, by + 22), 4)
+        tsurf = self.hud.font_md.render(t('tut_prefix') + title, True, (255, 226, 130))
+        tsurf.set_alpha(a)
+        self.screen.blit(tsurf, (bx + 38, by + 8))
+        yy = by + 34
+        for ln in body_lines:
+            ls = self.hud.font_sm.render(ln, True, (222, 228, 238))
+            ls.set_alpha(a)
+            self.screen.blit(ls, (bx + 20, yy))
+            yy += 18
+
     # ─────────────── 이벤트 / 입력 ───────────────────────────────────
     def _handle_events(self, dt):
         for event in pygame.event.get():
@@ -3092,7 +3140,7 @@ class Game:
                     from core.save_load import save_records
                     self._records = {**self._records, 'theme_clears': {},
                                      'game_cleared': False, 'unlocked_titles': [],
-                                     'active_title': '', 'ng_plus': 0}
+                                     'active_title': '', 'ng_plus': 0, 'tutorial_seen': []}
                     save_records(self._records)
                     self._gold_mult = 1.0; self._title_badge = False
                     self.messages.append(('[TEST] 기록 초기화됨', 'info'))
@@ -3894,7 +3942,7 @@ class Game:
             tags.append('mp_copy')          # 호스트: 초대 코드 복사
         if self._in_town and self.net is None:
             tags.append('mp_join')          # 마을 싱글: 친구 참가(코드)
-        tags += ['bgm', 'sfx', 'fs', 'lang', 'title', 'quit']
+        tags += ['bgm', 'sfx', 'tips', 'fs', 'lang', 'title', 'quit']
         return tags
 
     def _handle_pause_action(self, action):
@@ -3922,6 +3970,8 @@ class Game:
             self._settings['sfx_vol'] = max(0.0, min(1.0, self._settings['sfx_vol'] + dx*step))
             self.audio.set_sfx_volume(self._settings['sfx_vol'])
             save_settings(self._settings)
+        elif tag == 'tips':
+            self._toggle_tips()
         elif tag == 'fs':
             self._toggle_fullscreen()
         elif tag == 'lang':
@@ -3941,6 +3991,8 @@ class Game:
             self._copy_invite_code()
         elif tag == 'mp_join':
             self._open_ingame_join()
+        elif tag == 'tips':
+            self._toggle_tips()
         elif tag == 'fs':
             self._toggle_fullscreen()
         elif tag == 'lang':
@@ -4052,6 +4104,13 @@ class Game:
         self._quest_clear_font = None
         self._font_burning_big   = fonts.load_font(28, bold=True)
         self._font_burning_small = fonts.load_font(13)
+
+    def _toggle_tips(self):
+        self._settings['tips'] = not self._settings.get('tips', True)
+        save_settings(self._settings)
+        if not self._settings['tips']:
+            self._tut_active = None
+            self._tut_queue.clear()
 
     def _toggle_fullscreen(self):
         self._settings['fullscreen'] = not self._settings['fullscreen']
@@ -4183,6 +4242,8 @@ class Game:
             self.camera.center_on(self.player.x, self.player.y)
 
     def _player_move(self, dx, dy):
+        if not self._in_town:
+            self._tut('move')   # 첫 이동 → 기본 조작 안내
         nx, ny = self.player.x + dx, self.player.y + dy
         if   dx > 0: self._facing = 'right'
         elif dx < 0: self._facing = 'left'
@@ -5072,6 +5133,7 @@ class Game:
             self.dungeon.remove_item(item)
             self.messages.append((t('pickup', item.name), 'good'))
             self.audio.play('pickup')
+            self._tut('item')   # 첫 아이템 획득 → 인벤토리/장착 안내
         else:
             self.messages.append((t('inv_full'), 'warn'))
 
@@ -5524,6 +5586,74 @@ class Game:
         else:
             # 세션 없음 (마을에서 시작한 경우) → 현재 층 새로 생성
             self._load_floor()
+
+    # ══════════════ 신규 유저 온보딩 (상황별 튜토리얼 팁) ══════════════
+    _TUT_MS = 7000.0          # 팁 1개 표시 시간
+
+    def _tut_enabled(self) -> bool:
+        # 테스트 모드에서도 표시(사용자가 test_main.py로 검수) — 단, seen 저장은 하지 않아
+        # 매 실행마다 새로 볼 수 있다(_tut의 save_records가 test 모드에선 스킵됨).
+        return (self._settings.get('tips', True)
+                and not self._in_town
+                and not self._coop_dungeon
+                and self.player is not None)
+
+    def _tut(self, key):
+        """상황별 튜토리얼 팁을 평생 1회 발동. 이미 봤거나 비활성이면 무시."""
+        if not self._tut_enabled():
+            return
+        seen = self._records.setdefault('tutorial_seen', [])
+        if key in seen or any(q['key'] == key for q in self._tut_queue) \
+                or (self._tut_active and self._tut_active['key'] == key):
+            return
+        seen.append(key)
+        if not self._is_test_mode:
+            from core.save_load import save_records
+            save_records(self._records)
+        self._tut_queue.append({'key': key,
+                                'title': t('tut_' + key + '_title'),
+                                'body':  t('tut_' + key + '_body'),
+                                'ms': self._TUT_MS})
+        self.audio.play('menu_select')
+
+    def _update_tutorial(self, dt):
+        """활성 팁 시간 감소 + 큐에서 다음 팁 승격."""
+        if self._tut_active is not None:
+            self._tut_active['ms'] -= dt
+            if self._tut_active['ms'] <= 0:
+                self._tut_active = None
+        if self._tut_active is None and self._tut_queue:
+            self._tut_active = self._tut_queue.pop(0)
+
+    def _tut_check_context(self):
+        """매 프레임 상황을 살펴 조건이 맞으면 팁 발동(각 1회)."""
+        if not self._tut_enabled():
+            return
+        p = self.player
+        # 근처에 적이 있으면 공격 안내
+        near_enemy = any(e.is_alive() and not e.is_prop
+                         and max(abs(e.x - p.x), abs(e.y - p.y)) <= 5
+                         for e in self.dungeon.enemies)
+        if near_enemy:
+            self._tut('attack')
+            # 스킬 사용 가능(레벨 충족 + SP 여유)하면 스킬 안내
+            if p.stamina >= p.stamina_max * 0.6 and self._has_usable_skill():
+                self._tut('skill')
+        # 체력이 40% 아래로 떨어지면 포션 안내
+        if p.hp <= p.max_hp * 0.4:
+            self._tut('potion')
+        # 출구(계단 문)가 시야에 들어오면 하강 안내
+        sp = getattr(self.dungeon, 'stairs_pos', None)
+        if sp and self.dungeon.in_bounds(*sp) and self.dungeon.tiles[sp[1]][sp[0]].visible:
+            self._tut('stairs')
+
+    def _has_usable_skill(self) -> bool:
+        """장착 스킬 중 현재 레벨로 사용 가능한 게 하나라도 있는지."""
+        for sid in self._equipped_skills.values():
+            sdef = ALL_SKILL_DEFS.get(sid)
+            if sdef and self.player.level >= sdef.get('level_req', 1):
+                return True
+        return False
 
     def _reveal_player(self):
         """플레이어 위치 기준 시야 갱신 — 시야 반경(장비) 반영 + 진실의 시야면 전체 공개."""
@@ -9970,6 +10100,9 @@ class Game:
         # 던전 문 관문 진행 상태 (잠긴 동안만)
         if self._door_locked and self._gate is not None:
             self._draw_gate_status()
+        # 신규 유저 온보딩 팁 카드
+        if self._tut_active is not None and self.state == 'playing':
+            self._draw_tutorial()
         # 게임 중 '친구 참가' 코드 입력 오버레이
         if self._mp_join_open:
             self._draw_join_overlay()
