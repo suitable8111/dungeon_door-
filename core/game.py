@@ -1490,7 +1490,9 @@ class Game:
                     if not self._in_town:
                         self._update_conveyor(world_dt)
                         self._update_hazards(world_dt)
-                        self._tut_check_context()   # 상황별 튜토리얼 팁 발동
+                        self._tut_check_context()       # 던전 상황별 튜토리얼 팁
+                    else:
+                        self._tut_check_town_context()  # 마을/생활 콘텐츠 튜토리얼 팁
                     self._update_tutorial(dt)       # 팁 표시 시간/큐 갱신
                     # 방어구 파손 경고 소비 (Player.take_damage가 기록)
                     for _broken in self.player.just_broken:
@@ -5588,18 +5590,25 @@ class Game:
             self._load_floor()
 
     # ══════════════ 신규 유저 온보딩 (상황별 튜토리얼 팁) ══════════════
+    # 신규 콘텐츠에 튜토리얼을 붙이는 방법(설계 규약):
+    #   1) 그 콘텐츠를 "처음 접하는" 자연스러운 지점에서 self._tut('내키') 한 줄만 호출.
+    #      (예: 새 미니게임을 여는 함수 초입, 새 모드에 처음 진입하는 지점 등 —
+    #       진입형은 그 자리에서 직접 호출, 근접형은 _tut_check_context류 함수에 추가)
+    #   2) core/lang.py에 'tut_내키_title' / 'tut_내키_body'를 5개 언어로 추가.
+    #   그 외 엔진 코드는 건드릴 필요 없음 — 위치(던전/마을/신규 모드) 관계없이 동작한다.
     _TUT_MS = 7000.0          # 팁 1개 표시 시간
 
     def _tut_enabled(self) -> bool:
         # 테스트 모드에서도 표시(사용자가 test_main.py로 검수) — 단, seen 저장은 하지 않아
         # 매 실행마다 새로 볼 수 있다(_tut의 save_records가 test 모드에선 스킵됨).
+        # 던전/마을/향후 신규 모드 어디서든 동작 — 장소로 막지 않는다.
         return (self._settings.get('tips', True)
-                and not self._in_town
                 and not self._coop_dungeon
                 and self.player is not None)
 
     def _tut(self, key):
-        """상황별 튜토리얼 팁을 평생 1회 발동. 이미 봤거나 비활성이면 무시."""
+        """상황별 튜토리얼 팁을 평생 1회 발동. 이미 봤거나 비활성이면 무시.
+        신규 콘텐츠(생활/신규 모드 등)도 이 함수 하나만 호출하면 된다 — 클래스 상단 주석 참고."""
         if not self._tut_enabled():
             return
         seen = self._records.setdefault('tutorial_seen', [])
@@ -5626,7 +5635,8 @@ class Game:
             self._tut_active = self._tut_queue.pop(0)
 
     def _tut_check_context(self):
-        """매 프레임 상황을 살펴 조건이 맞으면 팁 발동(각 1회)."""
+        """던전 탐험 중 매 프레임 상황을 살펴 조건이 맞으면 팁 발동(각 1회).
+        마을/생활 콘텐츠 쪽 근접형 팁은 _tut_check_town_context에 있다."""
         if not self._tut_enabled():
             return
         p = self.player
@@ -5646,6 +5656,19 @@ class Game:
         sp = getattr(self.dungeon, 'stairs_pos', None)
         if sp and self.dungeon.in_bounds(*sp) and self.dungeon.tiles[sp[1]][sp[0]].visible:
             self._tut('stairs')
+
+    def _tut_check_town_context(self):
+        """마을/생활 콘텐츠 근접 시 팁 발동(각 1회) — 밭·목장·강가에 처음 다가섰을 때.
+        신규 생활 콘텐츠를 추가할 때 이 함수에 근접 조건 한 줄만 더하면 된다."""
+        if not self._tut_enabled() or not self._town:
+            return
+        p = self.player
+        if self._town.farm_plot_at(p.x, p.y) is not None:
+            self._tut('town_farm')
+        elif self._town.pen_at(p.x, p.y) is not None:
+            self._tut('town_ranch')
+        elif self._town.water_adjacent(p.x, p.y):
+            self._tut('town_fish')
 
     def _has_usable_skill(self) -> bool:
         """장착 스킬 중 현재 레벨로 사용 가능한 게 하나라도 있는지."""
@@ -5828,6 +5851,7 @@ class Game:
             self._storage_pane = 0
             self.state = 'storage'
             self.audio.play('shop_open')
+            self._tut('town_storage')
         elif npc['id'] == 'inn':
             self.state = 'inn'
             self.audio.play('shop_open')
@@ -5835,12 +5859,14 @@ class Game:
             self.dungeon.shop_items = self._make_town_stock()
             self.state = 'shop'
             self.audio.play('shop_open')
+            self._tut('town_shop')
         elif npc['id'] == 'smith':
             # 대장장이: 골드 소모 강화 (기존 강화 패널 재사용)
             self._enhance_mode = 'gold'
             self._enhance_open = True
             self._enhance_cursor = 0
             self.audio.play('shop_open')
+            self._tut('town_smith')
         elif npc['id'] == 'home_board':
             self._cycle_home_style()
         elif npc['id'] == 'home_chest':

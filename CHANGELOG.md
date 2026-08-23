@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.18.4 — Tutorial tips extended to town & life content
+
+- The tutorial-tip system from the last update was dungeon-only; it now also covers **town and life content**: your first time near a farm plot, ranch pen, or riverbank, and your first visit to the merchant, blacksmith, or storage chest, each show a one-time tip card explaining what to do.
+- Under the hood, the tutorial engine is now designed so any *future* content (new life-sim activities, new modes) can hook in a tip with a single line of code plus two translated strings — no engine changes needed.
+
 ## v2.18.3 — New-player onboarding: contextual tutorial tips
 
 - **Contextual tutorial tips** for new players: instead of dumping a wall of hint text into the message log on floor 1 (which most players never read), the game now shows a clear tip card at the bottom of the screen *the first time each situation comes up* — your first move, your first enemy, your first usable skill, your first time low on HP, spotting the exit door, and picking up your first item. Each tip appears only once, ever.
