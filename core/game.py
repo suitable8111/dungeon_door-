@@ -7625,6 +7625,10 @@ class Game:
         elif sub == 'speed_mage':
             self._equipped_skills['D'] = 'arcane_barrage'   # 초고속 연발 볼트
             # W는 기본 마법사의 점멸(arcane_blink) 그대로 — SP 소모만 대폭 절감(_use_skill 참고)
+        elif sub == 'berserker':
+            self._equipped_skills['S'] = 'blood_rage'       # 광폭화 → 잃은 HP 비례 폭증
+        elif sub == 'stormaxe':
+            self._equipped_skills['A'] = 'cyclone'          # 강철 회오리 → 회전 + 사방 도끼 방사
 
     def _do_advance(self, subclass_id):
         from core.subclasses import apply_subclass, name_key
@@ -7967,6 +7971,8 @@ class Game:
             'axe_throw':   self._exec_axe_throw,
             'berserk':     self._exec_berserk,
             'leap_smash':  self._exec_leap_smash,
+            'blood_rage':  self._exec_blood_rage,
+            'cyclone':     self._exec_cyclone,
         }
         fn = _exec_map.get(skill_id)
         if not fn:
@@ -8301,6 +8307,86 @@ class Game:
         self._gain_skill_xp('berserk')
         self.skills.trigger(slot)
         self.audio.play('levelup')
+        return True
+
+    def _exec_blood_rage(self, slot):
+        """피의 격노(광전사 전용) — berserk 변형: 잃은 HP 비례로 공격력·흡혈 폭증."""
+        lvl = self._skill_levels.get('blood_rage', 1)
+        s = ALL_SKILL_DEFS['blood_rage']['upgrades'][lvl - 1]
+        p = self.player
+        missing = (1.0 - p.hp / p.max_hp) if p.max_hp else 0.0
+        missing = max(0.0, min(1.0, missing))
+        atk = s['atk_pct'] + s['rage_atk'] * missing
+        ls  = s['lifesteal_pct'] + s['rage_ls'] * missing
+        p.aspd_buff_ms = s['dur_ms'];  p.aspd_buff_pct = s['aspd_pct']
+        p.lifesteal_ms = s['dur_ms'];  p.lifesteal_pct = ls
+        p.atk_bonus_ms = max(p.atk_bonus_ms, s['dur_ms'])
+        p.atk_bonus_pct = max(p.atk_bonus_pct, atk)
+        self.animator.add(BannerAnim(t('skill_blood_rage', int(atk * 100)),
+                                     (200, 40, 40), size=24))
+        self.animator.particles.emit_power_hit(p.x, p.y)
+        self._white_flash_ms = 90
+        self._start_shake(4, 180)
+        self._gain_skill_xp('blood_rage')
+        self.skills.trigger(slot)
+        self.audio.play('levelup')
+        return True
+
+    def _exec_cyclone(self, slot):
+        """사이클론(폭풍 도끼 전용) — 광역 회전 타격 + 8방향 도끼 방사."""
+        lvl = self._skill_levels.get('cyclone', 1)
+        s = ALL_SKILL_DEFS['cyclone']['upgrades'][lvl - 1]
+        radius, mul   = s['radius'], s['mul']
+        trange, tmul  = s['throw_range'], s['throw_mul']
+        px, py = self.player.x, self.player.y
+        hits = 0
+        # 1) 광역 회전 타격 (반경 R)
+        for ddx in range(-radius, radius + 1):
+            for ddy in range(-radius, radius + 1):
+                if ddx == 0 and ddy == 0:
+                    continue
+                nx, ny = px + ddx, py + ddy
+                enemy = self.dungeon.get_enemy_at(nx, ny)
+                if not enemy:
+                    continue
+                dmg = roll_damage(self._skill_atk, enemy.defense, mul)
+                enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                self._apply_lifesteal(dmg)
+                self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 180, 60)))
+                self.animator.particles.emit_basic_hit(nx, ny)
+                hits += 1
+                if not enemy.is_alive():
+                    self._on_enemy_killed(enemy)
+        # 2) 8방향 도끼 방사 (직선 N칸)
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            facing = self._DIR_NAME.get((dx, dy), 'right' if dx >= 0 else 'left')
+            land = (px, py)
+            for i in range(1, trange + 1):
+                nx, ny = px + dx * i, py + dy * i
+                if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].blocked:
+                    break
+                enemy = self.dungeon.get_enemy_at(nx, ny)
+                if enemy:
+                    dmg = roll_damage(self._skill_atk, enemy.defense, tmul)
+                    enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                    self._apply_lifesteal(dmg)
+                    self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 150, 70)))
+                    self.animator.particles.emit_power_hit(nx, ny)
+                    hits += 1
+                    if not enemy.is_alive():
+                        self._on_enemy_killed(enemy)
+                land = (nx, ny)
+            self.animator.add(MagicBoltAnim(px, py, land[0], land[1], facing, (235, 170, 90)))
+        self.animator.add(WhirlAnim(px, py))
+        self.animator.particles.emit_whirl(px, py)
+        self._start_shake(5, 200)
+        self._trigger_atk_anim()
+        self._gain_skill_xp('cyclone', hits)
+        self.skills.trigger(slot)
+        self.audio.play('skill_whirl')
+        self.messages.append((t('skill_cyclone', hits) if hits else t('skill_whirl_m'),
+                               'warn' if hits else 'info'))
         return True
 
     def _exec_leap_smash(self, slot):

@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.19.0 — Axeman 2nd advancement: Berserker & Stormaxe
+
+The Axeman finally gets its two class advancements (unlocking at Lv40 like every other class) — every one of the four classes now has a full advancement path.
+- **Berserker** — a reckless, HP-fueled bruiser. Its signature skill **Blood Rage** replaces Berserk: the more HP you've lost, the harder your attack and lifesteal spike — near death it more than doubles your attack bonus. Big HP and attack, no defense boost: high risk, high reward.
+- **Stormaxe** — a mobile swarm-clearer. Its signature **Cyclone** replaces Steel Whirl: a wider spinning AoE that *also* hurls axes in all 8 directions, shredding crowds. Raises attack speed, move speed, and evasion.
+
+Both advancements (and their new skills) are fully localized in all 5 languages.
+
 ## v2.18.4 — Tutorial tips extended to town & life content
 
 - The tutorial-tip system from the last update was dungeon-only; it now also covers **town and life content**: your first time near a farm plot, ranch pen, or riverbank, and your first visit to the merchant, blacksmith, or storage chest, each show a one-time tip card explaining what to do.

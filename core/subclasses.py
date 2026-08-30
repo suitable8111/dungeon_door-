@@ -47,7 +47,16 @@ SUBCLASSES = {
         'stats': {'max_hp': 4, 'attack': 2, 'move_speed': 0.4,
                   'attack_speed': 0.5, 'sp_reduce_bonus': 0.10},
     },
-    # 도끼맨: TBD (추후 추가)
+    # ── 도끼맨 ────────────────────────────────────────────────────────
+    'berserker': {          # 광전사 — HP를 연료로 쓰는 저돌적 단일 브루저
+        'base': 'axeman',
+        'stats': {'max_hp': 20, 'attack': 6, 'attack_speed': 0.2},
+    },
+    'stormaxe': {           # 폭풍 도끼 — 회전·방사로 스웜을 청소하는 기동 광역형
+        'base': 'axeman',
+        'stats': {'max_hp': 8, 'attack': 2, 'attack_speed': 0.6,
+                  'move_speed': 0.4, 'evasion': 6},
+    },
 }
 
 # 기본 직업 → 선택 가능한 전직 2개 (순서 = 표시 순서)
@@ -55,7 +64,7 @@ SUBCLASS_CHOICES = {
     'warrior': ['dual_blade', 'magic_swordsman'],
     'archer':  ['crossbow_master', 'twin_bow'],
     'mage':    ['battle_mage', 'speed_mage'],
-    # 'axeman': [...]  # TBD
+    'axeman':  ['berserker', 'stormaxe'],
 }
 
 ADVANCE_LEVEL = 40          # 전직 가능 레벨
