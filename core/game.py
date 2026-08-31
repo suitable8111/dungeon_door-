@@ -426,6 +426,21 @@ class Game:
         self._burning_floor       = 1        # 복귀용 원래 층
         self._burning_warned_10s  = False
 
+        # 무한 생존 모드 상태 (Endless Survival)
+        self._survival_active   = False
+        self._survival_wave     = 0
+        self._survival_spawn_ms = 0
+        self._survival_elapsed  = 0.0     # 경과 시간(ms)
+        self._survival_kills0   = 0       # 진입 시점 누적 킬(델타 계산용)
+        self._survival_score    = 0
+        self._survival_upgrades = []      # 획득한 업그레이드 id
+        self._survival_next_up  = 0       # 다음 드래프트까지 필요한 킬 수
+        self._surv_choices      = []      # 현재 드래프트 3장
+        self._surv_cursor       = 0
+        self._survival_final    = None    # 결과 화면용 스냅샷
+        self._survival_new_best = False
+        self._pending_survival  = False   # 캐릭터 생성 후 생존 모드로 진입할지
+
         # 버닝 HUD 폰트 캐시 (매 프레임 생성 방지, 언어별 폰트)
         from core.fonts import load_font as _lf
         self._font_burning_big   = _lf(28, bold=True)
@@ -1479,6 +1494,8 @@ class Game:
                         self._arcane_last_skill = None
                 if self._burning_active:
                     self._update_burning(dt)
+                elif self._survival_active:
+                    self._update_survival(dt)
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
@@ -3113,6 +3130,10 @@ class Game:
                         self._start_discard_confirm(_ri)
                 elif self.state == 'char_create':
                     self._handle_char_create_key(event.key, event.unicode)
+                elif (self.state == 'menu' and self._menu_page == 'main'
+                        and event.key == pygame.K_v):
+                    self._pending_survival = True
+                    self._open_char_create(None)
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
                         and ((event.unicode and (event.unicode.isalnum()
                                                  or event.unicode == '.'))
@@ -3228,6 +3249,10 @@ class Game:
                         self._cancel_pending_net()
                     else:
                         pygame.quit(); sys.exit()
+                elif self.state == 'survival_over':
+                    self._survival_return_menu()
+                elif self.state == 'survival_upgrade':
+                    pass   # 드래프트 중 ESC 무시 — 반드시 선택
                 elif self.state == 'dead':
                     pygame.quit(); sys.exit()
                 continue
@@ -3252,6 +3277,11 @@ class Game:
                 self._handle_life_codex_action(action)
             elif self.state == 'gate_choice':
                 self._handle_gate_choice_action(action)
+            elif self.state == 'survival_upgrade':
+                self._handle_survival_upgrade_action(action)
+            elif self.state == 'survival_over':
+                if t in ('confirm', 'attack', 'interact', 'ultimate'):
+                    self._survival_return_menu()
             elif self.state == 'fishing':
                 self._handle_fishing_action(action)
             elif self.state == 'ranch_menu':
@@ -3610,6 +3640,14 @@ class Game:
             return
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
+        if self._pending_survival:
+            # 무한 생존 모드: 세이브 슬롯을 만들지 않고(슬롯 None) 아레나로 직행
+            self._pending_survival = False
+            self._new_game(char_class=self._create_class, char_name=name,
+                           slot=None, appearance=self._create_appearance())
+            self._enter_survival()
+            self.clock.tick()
+            return
         self._new_game(char_class=self._create_class, char_name=name,
                        slot=self._create_slot,
                        appearance=self._create_appearance())
@@ -10023,6 +10061,213 @@ class Game:
 
         self._start_fade(self._load_floor)
 
+    # ─────────────── 무한 생존 모드 (Endless Survival) ────────────────
+    # 업그레이드 풀: id → (플레이어 스탯 적용). 드래프트에서 3장 중 1장 선택, 영구 누적.
+    _SURV_UPGRADE_IDS = ['hp', 'atk', 'aspd', 'move', 'eva', 'def', 'heal']
+
+    def start_survival_mode(self, char_class='warrior'):
+        """무한 생존 모드 진입 (test_main.py survival / 메뉴)."""
+        self.start_test_mode(floor=1, char_class=char_class)
+        self._enter_survival()
+        self.clock.tick()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
+
+    def _enter_survival(self):
+        self._survival_active   = True
+        self._survival_wave     = 0
+        self._survival_spawn_ms = 500
+        self._survival_elapsed  = 0.0
+        self._survival_kills0   = self._run_kills
+        self._survival_score    = 0
+        self._survival_upgrades = []
+        self._survival_next_up  = 12       # 첫 드래프트까지 12킬
+        self._survival_final    = None
+
+        dungeon, start = generate_arena()
+        self.dungeon = dungeon
+        self._theme  = BURNING_THEME
+        self.player.x, self.player.y = start
+        self.player.hp = self.player.max_hp
+        self.camera = Camera(ARENA_WIDTH, ARENA_HEIGHT)
+        self.camera.center_on(self.player.x, self.player.y)
+        self.messages.clear()
+        self.messages.append((t('survival_enter'), 'warn'))
+        self.audio.play('boss_appear')
+        self._start_shake(5, 400)
+
+    def _update_survival(self, dt_ms: int):
+        dt_ms = min(dt_ms, 200)
+        self._survival_elapsed  += dt_ms
+        self._survival_spawn_ms -= dt_ms
+
+        # 난이도: 경과 시간에 따라 오르는 가상 층(20초마다 +2) + 파도 번호
+        vfloor = 1 + int(self._survival_elapsed / 20000) * 2
+        interval = max(600, 1600 - int(self._survival_elapsed / 1000) * 8)  # 점점 빨라짐
+        live = sum(1 for e in self.dungeon.enemies if e.is_alive())
+        if self._survival_spawn_ms <= 0 and live < MAX_LIVE_ENEMIES:
+            self._survival_spawn_ms = interval
+            self._survival_wave += 1
+            new_enemies = spawn_wave(self.dungeon, self._enemy_data,
+                                     vfloor, self._survival_wave)
+            self.dungeon.enemies.extend(new_enemies)
+
+        # 킬 기반 업그레이드 드래프트
+        kills = self._run_kills - self._survival_kills0
+        if kills >= self._survival_next_up:
+            self._survival_next_up = kills + 12 + len(self._survival_upgrades) * 4
+            self._open_survival_upgrade()
+
+        # 점수 = 킬*10 + 파도*5 + 생존 초
+        self._survival_score = (kills * 10 + self._survival_wave * 5
+                                + int(self._survival_elapsed / 1000))
+
+        if len(self.dungeon.enemies) > MAX_LIVE_ENEMIES * 2:
+            self.dungeon.enemies = [e for e in self.dungeon.enemies if e.is_alive()]
+
+    def _open_survival_upgrade(self):
+        """웨이브 보상 — 업그레이드 3장 중 택1 (로그라이트 드래프트)."""
+        self._surv_choices = random.sample(self._SURV_UPGRADE_IDS, 3)
+        self._surv_cursor  = 0
+        self.state = 'survival_upgrade'
+        self.audio.play('levelup')
+
+    def _handle_survival_upgrade_action(self, action):
+        ty = action['type']
+        if ty == 'move' and action.get('dx'):
+            self._surv_cursor = (self._surv_cursor + action['dx']) % 3
+            self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            uid = self._surv_choices[self._surv_cursor]
+            self._survival_apply_upgrade(uid)
+            self._survival_upgrades.append(uid)
+            self.state = 'playing'
+
+    def _survival_apply_upgrade(self, uid):
+        p = self.player
+        if uid == 'hp':
+            p.max_hp += 20; p.hp = min(p.max_hp, p.hp + 20)
+        elif uid == 'atk':
+            p.attack += 3
+        elif uid == 'aspd':
+            p.attack_speed += 0.4
+        elif uid == 'move':
+            p.move_speed += 0.3
+        elif uid == 'eva':
+            p.evasion += 5
+        elif uid == 'def':
+            p.defense += 2
+        elif uid == 'heal':
+            p.hp = p.max_hp
+        self.messages.append((t('survival_pick', t('surv_up_' + uid)), 'good'))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.audio.play('tier_up')
+
+    def _end_survival(self):
+        self._survival_active = False
+        kills = self._run_kills - self._survival_kills0
+        self._survival_final = {
+            'wave':  self._survival_wave,
+            'kills': kills,
+            'time':  int(self._survival_elapsed / 1000),
+            'score': self._survival_score,
+        }
+        best = self._records.get('survival_best', 0)
+        self._survival_new_best = self._survival_score > best
+        if self._survival_new_best:
+            self._records['survival_best'] = self._survival_score
+            if not self._is_test_mode:
+                from core.save_load import save_records
+                save_records(self._records)
+        self.audio.play('death')
+        self._start_shake(6, 500)
+        self.state = 'survival_over'
+
+    def _survival_return_menu(self):
+        self._survival_active = False
+        self.state = 'menu'
+        self._menu_page = 'main'
+        self.audio.play('menu_select')
+
+    def _render_survival_upgrade(self):
+        """업그레이드 드래프트 — 3장 중 1장 선택 (월드 위 오버레이)."""
+        s = self.screen
+        bw, bh = 460, 200
+        bx = GAME_X + (GAME_W - bw) // 2
+        by = GAME_Y + (GAME_H - bh) // 2
+        panel = pygame.Surface((bw, bh), pygame.SRCALPHA); panel.fill((14, 20, 16, 246))
+        s.blit(panel, (bx, by))
+        pygame.draw.rect(s, (120, 220, 130), (bx, by, bw, bh), 2, border_radius=8)
+        title = self.hud.font_md.render(t('survival_upgrade_title'), True, (150, 240, 160))
+        s.blit(title, (bx + (bw - title.get_width()) // 2, by + 10))
+        cw, ch, gap = 132, 118, 14
+        total = cw * 3 + gap * 2
+        ox = bx + (bw - total) // 2
+        oy = by + 44
+        for i, uid in enumerate(self._surv_choices):
+            cx = ox + i * (cw + gap)
+            sel = i == self._surv_cursor
+            col = (150, 240, 160) if sel else (110, 140, 120)
+            if sel:
+                pygame.draw.rect(s, (28, 44, 32), (cx, oy, cw, ch), border_radius=8)
+            pygame.draw.rect(s, col, (cx, oy, cw, ch), 2, border_radius=8)
+            nm = self.hud.font_md.render(t('surv_up_' + uid), True, col)
+            s.blit(nm, (cx + (cw - nm.get_width()) // 2, oy + 12))
+            dy = oy + 40
+            for line in self._wrap_text(t('surv_up_' + uid + '_d'),
+                                        self.hud.font_sm, cw - 16):
+                ls = self.hud.font_sm.render(line, True, (200, 220, 205))
+                s.blit(ls, (cx + 8, dy)); dy += 15
+            num = self.hud.font_sm.render(str(i + 1), True, col)
+            s.blit(num, (cx + cw // 2 - num.get_width() // 2, oy + ch - 20))
+        hint = self.hud.font_sm.render(t('survival_upgrade_hint'), True, (150, 170, 155))
+        s.blit(hint, (bx + (bw - hint.get_width()) // 2, by + bh - 22))
+
+    def _render_survival_over(self):
+        """생존 종료 결과 화면."""
+        s = self.screen
+        f = self._survival_final or {}
+        overlay = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+        overlay.fill((6, 10, 8, 232))
+        s.blit(overlay, (GAME_X, GAME_Y))
+        cx = GAME_X + GAME_W // 2
+        y = GAME_Y + 60
+        title = self.hud.font_lg.render(t('survival_over_title'), True, (240, 120, 110))
+        s.blit(title, (cx - title.get_width() // 2, y)); y += 54
+        rows = [
+            (t('survival_stat_wave'),  str(f.get('wave', 0))),
+            (t('survival_stat_time'),  f"{f.get('time', 0)}s"),
+            (t('survival_stat_kills'), str(f.get('kills', 0))),
+            (t('survival_stat_score'), str(f.get('score', 0))),
+        ]
+        for label, val in rows:
+            ls = self.hud.font_md.render(label, True, (190, 200, 195))
+            vs = self.hud.font_md.render(val, True, (240, 235, 150))
+            s.blit(ls, (cx - 120, y))
+            s.blit(vs, (cx + 120 - vs.get_width(), y))
+            y += 34
+        y += 8
+        if self._survival_new_best:
+            nb = self.hud.font_md.render(t('survival_new_best'), True, (120, 240, 140))
+            s.blit(nb, (cx - nb.get_width() // 2, y)); y += 34
+        else:
+            best = self.hud.font_sm.render(
+                t('survival_best', self._records.get('survival_best', 0)),
+                True, (170, 190, 175))
+            s.blit(best, (cx - best.get_width() // 2, y)); y += 30
+        hint = self.hud.font_sm.render(t('survival_return_hint'), True, (160, 175, 165))
+        s.blit(hint, (cx - hint.get_width() // 2, GAME_Y + GAME_H - 40))
+
+    def _draw_survival_hud(self):
+        """상단 생존 정보 — 파도 / 시간 / 킬 / 점수."""
+        s = self.screen
+        kills = self._run_kills - self._survival_kills0
+        secs  = int(self._survival_elapsed / 1000)
+        big = self._font_burning_big.render(f"{t('survival_wave')} {self._survival_wave}",
+                                            True, (150, 240, 160))
+        s.blit(big, (GAME_X + GAME_W // 2 - big.get_width() // 2, GAME_Y + 8))
+        info = f"{secs}s   ⚔{kills}   ★{self._survival_score}"
+        info_s = self._font_burning_small.render(info, True, (200, 230, 205))
+        s.blit(info_s, (GAME_X + GAME_W // 2 - info_s.get_width() // 2, GAME_Y + 40))
+
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
     def _spawn_boss_summon(self, key: str, bx: int, by: int):
         if key not in self._enemy_data:
@@ -10124,6 +10369,8 @@ class Game:
               and not self._downed and not self._spectating):
             if self._burning_active:
                 self._exit_burning_stage(survived=False)
+            elif self._survival_active:
+                self._end_survival()
             else:
                 self._records = update_records(self.floor, self._run_kills, self.player.gold)
                 # 소프트 사망: 세이브 유지 → 재시작 시 마을로 복귀, 도달 층 재도전 가능
@@ -10165,6 +10412,10 @@ class Game:
                 mp_upnp=self._mp_upnp,
                 mp_recent=self._settings.get('mp_recent'),
             )
+            if self._menu_page == 'main':
+                hint = self.hud.font_sm.render(t('survival_menu_hint'), True, (150, 220, 160))
+                self.screen.blit(hint, (WINDOW_WIDTH // 2 - hint.get_width() // 2,
+                                        WINDOW_HEIGHT - 26))
             pygame.display.flip()
             return
 
@@ -10250,6 +10501,10 @@ class Game:
             self._render_life_codex()
         elif self.state == 'gate_choice':
             self._render_gate_choice()
+        elif self.state == 'survival_upgrade':
+            self._render_survival_upgrade()
+        elif self.state == 'survival_over':
+            self._render_survival_over()
         elif self.state == 'fishing':
             self._render_fishing()
         elif self.state == 'ranch_menu':
@@ -10328,6 +10583,9 @@ class Game:
         # 버닝 스테이지 타이머 오버레이
         if self._burning_active:
             self._render_burning_hud()
+        # 무한 생존 모드 HUD
+        if self._survival_active and self.state == 'playing':
+            self._draw_survival_hud()
 
         pygame.display.flip()
 

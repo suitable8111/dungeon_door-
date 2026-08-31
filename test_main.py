@@ -68,6 +68,8 @@ arg1 = args[0].lower() if args else ''
 
 if arg1 == 'bunning':
     game.start_burning_mode(char_class=char_class)
+elif arg1 == 'survival':
+    game.start_survival_mode(char_class=char_class)
 elif arg1 == 'journal':
     game.start_journal_test(char_class=char_class)
 elif arg1 == 'town':

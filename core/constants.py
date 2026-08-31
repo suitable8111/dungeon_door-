@@ -1,4 +1,4 @@
-VERSION = "2.19.0"     # 메인화면 표시 + 태그와 일치시켜 빌드 확인용
+VERSION = "2.20.0"     # 메인화면 표시 + 태그와 일치시켜 빌드 확인용
 TILE_SIZE = 32
 WINDOW_WIDTH = 1024
 WINDOW_HEIGHT = 768
