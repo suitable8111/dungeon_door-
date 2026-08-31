@@ -3641,11 +3641,10 @@ class Game:
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
         if self._pending_survival:
-            # 무한 생존 모드: 세이브 슬롯을 만들지 않고(슬롯 None) 아레나로 직행
+            # 무한 생존 모드: 세이브를 건드리지 않고 일회성 런으로 아레나 직행
             self._pending_survival = False
-            self._new_game(char_class=self._create_class, char_name=name,
-                           slot=None, appearance=self._create_appearance())
-            self._enter_survival()
+            self._begin_survival_run(self._create_class, name,
+                                     self._create_appearance())
             self.clock.tick()
             return
         self._new_game(char_class=self._create_class, char_name=name,
@@ -10066,10 +10065,65 @@ class Game:
     _SURV_UPGRADE_IDS = ['hp', 'atk', 'aspd', 'move', 'eva', 'def', 'heal']
 
     def start_survival_mode(self, char_class='warrior'):
-        """무한 생존 모드 진입 (test_main.py survival / 메뉴)."""
-        self.start_test_mode(floor=1, char_class=char_class)
-        self._enter_survival()
-        self.clock.tick()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
+        """무한 생존 모드 직행 (test_main.py survival). 테스트 기록 격리 + Lv1 시작."""
+        self._is_test_mode = True
+        from core.save_load import use_test_data
+        use_test_data(True)
+        self._records = load_records()
+        self._storage, self._storage_cap = load_storage()
+        self._gold_mult = ng_plus_gold_mult(self._records)
+        self._title_badge = bool(self._records.get('active_title'))
+        self._begin_survival_run(char_class, char_name='TestHero')
+        self.clock.tick()
+
+    def _begin_survival_run(self, char_class, char_name='Hero', appearance=None):
+        """무한 생존 런 셋업 — 세이브를 만들지도/지우지도 않는 일회성 런.
+        레벨1 기본 스탯(생존 난이도 유지) + 스킬 전부 최대·조합 전체 해금 + 공속 극대화(아케이드 손맛)."""
+        self._char_class = char_class if char_class in CLASSES else 'warrior'
+        self._char_name  = char_name or 'Hero'
+        self._char_appearance = dict(appearance) if appearance else \
+            {'skin': 0, 'hair': 0, 'haircol': 0}
+        self._save_data       = None
+        self.floor            = 1
+        self._facing          = 'down'
+        self._walk_frame      = 0
+        self.messages         = []
+        self.skills           = SkillManager()
+        self._run_kills       = 0
+        # 스킬 전부 최대 레벨 + 조합/스킬북 전체 해금
+        self._skill_levels    = {sid: SKILL_MAX_LEVEL for sid in ALL_SKILL_DEFS}
+        self._skill_xp        = {sid: 0 for sid in ALL_SKILL_DEFS}
+        self._equipped_skills = default_equipped_for(self._char_class)
+        self._apply_subclass_equips()
+        self._skill_enchants  = {
+            sid: {'power': 0, 'haste': 0, 'efficiency': 0, 'arcane': 0}
+            for sid in ALL_SKILL_DEFS
+        }
+        self._unlocked_combos = set(COMBO_SKILL_DEFS.keys())
+        self._skill_books     = set(COMBO_SKILL_DEFS.keys())
+        self._arcane_window_ms  = 0
+        self._arcane_last_skill = None
+        self._combo_count = 0
+        self._combo_ms    = 0.0
+        self._in_town         = False
+        self._coop_dungeon    = False
+        self._coop_seed       = None
+        self._coop_diff       = None
+        self._reset_downed_state()
+        self._dungeon_session = None
+        from core.quests import fresh_states
+        self._quests = fresh_states()
+        from core.coop_quests import fresh_states as _coop_fresh
+        self._coop_quests = _coop_fresh()
+        self._dialog = None
+        self._max_floor_reached = 1
+        self._load_floor(is_new_game=True)      # 레벨1 기본 플레이어 생성
+        self._apply_skill_level_cds()
+        # 공격속도 극대화 — 저레벨이라 기본 피해는 낮지만 손맛/스킬 회전은 시원하게
+        p = self.player
+        p.attack_speed = max(p.attack_speed, 8.0)
+        self.state = 'playing'
+        self._enter_survival()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
 
     def _enter_survival(self):
         self._survival_active   = True

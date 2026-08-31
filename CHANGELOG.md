@@ -6,6 +6,7 @@ A brand-new standalone mode built for the "just one more run" itch:
 - **Endless Survival** — drop into a single arena and hold out against never-ending, escalating waves of monsters. The longer you last, the faster and tougher they come.
 - **Upgrade drafts** — every so often you pick 1 of 3 permanent run upgrades (Iron Vigor / Sharpen / Frenzy / Swiftness / Evasion / Toughness / First Aid), stacking them into a build that snowballs.
 - **Score & personal best** — earn score from kills, waves cleared, and time survived; beating your record pops a NEW BEST banner. Death drops you on a results screen.
+- **Arcade rules** — you drop in at level 1 with a *fully unlocked, max-level skillset* and a cranked attack speed, so it's about the upgrade drafts and reflexes, not grinding. Runs are self-contained and never touch your story saves.
 - Launch it straight from the main menu (press **V**) with any unlocked class. Fully localized in all 5 languages.
 
 ## v2.19.0 — Axeman 2nd advancement: Berserker & Stormaxe
