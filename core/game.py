@@ -10153,16 +10153,22 @@ class Game:
         self._survival_elapsed  += dt_ms
         self._survival_spawn_ms -= dt_ms
 
-        # 난이도: 경과 시간에 따라 오르는 가상 층(20초마다 +2) + 파도 번호
-        vfloor = 1 + int(self._survival_elapsed / 20000) * 2
-        interval = max(600, 1600 - int(self._survival_elapsed / 1000) * 8)  # 점점 빨라짐
+        # 난이도 자동 스케일 = 플레이어 파워(레벨 + 획득 업그레이드) 기반.
+        # 저레벨엔 적 강도·밀도·스폰수를 낮춰 순하게, 성장할수록 램프업.
+        # (완만한 시간 크리프를 얹어 캠핑해도 서서히 압박이 는다.)
+        power = (self.player.level - 1) + len(self._survival_upgrades)
+        tcreep = int(self._survival_elapsed / 30000)      # 30초마다 +1
+        vfloor = 1 + int(power * 0.9) + tcreep             # 적 강도
+        diff   = 1 + power + tcreep                        # 적 수/강적 비율 티어
+        interval = max(700, 2000 - power * 55 - int(self._survival_elapsed / 1000) * 4)
+        live_cap = min(MAX_LIVE_ENEMIES, 14 + power * 4)   # 동시 활성 상한(몰살 방지)
+        per_cap  = max(4, 4 + power * 2)                   # 1회 스폰 상한
         live = sum(1 for e in self.dungeon.enemies if e.is_alive())
-        if self._survival_spawn_ms <= 0 and live < MAX_LIVE_ENEMIES:
+        if self._survival_spawn_ms <= 0 and live < live_cap:
             self._survival_spawn_ms = interval
             self._survival_wave += 1
-            new_enemies = spawn_wave(self.dungeon, self._enemy_data,
-                                     vfloor, self._survival_wave)
-            self.dungeon.enemies.extend(new_enemies)
+            new_enemies = spawn_wave(self.dungeon, self._enemy_data, vfloor, diff)
+            self.dungeon.enemies.extend(new_enemies[:per_cap])
 
         # 킬 기반 업그레이드 드래프트
         kills = self._run_kills - self._survival_kills0
