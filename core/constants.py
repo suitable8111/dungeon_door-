@@ -1,4 +1,4 @@
-VERSION = "2.20.0"     # 메인화면 표시 + 태그와 일치시켜 빌드 확인용
+VERSION = "2.21.0"     # 메인화면 표시 + 태그와 일치시켜 빌드 확인용
 TILE_SIZE = 32
 WINDOW_WIDTH = 1024
 WINDOW_HEIGHT = 768
@@ -60,6 +60,9 @@ SHOP_COLOR  = ( 60, 210, 120)
 
 # ---- 플레이어 클래스 ----
 CLASSES = ('warrior', 'archer', 'mage', 'axeman')
+
+# ---- 무한 생존(Endless Survival) ----
+SURVIVAL_START_LEVEL = 10   # 정식 무한 생존 진입 기준선(캐릭터 레벨 10에서 시작)
 BOSS_COLOR  = (200,  80, 220)
 SKILL_READY = (100, 180, 255)
 SKILL_CD    = ( 60,  60,  90)

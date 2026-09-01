@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.21.0 — Endless Survival goes official
+
+Endless Survival graduates from a hidden hotkey to a first-class mode:
+- **Dedicated menu button** — a proper "Endless Survival" entry now sits on the main menu (no more secret **V** shortcut), selectable by mouse or keyboard.
+- **Level 10 baseline** — runs now start your hero at **Level 10** instead of level 1, so you drop in already durable and the early game is fun rather than punishing. (The old level-1 start was too fragile.)
+- **Restart or leave on death** — the results screen now lets you **restart instantly** with the same class (**R**) or head back to the menu (**ESC**), instead of always kicking you out.
+
 ## v2.20.0 — New mode: Endless Survival
 
 A brand-new standalone mode built for the "just one more run" itch:

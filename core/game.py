@@ -3134,6 +3134,8 @@ class Game:
                         and event.key == pygame.K_v):
                     self._pending_survival = True
                     self._open_char_create(None)
+                elif self.state == 'survival_over' and event.key == pygame.K_r:
+                    self._survival_restart()
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
                         and ((event.unicode and (event.unicode.isalnum()
                                                  or event.unicode == '.'))
@@ -3345,7 +3347,7 @@ class Game:
             return
         typ = action['type']
         n = len(self._cards)
-        total = n + 3  # + multiplayer + settings + quit
+        total = n + 4  # + multiplayer + survival + settings + quit
         if typ == 'move':
             dy = action.get('dy', 0)
             if dy != 0:
@@ -3358,9 +3360,13 @@ class Game:
                 self._open_multiplayer()
             elif self._menu_sel == n + 1:
                 self.audio.play('menu_select')
+                self._pending_survival = True
+                self._open_char_create(None)
+            elif self._menu_sel == n + 2:
+                self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
-            elif self._menu_sel == n + 2:
+            elif self._menu_sel == n + 3:
                 pygame.quit(); sys.exit()
 
     def _open_multiplayer(self):
@@ -3800,6 +3806,10 @@ class Game:
                     self.start_test_mode(self._test_floor)
                 elif action == 'multiplayer':
                     self._open_multiplayer()
+                elif action == 'survival':
+                    self.audio.play('menu_select')
+                    self._pending_survival = True
+                    self._open_char_create(None)
                 elif action == 'settings':
                     self._menu_page = 'settings'
                     self._menu_settings_sel = 0
@@ -10065,7 +10075,7 @@ class Game:
     _SURV_UPGRADE_IDS = ['hp', 'atk', 'aspd', 'move', 'eva', 'def', 'heal']
 
     def start_survival_mode(self, char_class='warrior'):
-        """무한 생존 모드 직행 (test_main.py survival). 테스트 기록 격리 + Lv1 시작."""
+        """무한 생존 모드 직행 (test_main.py survival). 테스트 기록 격리 + Lv10 시작."""
         self._is_test_mode = True
         from core.save_load import use_test_data
         use_test_data(True)
@@ -10078,7 +10088,7 @@ class Game:
 
     def _begin_survival_run(self, char_class, char_name='Hero', appearance=None):
         """무한 생존 런 셋업 — 세이브를 만들지도/지우지도 않는 일회성 런.
-        레벨1 기본 스탯(생존 난이도 유지) + 스킬 전부 최대·조합 전체 해금 + 공속 극대화(아케이드 손맛)."""
+        Lv10 기준선 스탯 + 스킬 전부 최대·조합 전체 해금 + 공속 극대화(아케이드 손맛)."""
         self._char_class = char_class if char_class in CLASSES else 'warrior'
         self._char_name  = char_name or 'Hero'
         self._char_appearance = dict(appearance) if appearance else \
@@ -10119,8 +10129,12 @@ class Game:
         self._max_floor_reached = 1
         self._load_floor(is_new_game=True)      # 레벨1 기본 플레이어 생성
         self._apply_skill_level_cds()
-        # 공격속도 극대화 — 저레벨이라 기본 피해는 낮지만 손맛/스킬 회전은 시원하게
         p = self.player
+        # 정식 무한 생존: 캐릭터 레벨 10 기준선에서 시작 (레벨업 스탯 곡선 그대로 적용)
+        for _ in range(max(0, SURVIVAL_START_LEVEL - p.level)):
+            p._level_up()
+        p.hp = p.max_hp
+        # 공격속도 극대화 — 손맛/스킬 회전을 시원하게
         p.attack_speed = max(p.attack_speed, 8.0)
         self.state = 'playing'
         self._enter_survival()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
@@ -10246,6 +10260,13 @@ class Game:
         self.state = 'menu'
         self._menu_page = 'main'
         self.audio.play('menu_select')
+
+    def _survival_restart(self):
+        """같은 캐릭터(클래스/외형)로 새 생존 런 즉시 재시작."""
+        self.audio.play('menu_select')
+        self._begin_survival_run(self._char_class, self._char_name,
+                                 getattr(self, '_char_appearance', None))
+        self.clock.tick()
 
     def _render_survival_upgrade(self):
         """업그레이드 드래프트 — 3장 중 1장 선택 (월드 위 오버레이)."""
@@ -10472,10 +10493,6 @@ class Game:
                 mp_upnp=self._mp_upnp,
                 mp_recent=self._settings.get('mp_recent'),
             )
-            if self._menu_page == 'main':
-                hint = self.hud.font_sm.render(t('survival_menu_hint'), True, (150, 220, 160))
-                self.screen.blit(hint, (WINDOW_WIDTH // 2 - hint.get_width() // 2,
-                                        WINDOW_HEIGHT - 26))
             pygame.display.flip()
             return
 

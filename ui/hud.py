@@ -289,7 +289,7 @@ class HUD:
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
             p_w = 470
-            p_h = 82 + len(cards) * 62 + 16 + 54 + 50 + 52
+            p_h = 82 + len(cards) * 62 + 16 + 54 + 58 + 50 + 52
             if mp_banner == 'host' and mp_code:
                 p_h += 52    # 초대 코드 2줄 + UPnP 상태 표시 공간
         elif page == 'coop_select':
@@ -404,11 +404,36 @@ class HUD:
                                mp_rect.centery - mlbl.get_height() // 2))
             buttons.append((mp_rect, 'multiplayer'))
 
+            # ── 무한 생존 버튼 (전체 폭, 붉은-금빛 아케이드 강조) ────
+            sv_idx  = len(cards) + 1
+            sv_h    = 46
+            sv_rect = pygame.Rect(p_x + 20, mp_rect.bottom + 10, p_w - 40, sv_h)
+            sv_act  = (sv_idx == sel)
+            sv_hov  = sv_rect.collidepoint(mouse_pos)
+            sv_on   = sv_act or sv_hov
+            sv_bg = (52, 26, 22) if sv_on else (34, 20, 18)
+            sv_bd = (240, 150, 70) if sv_on else (150, 92, 52)
+            sv_tc = (255, 214, 150) if sv_on else (214, 168, 120)
+            pygame.draw.rect(screen, sv_bg, sv_rect, border_radius=5)
+            pygame.draw.rect(screen, sv_bd, sv_rect, 2 if sv_act else 1, border_radius=5)
+            # 좌측 아이콘: 해골/투사 느낌의 마름모 코어
+            _ix, _iy = sv_rect.left + 24, sv_rect.centery
+            pygame.draw.polygon(screen, sv_bd,
+                                [(_ix, _iy-8), (_ix+7, _iy), (_ix, _iy+8), (_ix-7, _iy)])
+            pygame.draw.polygon(screen, sv_bg,
+                                [(_ix, _iy-4), (_ix+3, _iy), (_ix, _iy+4), (_ix-3, _iy)])
+            slbl = self.font_md.render(t('menu_survival'), True, sv_tc)
+            screen.blit(slbl, (sv_rect.left + 44, sv_rect.top + 6))
+            ssub = self.font_sm.render(t('menu_survival_sub'), True,
+                                       (200, 150, 110) if sv_on else (150, 112, 80))
+            screen.blit(ssub, (sv_rect.left + 44, sv_rect.bottom - 18))
+            buttons.append((sv_rect, 'survival'))
+
             # ── 설정 / 종료 버튼 (나란히, 작은 크기) ───────────────
             sm_h = 44
             sm_w = (p_w - 60) // 2
-            sm_y = mp_rect.bottom + 12
-            s_idx = len(cards) + 1;     q_idx = len(cards) + 2
+            sm_y = sv_rect.bottom + 12
+            s_idx = len(cards) + 2;     q_idx = len(cards) + 3
 
             for idx, action, lbl_key, danger, sm_x in [
                 (s_idx, 'settings', 'menu_settings', False, p_x + 20),
