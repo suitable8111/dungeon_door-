@@ -440,6 +440,17 @@ class Game:
         self._survival_final    = None    # 결과 화면용 스냅샷
         self._survival_new_best = False
         self._pending_survival  = False   # 캐릭터 생성 후 생존 모드로 진입할지
+        # ── 증강(Augment): 런 시작 시 1택, 빌드를 규정하는 기믹 강화 ──
+        self._aug_id            = None    # 선택된 증강 id (HUD 표시용)
+        self._aug_choices       = []      # 시작 드래프트 3장
+        self._aug_cursor        = 0
+        self._aug_size_scale    = 1.0     # 캐릭터 크기 배율(렌더)
+        self._aug_cd_mul        = 1.0     # 스킬 쿨타임 배율
+        self._aug_lifesteal     = 0.0     # 상시 흡혈 비율(0=없음)
+        self._aug_skill_burst   = False   # 스킬 시전 시 8방향 추가 탄막
+        self._aug_on_kill_explode = False # 처치 시 연쇄 폭발
+        self._aug_frost_aura    = False   # 주변 적 상시 둔화
+        self._aug_exploding     = False   # 연쇄폭발 재진입 가드
 
         # 버닝 HUD 폰트 캐시 (매 프레임 생성 방지, 언어별 폰트)
         from core.fonts import load_font as _lf
@@ -3253,7 +3264,7 @@ class Game:
                         pygame.quit(); sys.exit()
                 elif self.state == 'survival_over':
                     self._survival_return_menu()
-                elif self.state == 'survival_upgrade':
+                elif self.state in ('survival_upgrade', 'survival_augment'):
                     pass   # 드래프트 중 ESC 무시 — 반드시 선택
                 elif self.state == 'dead':
                     pygame.quit(); sys.exit()
@@ -3281,6 +3292,8 @@ class Game:
                 self._handle_gate_choice_action(action)
             elif self.state == 'survival_upgrade':
                 self._handle_survival_upgrade_action(action)
+            elif self.state == 'survival_augment':
+                self._handle_survival_augment_action(action)
             elif self.state == 'survival_over':
                 if t in ('confirm', 'attack', 'interact', 'ultimate'):
                     self._survival_return_menu()
@@ -4980,6 +4993,9 @@ class Game:
             return
         gold = int(enemy.gold_drop * self._gold_mult)   # NG+ 영구 골드 배율
         self._run_kills += 1
+        # 연쇄폭발 증강: 처치 지점 광역 폭발 (재진입 가드는 헬퍼 내부)
+        if self._aug_on_kill_explode and self._survival_active:
+            self._aug_kill_explode(enemy.x, enemy.y)
         self._gate_on_kill(enemy)   # 던전 문 관문 진행도 갱신(현상금/처치율)
         # 펫 강화석 드롭 (해금 후): 일반 3% · 보스/엘리트 30%
         if self.player.is_pet_unlocked:
@@ -8043,6 +8059,9 @@ class Game:
         self._enchant_dmg_mul = 1.0
         if result and cancel_ok:
             self._do_drive_cancel()
+        # 탄막 증강: 스킬 시전 성공 시 8방향 추가 탄막
+        if result and self._aug_skill_burst and self._survival_active:
+            self._aug_fire_burst()
 
         if result:
             if not self._SKILL_COOLDOWNS_ENABLED:
@@ -8953,12 +8972,13 @@ class Game:
 
     # ─────────────── 스킬 강화 ───────────────────────────────────────
     def _apply_skill_level_cds(self):
+        cd_mul = getattr(self, '_aug_cd_mul', 1.0)
         for slot in ('W', 'A', 'S', 'D'):
             skill_id = self._equipped_skills.get(slot)
             if not skill_id:
                 continue
             stats = self._get_skill_final_stats(skill_id)
-            self.skills.set_cd_override(slot, stats['cd_ms'])
+            self.skills.set_cd_override(slot, max(200, int(stats['cd_ms'] * cd_mul)))
 
     def _get_skill_final_stats(self, skill_id: str) -> dict:
         """인챈트 반영 최종 스킬 스탯을 반환."""
@@ -10136,8 +10156,11 @@ class Game:
         p.hp = p.max_hp
         # 공격속도 극대화 — 손맛/스킬 회전을 시원하게
         p.attack_speed = max(p.attack_speed, 8.0)
+        # 증강 상태 초기화 (매 런 새로 선택)
+        self._reset_augments()
         self.state = 'playing'
         self._enter_survival()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
+        self._open_survival_augment()   # 런 시작 증강 드래프트 (아레나는 일시정지)
 
     def _enter_survival(self):
         self._survival_active   = True
@@ -10166,6 +10189,17 @@ class Game:
         dt_ms = min(dt_ms, 200)
         self._survival_elapsed  += dt_ms
         self._survival_spawn_ms -= dt_ms
+
+        # ── 증강 상시 효과 ──────────────────────────────────────────
+        if self._aug_lifesteal > 0:      # 흡혈귀: 흡혈 버프를 매 프레임 갱신(상시 유지)
+            self.player.lifesteal_ms = 500
+            self.player.lifesteal_pct = max(self.player.lifesteal_pct, self._aug_lifesteal)
+        if self._aug_frost_aura:         # 서리 오라: 반경 4칸 내 적 둔화
+            px, py = self.player.x, self.player.y
+            for e in self.dungeon.enemies:
+                if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= 4:
+                    e.slowed_ms = max(e.slowed_ms, 350)
+                    e.slow_pct = max(e.slow_pct, 0.5)
 
         # 난이도 자동 스케일 = 플레이어 파워(레벨 + 획득 업그레이드) 기반.
         # 저레벨엔 적 강도·밀도·스폰수를 낮춰 순하게, 성장할수록 램프업.
@@ -10234,6 +10268,138 @@ class Game:
         self.messages.append((t('survival_pick', t('surv_up_' + uid)), 'good'))
         self.animator.particles.emit_levelup(p.x, p.y)
         self.audio.play('tier_up')
+
+    # ─────────────── 증강(Augment) — 아수라장 스타일 시작 강화 ────────────
+    # 단순 스탯이 아닌, 빌드를 규정하는 기믹 강화. 런 시작 시 3장 중 1택.
+    _SURV_AUGMENTS = ['titan', 'glass_cannon', 'speedster', 'vampire',
+                      'berserker_pact', 'bullet_storm', 'detonator', 'frost_aura']
+    _AUG_COLOR = {
+        'titan':          (220, 170,  90),
+        'glass_cannon':   (240, 110, 110),
+        'speedster':      (120, 220, 235),
+        'vampire':        (210,  80, 130),
+        'berserker_pact': (235, 120,  60),
+        'bullet_storm':   (180, 150, 245),
+        'detonator':      (255, 160,  70),
+        'frost_aura':     (140, 205, 255),
+    }
+
+    def _reset_augments(self):
+        self._aug_id = None
+        self._aug_choices = []
+        self._aug_cursor = 0
+        self._aug_size_scale = 1.0
+        self._aug_cd_mul = 1.0
+        self._aug_lifesteal = 0.0
+        self._aug_skill_burst = False
+        self._aug_on_kill_explode = False
+        self._aug_frost_aura = False
+        self._aug_exploding = False
+
+    def _open_survival_augment(self):
+        """런 시작 증강 드래프트 — 3장 중 1택(아레나 일시정지)."""
+        self._aug_choices = random.sample(self._SURV_AUGMENTS, 3)
+        self._aug_cursor = 0
+        self.state = 'survival_augment'
+        self.audio.play('levelup')
+
+    def _handle_survival_augment_action(self, action):
+        ty = action['type']
+        if ty == 'move' and action.get('dx'):
+            self._aug_cursor = (self._aug_cursor + action['dx']) % 3
+            self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self._survival_apply_augment(self._aug_choices[self._aug_cursor])
+            self.state = 'playing'
+
+    def _survival_apply_augment(self, aid):
+        p = self.player
+        self._aug_id = aid
+        if aid == 'titan':                       # 거신: 거대·강력하지만 굼뜸
+            self._aug_size_scale = 1.6
+            p.max_hp = int(p.max_hp * 2.2); p.hp = p.max_hp
+            p.attack = int(p.attack * 1.4)
+            p.move_speed = round(p.move_speed * 0.72, 2)
+        elif aid == 'glass_cannon':              # 유리대포: 압도적 화력·종잇장 체력
+            p.attack = int(p.attack * 2.3)
+            p.max_hp = max(1, int(p.max_hp * 0.45)); p.hp = p.max_hp
+        elif aid == 'speedster':                 # 질풍: 초고속·소형·회피
+            self._aug_size_scale = 0.7
+            p.move_speed = round(p.move_speed * 1.7, 2)
+            p.attack_speed = round(p.attack_speed * 1.3, 2)
+            p.evasion = min(60, p.evasion + 18)
+        elif aid == 'vampire':                    # 흡혈귀: 상시 흡혈·낮은 체력
+            self._aug_lifesteal = 0.30
+            p.max_hp = max(1, int(p.max_hp * 0.8)); p.hp = p.max_hp
+        elif aid == 'berserker_pact':             # 광란의 계약: 쿨↓·공속↑·무방비
+            self._aug_cd_mul = 0.45
+            p.attack_speed = round(p.attack_speed * 1.5, 2)
+            p.attack = int(p.attack * 1.2)
+            p.defense = 0
+        elif aid == 'bullet_storm':               # 탄막: 스킬마다 8방향 탄막·쿨↓
+            self._aug_skill_burst = True
+            self._aug_cd_mul = 0.7
+        elif aid == 'detonator':                  # 연쇄폭발: 처치 시 광역 폭발
+            self._aug_on_kill_explode = True
+            p.attack = int(p.attack * 1.15)
+        elif aid == 'frost_aura':                 # 서리 오라: 주변 적 상시 둔화
+            self._aug_frost_aura = True
+            p.defense += 4
+        # 쿨타임 배율 반영 (증강 후 재적용)
+        self._apply_skill_level_cds()
+        self.messages.append((t('survival_pick', t('aug_' + aid)), 'good'))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.audio.play('tier_up')
+        self._start_shake(4, 220)
+
+    def _aug_fire_burst(self):
+        """탄막 증강 — 8방향 직선 탄막 방사(스킬 시전 시)."""
+        px, py = self.player.x, self.player.y
+        rng = 6
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
+                       (1, 1), (1, -1), (-1, 1), (-1, -1)):
+            facing = self._DIR_NAME.get((dx, dy), 'right' if dx >= 0 else 'left')
+            land = (px, py)
+            for i in range(1, rng + 1):
+                nx, ny = px + dx * i, py + dy * i
+                if not self.dungeon.in_bounds(nx, ny) or self.dungeon.tiles[ny][nx].blocked:
+                    break
+                enemy = self.dungeon.get_enemy_at(nx, ny)
+                if enemy:
+                    dmg = roll_damage(self._skill_atk, enemy.defense, 0.7)
+                    enemy.take_damage(dmg); enemy.on_hurt(px, py)
+                    self._apply_lifesteal(dmg)
+                    self.animator.add(HitFlashAnim(nx, ny, dmg, (190, 160, 250)))
+                    self.animator.particles.emit_basic_hit(nx, ny)
+                    if not enemy.is_alive():
+                        self._on_enemy_killed(enemy)
+                land = (nx, ny)
+            self.animator.add(MagicBoltAnim(px, py, land[0], land[1], facing, (190, 160, 250)))
+
+    def _aug_kill_explode(self, ex, ey):
+        """연쇄폭발 증강 — 처치 지점 반경 폭발(재진입 가드)."""
+        if self._aug_exploding:
+            return
+        self._aug_exploding = True
+        try:
+            radius = 2
+            self.animator.particles.emit_fireball_hit(ex, ey)
+            self._start_shake(4, 160)
+            for ddx in range(-radius, radius + 1):
+                for ddy in range(-radius, radius + 1):
+                    if ddx == 0 and ddy == 0:
+                        continue
+                    nx, ny = ex + ddx, ey + ddy
+                    enemy = self.dungeon.get_enemy_at(nx, ny)
+                    if not enemy or not enemy.is_alive():
+                        continue
+                    dmg = roll_damage(self._skill_atk, enemy.defense, 0.8)
+                    enemy.take_damage(dmg); enemy.on_hurt(ex, ey)
+                    self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 150, 60)))
+                    if not enemy.is_alive():
+                        self._on_enemy_killed(enemy)
+        finally:
+            self._aug_exploding = False
 
     def _end_survival(self):
         self._survival_active = False
@@ -10337,6 +10503,42 @@ class Game:
         hint = self.hud.font_sm.render(t('survival_return_hint'), True, (160, 175, 165))
         s.blit(hint, (cx - hint.get_width() // 2, GAME_Y + GAME_H - 40))
 
+    def _render_survival_augment(self):
+        """런 시작 증강 드래프트 — 기믹 강화 3장 중 1택(아레나 위 오버레이)."""
+        s = self.screen
+        overlay = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+        overlay.fill((6, 8, 14, 236))
+        s.blit(overlay, (GAME_X, GAME_Y))
+        title = self.hud.font_lg.render(t('aug_title'), True, (235, 220, 150))
+        s.blit(title, (GAME_X + (GAME_W - title.get_width()) // 2, GAME_Y + 40))
+        sub = self.hud.font_sm.render(t('aug_sub'), True, (170, 180, 200))
+        s.blit(sub, (GAME_X + (GAME_W - sub.get_width()) // 2, GAME_Y + 78))
+        cw, ch, gap = 224, 250, 18
+        total = cw * 3 + gap * 2
+        ox = GAME_X + (GAME_W - total) // 2
+        oy = GAME_Y + 118
+        for i, aid in enumerate(self._aug_choices):
+            cx = ox + i * (cw + gap)
+            sel = i == self._aug_cursor
+            col = self._AUG_COLOR.get(aid, (200, 200, 210))
+            bg = (26, 30, 40) if sel else (16, 18, 26)
+            pygame.draw.rect(s, bg, (cx, oy, cw, ch), border_radius=10)
+            pygame.draw.rect(s, col, (cx, oy, cw, ch), 3 if sel else 1, border_radius=10)
+            # 증강 아이콘: 색 마름모
+            icx, icy = cx + cw // 2, oy + 42
+            pygame.draw.polygon(s, col, [(icx, icy-20), (icx+18, icy), (icx, icy+20), (icx-18, icy)])
+            pygame.draw.polygon(s, bg, [(icx, icy-10), (icx+9, icy), (icx, icy+10), (icx-9, icy)])
+            nm = self.hud.font_md.render(t('aug_' + aid), True, col)
+            s.blit(nm, (cx + (cw - nm.get_width()) // 2, oy + 76))
+            dy = oy + 112
+            for line in self._wrap_text(t('aug_' + aid + '_d'), self.hud.font_sm, cw - 28):
+                ls = self.hud.font_sm.render(line, True, (210, 218, 228))
+                s.blit(ls, (cx + 14, dy)); dy += 18
+            num = self.hud.font_md.render(str(i + 1), True, col)
+            s.blit(num, (cx + cw // 2 - num.get_width() // 2, oy + ch - 30))
+        hint = self.hud.font_sm.render(t('survival_upgrade_hint'), True, (160, 175, 195))
+        s.blit(hint, (GAME_X + (GAME_W - hint.get_width()) // 2, GAME_Y + GAME_H - 34))
+
     def _draw_survival_hud(self):
         """상단 생존 정보 — 파도 / 시간 / 킬 / 점수."""
         s = self.screen
@@ -10348,6 +10550,11 @@ class Game:
         info = f"{secs}s   ⚔{kills}   ★{self._survival_score}"
         info_s = self._font_burning_small.render(info, True, (200, 230, 205))
         s.blit(info_s, (GAME_X + GAME_W // 2 - info_s.get_width() // 2, GAME_Y + 40))
+        # 선택한 증강 표시 (좌상단 뱃지)
+        if self._aug_id:
+            col = self._AUG_COLOR.get(self._aug_id, (200, 200, 210))
+            ab = self._font_burning_small.render('◆ ' + t('aug_' + self._aug_id), True, col)
+            s.blit(ab, (GAME_X + 10, GAME_Y + 10))
 
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
     def _spawn_boss_summon(self, key: str, bx: int, by: int):
@@ -10580,6 +10787,8 @@ class Game:
             self._render_gate_choice()
         elif self.state == 'survival_upgrade':
             self._render_survival_upgrade()
+        elif self.state == 'survival_augment':
+            self._render_survival_augment()
         elif self.state == 'survival_over':
             self._render_survival_over()
         elif self.state == 'fishing':
@@ -11518,6 +11727,9 @@ class Game:
         scale = 1.0
         if self._fortify_effect and self._fortify_effect.alive:
             scale = self._fortify_effect.squeeze_scale
+        # 증강(거신/질풍 등) 캐릭터 크기 배율
+        if self._survival_active and self._aug_size_scale != 1.0:
+            scale *= self._aug_size_scale
 
         if self._USE_AVATAR:
             self._draw_avatar_player(x, y, facing, phase, scale)

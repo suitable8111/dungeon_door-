@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.22.0 — Endless Survival: Augments
+
+Inspired by the "pick a game-changing power" feel of arena augment modes, Endless Survival now opens every run with a build-defining **Augment** draft:
+- **Choose 1 of 3 at the start** — before the first wave, the arena pauses and you pick one powerful, gimmicky augment that reshapes the whole run (not just flat +stats).
+- **Eight augments, distinct playstyles:**
+  - **Titan** — grow huge; massive HP & attack, but sluggish.
+  - **Glass Cannon** — colossal damage, paper-thin health.
+  - **Speedster** — shrink down; blazing move & attack speed, high evasion.
+  - **Vampire** — permanently lifesteal a chunk of all damage dealt.
+  - **Berserker's Pact** — slashed cooldowns and cranked attack speed, at the cost of all defense.
+  - **Bullet Storm** — every skill cast sprays bonus projectiles in all 8 directions, with shorter cooldowns.
+  - **Detonator** — each kill triggers an explosion that shreds nearby enemies.
+  - **Frost Aura** — enemies around you are permanently slowed.
+- Your chosen augment shows on the HUD, and stacks with the mid-run upgrade drafts for wild snowball builds. Restarting rolls a fresh augment choice. Fully localized in all 5 languages.
+
 ## v2.21.0 — Endless Survival goes official
 
 Endless Survival graduates from a hidden hotkey to a first-class mode:
