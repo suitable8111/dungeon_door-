@@ -75,9 +75,11 @@ def generate_arena() -> tuple:
 
 
 def spawn_wave(dungeon, enemy_data: dict,
-               floor_level: int, wave_num: int) -> list:
+               floor_level: int, wave_num: int, allow_boss: bool = True) -> list:
     """
     아레나 외곽 경계에서 적 wave 생성.
+    allow_boss=False면 보스급(is_boss) 적을 스폰 풀에서 제외한다
+    (예: 무한 생존 초반 웨이브 — 보스가 잡몹처럼 쏟아지지 않게).
     Returns list[Enemy]
     """
     from entities.enemy import Enemy
@@ -87,6 +89,10 @@ def spawn_wave(dungeon, enemy_data: dict,
     spawn_margin = BORDER + 1
 
     all_keys = [k for k in enemy_data if k != '_comment']
+    if not allow_boss:
+        all_keys = [k for k in all_keys
+                    if not (isinstance(enemy_data.get(k), dict)
+                            and enemy_data[k].get('is_boss'))]
 
     # 파도가 진행될수록 강한 적 비중 증가
     hard_ratio = min(0.8, wave_num * 0.07)

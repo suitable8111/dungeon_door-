@@ -10215,7 +10215,10 @@ class Game:
         if self._survival_spawn_ms <= 0 and live < live_cap:
             self._survival_spawn_ms = interval
             self._survival_wave += 1
-            new_enemies = spawn_wave(self.dungeon, self._enemy_data, vfloor, diff)
+            # 초반 웨이브(1~5)엔 보스급 제외 — 시작부터 보스가 쏟아지면 너무 빡세다.
+            allow_boss = self._survival_wave >= 6
+            new_enemies = spawn_wave(self.dungeon, self._enemy_data, vfloor, diff,
+                                     allow_boss=allow_boss)
             self.dungeon.enemies.extend(new_enemies[:per_cap])
 
         # 킬 기반 업그레이드 드래프트

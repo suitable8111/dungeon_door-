@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.22.1 — Endless Survival: gentler early waves
+
+- **No bosses in the opening waves** — Endless Survival was pulling full boss-tier enemies (Dark Knight, Lich) into the spawn pool from wave 1, which made the start brutal. Bosses now only start appearing from wave 6 onward; the first waves are ordinary mobs so you can find your footing.
+
 ## v2.22.0 — Endless Survival: Augments
 
 Inspired by the "pick a game-changing power" feel of arena augment modes, Endless Survival now opens every run with a build-defining **Augment** draft:
