@@ -334,6 +334,21 @@
     "name_zh": "旋风药水",
     "name_ru": "Зелье вихря"
   },
+  "sp_surge_potion": {
+    "name": "무한 기력 물약",
+    "color": [
+      80,
+      220,
+      255
+    ],
+    "type": "consumable",
+    "effect": "infinite_sp",
+    "value": 10000,
+    "name_en": "Infinite Stamina Potion",
+    "name_ja": "無限気力ポーション",
+    "name_zh": "无限气力药水",
+    "name_ru": "Зелье бесконечной энергии"
+  },
   "leather_boots": {
     "name": "가죽 장화",
     "color": [

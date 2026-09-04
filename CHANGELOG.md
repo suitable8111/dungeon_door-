@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.23.0 — Endless Survival: stamina economy
+
+Tuned to keep skills flowing in the arena chaos:
+- **Skills cost far less SP in Endless Survival** — stamina drain is cut to ~35% of normal, so you can keep firing abilities instead of waiting on the bar.
+- **New item: Infinite Stamina Potion** — grants unlimited SP for 10 seconds (spam every skill freely). It drops randomly from kills in Endless Survival, and you can carry up to **5** at a time. Fully localized in all 5 languages.
+
 ## v2.22.1 — Endless Survival: gentler early waves
 
 - **No bosses in the opening waves** — Endless Survival was pulling full boss-tier enemies (Dark Knight, Lich) into the spawn pool from wave 1, which made the start brutal. Bosses now only start appearing from wave 6 onward; the first waves are ordinary mobs so you can find your footing.

@@ -4465,6 +4465,8 @@ class Game:
             return True
         if self._breaker_cheap_sp_ms > 0: # 귀멸의 존재: 완전무료 대신 아주 미세하게 소모
             cost *= 0.08
+        if self._survival_active:         # 아수라장: SP 소모 대폭 감소(스킬 회전 원활)
+            cost *= self._SURVIVAL_SP_MUL
         cost *= (1.0 - p.total_sp_reduce)
         if p.stamina < cost:
             now = pygame.time.get_ticks()
@@ -4996,6 +4998,9 @@ class Game:
         # 연쇄폭발 증강: 처치 지점 광역 폭발 (재진입 가드는 헬퍼 내부)
         if self._aug_on_kill_explode and self._survival_active:
             self._aug_kill_explode(enemy.x, enemy.y)
+        # 아수라장: 무한 기력 물약 랜덤 드랍(소지 상한 5)
+        if self._survival_active and not enemy.is_prop:
+            self._survival_try_drop_sp_potion()
         self._gate_on_kill(enemy)   # 던전 문 관문 진행도 갱신(현상금/처치율)
         # 펫 강화석 드롭 (해금 후): 일반 3% · 보스/엘리트 30%
         if self.player.is_pet_unlocked:
@@ -5226,6 +5231,8 @@ class Game:
             if self._in_town:
                 return False               # 마을에선 사용 불가
             self._throw_bomb()
+        elif item.effect == 'infinite_sp':
+            self._use_infinite_sp_potion(item.value or 10000)
         else:
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
@@ -5234,6 +5241,34 @@ class Game:
         if item.count <= 0 and item in self.player.inventory:
             self.player.inventory.remove(item)
         return True
+
+    def _use_infinite_sp_potion(self, duration_ms):
+        """무한 기력 물약 — 지속 동안 SP 무제한(스킬 난사). 중첩 시 시간 연장."""
+        self._infinite_sp_ms = max(self._infinite_sp_ms, float(duration_ms))
+        self.player.stamina = self.player.stamina_max
+        self.messages.append((t('item_infinite_sp', int(duration_ms / 1000)), 'good'))
+        self.animator.particles.emit_levelup(self.player.x, self.player.y)
+        self.animator.add(CalloutAnim(self.player.x, self.player.y, '∞ SP', (90, 220, 255)))
+        self.audio.play('use_item')
+
+    def _survival_try_drop_sp_potion(self):
+        """아수라장 킬 드랍 — 무한 기력 물약을 확률적으로 인벤에 추가(상한 5)."""
+        if random.random() >= self._SP_POTION_DROP:
+            return
+        have = sum(it.count for it in self.player.inventory
+                   if it.item_type == 'consumable' and it.key == self._SP_POTION_KEY)
+        if have >= self._SP_POTION_MAX:
+            return
+        data = self._item_data.get(self._SP_POTION_KEY)
+        if not data:
+            return
+        from entities.item import Item
+        d = dict(data); d['key'] = self._SP_POTION_KEY; d['count'] = 1
+        if not self.player.add_item(Item(self.player.x, self.player.y, d)):
+            return   # 인벤 가득 + 기존 스택 없음
+        self.messages.append((t('sp_potion_drop', have + 1, self._SP_POTION_MAX), 'good'))
+        self.animator.add(CalloutAnim(self.player.x, self.player.y, '+∞SP', (90, 220, 255)))
+        self.audio.play('pickup')
 
     # ═════════════════ 마을 시스템 ═══════════════════════════════════
     def _spawn_town_portal(self, x=None, y=None):
@@ -10271,6 +10306,12 @@ class Game:
         self.messages.append((t('survival_pick', t('surv_up_' + uid)), 'good'))
         self.animator.particles.emit_levelup(p.x, p.y)
         self.audio.play('tier_up')
+
+    # 아수라장: SP 소모 배율(35%) + 무한 기력 물약 드랍/소지 설정
+    _SURVIVAL_SP_MUL = 0.35
+    _SP_POTION_KEY   = 'sp_surge_potion'
+    _SP_POTION_MAX   = 5       # 기본 소지 상한
+    _SP_POTION_DROP  = 0.05    # 킬당 드랍 확률(5%)
 
     # ─────────────── 증강(Augment) — 아수라장 스타일 시작 강화 ────────────
     # 단순 스탯이 아닌, 빌드를 규정하는 기믹 강화. 런 시작 시 3장 중 1택.
