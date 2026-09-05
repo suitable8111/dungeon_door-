@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.25.0 — Endless Survival: persistent survivor level
+
+Endless Survival now has a **dedicated survivor character** with meta-progression:
+- **Your level carries over between runs** — the first time you enter, you create your survivor; from then on every run starts at your saved level (minimum Lv10). Push further into a run and your **highest level reached is saved** when you die or quit.
+- **Shown on the main menu** — the Endless Survival button displays your survivor's name and level, so your progress is visible at a glance.
+- **Items are never saved** — only the level (and your survivor's identity) persists. Gear/inventory stays run-only; a proper time/stage-based reward system for items is planned separately.
+- The results screen now shows the level you reached and flags when your survivor levels up. Fully localized in all 5 languages.
+
 ## v2.24.0 — Level-up refill + unified, expanded Augments
 
 - **Level-up now fully restores HP *and* SP** — every level-up tops off both bars, so pushing into a level-up mid-fight is a real reset button.

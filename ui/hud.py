@@ -242,7 +242,7 @@ class HUD:
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
                     page='main', settings=None, settings_sel=0,
                     mp_ip=None, mp_status=None, mp_banner=None, mp_code=None,
-                    mp_upnp=None, mp_recent=None):
+                    mp_upnp=None, mp_recent=None, survival_char=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -424,9 +424,21 @@ class HUD:
                                 [(_ix, _iy-4), (_ix+3, _iy), (_ix, _iy+4), (_ix-3, _iy)])
             slbl = self.font_md.render(t('menu_survival'), True, sv_tc)
             screen.blit(slbl, (sv_rect.left + 44, sv_rect.top + 6))
-            ssub = self.font_sm.render(t('menu_survival_sub'), True,
+            # 저장된 생존 캐릭터가 있으면 이름·레벨을, 없으면 기본 설명을 표시
+            if survival_char and survival_char.get('char_class'):
+                sub_txt = (f"{survival_char.get('name', 'Hero')[:10]}  ·  "
+                           f"Lv {int(survival_char.get('level', 10))}")
+            else:
+                sub_txt = t('menu_survival_sub')
+            ssub = self.font_sm.render(sub_txt, True,
                                        (200, 150, 110) if sv_on else (150, 112, 80))
             screen.blit(ssub, (sv_rect.left + 44, sv_rect.bottom - 18))
+            # 우측: 생존 캐릭터 레벨 뱃지(있을 때)
+            if survival_char and survival_char.get('char_class'):
+                lv_s = self.font_md.render(f"Lv{int(survival_char.get('level', 10))}",
+                                           True, sv_tc)
+                screen.blit(lv_s, (sv_rect.right - lv_s.get_width() - 14,
+                                   sv_rect.centery - lv_s.get_height() // 2))
             buttons.append((sv_rect, 'survival'))
 
             # ── 설정 / 종료 버튼 (나란히, 작은 크기) ───────────────

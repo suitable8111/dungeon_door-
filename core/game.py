@@ -440,6 +440,9 @@ class Game:
         self._survival_final    = None    # 결과 화면용 스냅샷
         self._survival_new_best = False
         self._pending_survival  = False   # 캐릭터 생성 후 생존 모드로 진입할지
+        self._survival_persist  = False   # 종료 시 생존 캐릭터 레벨 저장 여부
+        self._survival_start_level = SURVIVAL_START_LEVEL  # 이번 런 시작 레벨
+        self._survival_level_up = False   # 이번 런에서 최고 레벨 갱신 여부
         # ── 증강(Augment): 시작 + 강화마다 반복 선택, 빌드를 규정 ──
         self._aug_id            = None    # 최근 선택 증강 id (HUD 강조용)
         self._survival_augs     = []      # 획득한 증강 id 목록(중복=스택)
@@ -3059,7 +3062,7 @@ class Game:
     def _handle_events(self, dt):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                pygame.quit(); sys.exit()
+                self._quit_game()
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 # 버리기 확인 대화상자 처리 (최우선)
@@ -3146,8 +3149,7 @@ class Game:
                     self._handle_char_create_key(event.key, event.unicode)
                 elif (self.state == 'menu' and self._menu_page == 'main'
                         and event.key == pygame.K_v):
-                    self._pending_survival = True
-                    self._open_char_create(None)
+                    self._launch_survival()
                 elif self.state == 'survival_over' and event.key == pygame.K_r:
                     self._survival_restart()
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
@@ -3264,13 +3266,13 @@ class Game:
                     elif self._pending_net is not None:
                         self._cancel_pending_net()
                     else:
-                        pygame.quit(); sys.exit()
+                        self._quit_game()
                 elif self.state == 'survival_over':
                     self._survival_return_menu()
                 elif self.state in ('survival_upgrade', 'survival_augment'):
                     pass   # 드래프트 중 ESC 무시 — 반드시 선택
                 elif self.state == 'dead':
-                    pygame.quit(); sys.exit()
+                    self._quit_game()
                 continue
 
             if self.state == 'menu':
@@ -3376,14 +3378,13 @@ class Game:
                 self._open_multiplayer()
             elif self._menu_sel == n + 1:
                 self.audio.play('menu_select')
-                self._pending_survival = True
-                self._open_char_create(None)
+                self._launch_survival()
             elif self._menu_sel == n + 2:
                 self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
             elif self._menu_sel == n + 3:
-                pygame.quit(); sys.exit()
+                self._quit_game()
 
     def _open_multiplayer(self):
         """멀티플레이(beta) 페이지 진입 — 최근 접속 코드를 미리 채운다."""
@@ -3663,10 +3664,13 @@ class Game:
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
         if self._pending_survival:
-            # 무한 생존 모드: 세이브를 건드리지 않고 일회성 런으로 아레나 직행
+            # 무한 생존 최초 진입: 전용 생존 캐릭터 생성(레벨만 영속) → 아레나 직행
             self._pending_survival = False
-            self._begin_survival_run(self._create_class, name,
-                                     self._create_appearance())
+            app = self._create_appearance()
+            self._save_survival_char(self._create_class, name, app,
+                                     SURVIVAL_START_LEVEL)
+            self._begin_survival_run(self._create_class, name, app,
+                                     start_level=SURVIVAL_START_LEVEL, persist=True)
             self.clock.tick()
             return
         self._new_game(char_class=self._create_class, char_name=name,
@@ -3824,13 +3828,12 @@ class Game:
                     self._open_multiplayer()
                 elif action == 'survival':
                     self.audio.play('menu_select')
-                    self._pending_survival = True
-                    self._open_char_create(None)
+                    self._launch_survival()
                 elif action == 'settings':
                     self._menu_page = 'settings'
                     self._menu_settings_sel = 0
                 elif action == 'quit':
-                    pygame.quit(); sys.exit()
+                    self._quit_game()
                 break
 
     def _handle_menu_settings_click(self, tag):
@@ -4069,7 +4072,7 @@ class Game:
             self._cards          = list_cards()
             self._save_data      = load_game(self._save_slot)
         elif tag == 'quit':
-            pygame.quit(); sys.exit()
+            self._quit_game()
 
     # ── 클립보드 / 초대 코드 복사 ─────────────────────────────────────
     def _copy_to_clipboard(self, text):
@@ -10144,9 +10147,60 @@ class Game:
         self._begin_survival_run(char_class, char_name='TestHero')
         self.clock.tick()
 
-    def _begin_survival_run(self, char_class, char_name='Hero', appearance=None):
-        """무한 생존 런 셋업 — 세이브를 만들지도/지우지도 않는 일회성 런.
-        Lv10 기준선 스탯 + 스킬 전부 최대·조합 전체 해금 + 공속 극대화(아케이드 손맛)."""
+    def _persist_survival_level(self):
+        """전용 생존 캐릭터의 도달 최고 레벨만 records에 영속(아이템/층 저장 안 함)."""
+        if not self._survival_persist:
+            return
+        prof = self._records.get('survival_char') or {
+            'name': self._char_name, 'char_class': self._char_class,
+            'appearance': dict(getattr(self, '_char_appearance', {}) or {}),
+            'level': SURVIVAL_START_LEVEL}
+        if self.player and self.player.level > int(prof.get('level', SURVIVAL_START_LEVEL)):
+            prof['level'] = self.player.level
+        self._records['survival_char'] = prof
+        if not self._is_test_mode:
+            from core.save_load import save_records
+            save_records(self._records)
+
+    def _quit_game(self):
+        """게임 종료 — 무한 생존 진행 중이면 도달 레벨을 먼저 저장한다."""
+        if self._survival_active and self._survival_persist:
+            self._persist_survival_level()
+        pygame.quit(); sys.exit()
+
+    def _launch_survival(self):
+        """메뉴에서 무한 생존 진입 — 저장된 생존 캐릭터가 있으면 그 레벨서 바로
+        시작, 없으면(최초) 캐릭터 생성 화면으로."""
+        prof = self._records.get('survival_char')
+        if prof and prof.get('char_class') in CLASSES:
+            lvl = max(SURVIVAL_START_LEVEL, int(prof.get('level', SURVIVAL_START_LEVEL)))
+            self._begin_survival_run(prof['char_class'], prof.get('name', 'Hero'),
+                                     prof.get('appearance'),
+                                     start_level=lvl, persist=True)
+            self.clock.tick()
+        else:
+            self._pending_survival = True
+            self._open_char_create(None)
+
+    def _save_survival_char(self, char_class, name, appearance, level):
+        """전용 생존 캐릭터 프로필 저장(레벨/정체성만 — 아이템·층 저장 안 함)."""
+        self._records['survival_char'] = {
+            'name': name, 'char_class': char_class,
+            'appearance': dict(appearance or {}), 'level': int(level),
+        }
+        if not self._is_test_mode:
+            from core.save_load import save_records
+            save_records(self._records)
+
+    def _begin_survival_run(self, char_class, char_name='Hero', appearance=None,
+                            start_level=None, persist=False):
+        """무한 생존 런 셋업 — 인벤/장비/층은 저장하지 않는 일회성 런.
+        start_level(기본 Lv10 또는 저장된 생존 레벨)에서 시작 + 스킬 전부 최대·
+        조합 전체 해금 + 공속 극대화(아케이드 손맛). persist=True면 종료 시 레벨 저장."""
+        if start_level is None:
+            start_level = SURVIVAL_START_LEVEL
+        self._survival_persist = persist
+        self._survival_start_level = start_level
         self._char_class = char_class if char_class in CLASSES else 'warrior'
         self._char_name  = char_name or 'Hero'
         self._char_appearance = dict(appearance) if appearance else \
@@ -10188,8 +10242,8 @@ class Game:
         self._load_floor(is_new_game=True)      # 레벨1 기본 플레이어 생성
         self._apply_skill_level_cds()
         p = self.player
-        # 정식 무한 생존: 캐릭터 레벨 10 기준선에서 시작 (레벨업 스탯 곡선 그대로 적용)
-        for _ in range(max(0, SURVIVAL_START_LEVEL - p.level)):
+        # 저장된 생존 레벨(최소 Lv10)에서 시작 — 레벨업 스탯 곡선 그대로 적용
+        for _ in range(max(0, start_level - p.level)):
             p._level_up()
         p.hp = p.max_hp
         # 공격속도 극대화 — 손맛/스킬 회전을 시원하게
@@ -10511,19 +10565,35 @@ class Game:
     def _end_survival(self):
         self._survival_active = False
         kills = self._run_kills - self._survival_kills0
+        reached_level = self.player.level
         self._survival_final = {
             'wave':  self._survival_wave,
             'kills': kills,
             'time':  int(self._survival_elapsed / 1000),
             'score': self._survival_score,
+            'level': reached_level,
         }
+        dirty = False
         best = self._records.get('survival_best', 0)
         self._survival_new_best = self._survival_score > best
         if self._survival_new_best:
             self._records['survival_best'] = self._survival_score
-            if not self._is_test_mode:
-                from core.save_load import save_records
-                save_records(self._records)
+            dirty = True
+        # 전용 생존 캐릭터: 도달 최고 레벨만 영속 저장(아이템/층은 저장 안 함)
+        self._survival_level_up = False
+        if self._survival_persist:
+            prof = self._records.get('survival_char') or {
+                'name': self._char_name, 'char_class': self._char_class,
+                'appearance': dict(getattr(self, '_char_appearance', {}) or {}),
+                'level': SURVIVAL_START_LEVEL}
+            if reached_level > int(prof.get('level', SURVIVAL_START_LEVEL)):
+                prof['level'] = reached_level
+                self._survival_level_up = True
+            self._records['survival_char'] = prof
+            dirty = True
+        if dirty and not self._is_test_mode:
+            from core.save_load import save_records
+            save_records(self._records)
         self.audio.play('death')
         self._start_shake(6, 500)
         self.state = 'survival_over'
@@ -10535,11 +10605,15 @@ class Game:
         self.audio.play('menu_select')
 
     def _survival_restart(self):
-        """같은 캐릭터(클래스/외형)로 새 생존 런 즉시 재시작."""
+        """새 생존 런 즉시 재시작. 영속 캐릭터면 저장된(갱신된) 레벨서 다시 시작."""
         self.audio.play('menu_select')
-        self._begin_survival_run(self._char_class, self._char_name,
-                                 getattr(self, '_char_appearance', None))
-        self.clock.tick()
+        if self._survival_persist:
+            self._launch_survival()   # records의 최신 생존 레벨로 재시작
+        else:
+            self._begin_survival_run(self._char_class, self._char_name,
+                                     getattr(self, '_char_appearance', None),
+                                     start_level=self._survival_start_level)
+            self.clock.tick()
 
     def _render_survival_upgrade(self):
         """업그레이드 드래프트 — 3장 중 1장 선택 (월드 위 오버레이)."""
@@ -10587,6 +10661,7 @@ class Game:
         title = self.hud.font_lg.render(t('survival_over_title'), True, (240, 120, 110))
         s.blit(title, (cx - title.get_width() // 2, y)); y += 54
         rows = [
+            (t('survival_stat_level'), f"Lv {f.get('level', 0)}"),
             (t('survival_stat_wave'),  str(f.get('wave', 0))),
             (t('survival_stat_time'),  f"{f.get('time', 0)}s"),
             (t('survival_stat_kills'), str(f.get('kills', 0))),
@@ -10598,7 +10673,12 @@ class Game:
             s.blit(ls, (cx - 120, y))
             s.blit(vs, (cx + 120 - vs.get_width(), y))
             y += 34
-        y += 8
+        y += 6
+        # 전용 생존 캐릭터 레벨 갱신 안내
+        if getattr(self, '_survival_level_up', False):
+            up = self.hud.font_sm.render(
+                t('survival_level_saved', f.get('level', 0)), True, (120, 220, 245))
+            s.blit(up, (cx - up.get_width() // 2, y)); y += 26
         if self._survival_new_best:
             nb = self.hud.font_md.render(t('survival_new_best'), True, (120, 240, 140))
             s.blit(nb, (cx - nb.get_width() // 2, y)); y += 34
@@ -10807,6 +10887,7 @@ class Game:
                 mp_code=self._mp_code,
                 mp_upnp=self._mp_upnp,
                 mp_recent=self._settings.get('mp_recent'),
+                survival_char=self._records.get('survival_char'),
             )
             pygame.display.flip()
             return
