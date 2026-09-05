@@ -440,9 +440,10 @@ class Game:
         self._survival_final    = None    # 결과 화면용 스냅샷
         self._survival_new_best = False
         self._pending_survival  = False   # 캐릭터 생성 후 생존 모드로 진입할지
-        # ── 증강(Augment): 런 시작 시 1택, 빌드를 규정하는 기믹 강화 ──
-        self._aug_id            = None    # 선택된 증강 id (HUD 표시용)
-        self._aug_choices       = []      # 시작 드래프트 3장
+        # ── 증강(Augment): 시작 + 강화마다 반복 선택, 빌드를 규정 ──
+        self._aug_id            = None    # 최근 선택 증강 id (HUD 강조용)
+        self._survival_augs     = []      # 획득한 증강 id 목록(중복=스택)
+        self._aug_choices       = []      # 현재 드래프트 3장
         self._aug_cursor        = 0
         self._aug_size_scale    = 1.0     # 캐릭터 크기 배율(렌더)
         self._aug_cd_mul        = 1.0     # 스킬 쿨타임 배율
@@ -450,6 +451,8 @@ class Game:
         self._aug_skill_burst   = False   # 스킬 시전 시 8방향 추가 탄막
         self._aug_on_kill_explode = False # 처치 시 연쇄 폭발
         self._aug_frost_aura    = False   # 주변 적 상시 둔화
+        self._aug_regen         = 0.0     # 초당 HP 재생량
+        self._aug_regen_acc     = 0.0     # 재생 누적 타이머(ms)
         self._aug_exploding     = False   # 연쇄폭발 재진입 가드
 
         # 버닝 HUD 폰트 캐시 (매 프레임 생성 방지, 언어별 폰트)
@@ -10235,11 +10238,17 @@ class Game:
                 if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= 4:
                     e.slowed_ms = max(e.slowed_ms, 350)
                     e.slow_pct = max(e.slow_pct, 0.5)
+        if self._aug_regen > 0:          # 재생: 초당 HP 회복
+            self._aug_regen_acc += dt_ms
+            while self._aug_regen_acc >= 1000:
+                self._aug_regen_acc -= 1000
+                self.player.hp = min(self.player.max_hp,
+                                     int(self.player.hp + self._aug_regen))
 
-        # 난이도 자동 스케일 = 플레이어 파워(레벨 + 획득 업그레이드) 기반.
+        # 난이도 자동 스케일 = 플레이어 파워(레벨 + 획득 증강) 기반.
         # 저레벨엔 적 강도·밀도·스폰수를 낮춰 순하게, 성장할수록 램프업.
         # (완만한 시간 크리프를 얹어 캠핑해도 서서히 압박이 는다.)
-        power = (self.player.level - 1) + len(self._survival_upgrades)
+        power = (self.player.level - 1) + len(self._survival_augs)
         tcreep = int(self._survival_elapsed / 30000)      # 30초마다 +1
         vfloor = 1 + int(power * 0.9) + tcreep             # 적 강도
         diff   = 1 + power + tcreep                        # 적 수/강적 비율 티어
@@ -10256,11 +10265,11 @@ class Game:
                                      allow_boss=allow_boss)
             self.dungeon.enemies.extend(new_enemies[:per_cap])
 
-        # 킬 기반 업그레이드 드래프트
+        # 킬 기반 증강 드래프트 (시작 증강과 동일한 아수라장 결로 반복)
         kills = self._run_kills - self._survival_kills0
         if kills >= self._survival_next_up:
-            self._survival_next_up = kills + 12 + len(self._survival_upgrades) * 4
-            self._open_survival_upgrade()
+            self._survival_next_up = kills + 12 + len(self._survival_augs) * 4
+            self._open_survival_augment()
 
         # 점수 = 킬*10 + 파도*5 + 생존 초
         self._survival_score = (kills * 10 + self._survival_wave * 5
@@ -10313,10 +10322,25 @@ class Game:
     _SP_POTION_MAX   = 5       # 기본 소지 상한
     _SP_POTION_DROP  = 0.05    # 킬당 드랍 확률(5%)
 
-    # ─────────────── 증강(Augment) — 아수라장 스타일 시작 강화 ────────────
-    # 단순 스탯이 아닌, 빌드를 규정하는 기믹 강화. 런 시작 시 3장 중 1택.
-    _SURV_AUGMENTS = ['titan', 'glass_cannon', 'speedster', 'vampire',
-                      'berserker_pact', 'bullet_storm', 'detonator', 'frost_aura']
+    # ─────────────── 증강(Augment) — 아수라장 스타일 강화 ────────────
+    # 단순 스탯이 아닌 빌드를 규정하는 기믹 강화. 시작 + 강화마다 3장 중 1택.
+    # 고유 변신(max 1) + 반복 강화(스택) 혼합 → 매 선택이 같은 "증강" 결.
+    _SURV_AUGMENTS = [
+        # 고유 변신형 (한 번만)
+        'titan', 'glass_cannon', 'speedster', 'vampire',
+        'berserker_pact', 'bullet_storm', 'detonator', 'frost_aura',
+        # 반복 강화형 (스택)
+        'overpower', 'frenzy', 'vitality', 'fleet', 'evasive', 'bulwark',
+        'lifedrain', 'overclock', 'regen',
+    ]
+    _AUG_MAX = {
+        'titan': 1, 'glass_cannon': 1, 'speedster': 1, 'vampire': 1,
+        'berserker_pact': 1, 'bullet_storm': 1, 'detonator': 1, 'frost_aura': 1,
+        # 반복형: overpower/frenzy/vitality는 사실상 무제한(드래프트 고갈 방지)
+        'overpower': 99, 'frenzy': 99, 'vitality': 99,
+        'fleet': 3, 'evasive': 3, 'bulwark': 3,
+        'lifedrain': 3, 'overclock': 3, 'regen': 3,
+    }
     _AUG_COLOR = {
         'titan':          (220, 170,  90),
         'glass_cannon':   (240, 110, 110),
@@ -10326,10 +10350,20 @@ class Game:
         'bullet_storm':   (180, 150, 245),
         'detonator':      (255, 160,  70),
         'frost_aura':     (140, 205, 255),
+        'overpower':      (240, 150,  90),
+        'frenzy':         (240, 200,  90),
+        'vitality':       (120, 225, 130),
+        'fleet':          (150, 230, 210),
+        'evasive':        (200, 220, 130),
+        'bulwark':        (160, 175, 210),
+        'lifedrain':      (215, 100, 150),
+        'overclock':      (180, 160, 245),
+        'regen':          (130, 230, 170),
     }
 
     def _reset_augments(self):
         self._aug_id = None
+        self._survival_augs = []
         self._aug_choices = []
         self._aug_cursor = 0
         self._aug_size_scale = 1.0
@@ -10338,11 +10372,19 @@ class Game:
         self._aug_skill_burst = False
         self._aug_on_kill_explode = False
         self._aug_frost_aura = False
+        self._aug_regen = 0.0
+        self._aug_regen_acc = 0.0
         self._aug_exploding = False
 
     def _open_survival_augment(self):
-        """런 시작 증강 드래프트 — 3장 중 1택(아레나 일시정지)."""
-        self._aug_choices = random.sample(self._SURV_AUGMENTS, 3)
+        """증강 드래프트 — 3장 중 1택(아레나 일시정지). 시작·강화 공용.
+        이미 최대치까지 획득한 고유 증강은 제외 → 매 선택이 신선하게 유지."""
+        owned = self._survival_augs
+        avail = [a for a in self._SURV_AUGMENTS
+                 if owned.count(a) < self._AUG_MAX.get(a, 1)]
+        if len(avail) < 3:      # 안전망(사실상 발생 안 함 — 무제한 반복형 존재)
+            avail = self._SURV_AUGMENTS[:]
+        self._aug_choices = random.sample(avail, 3)
         self._aug_cursor = 0
         self.state = 'survival_augment'
         self.audio.play('levelup')
@@ -10359,6 +10401,8 @@ class Game:
     def _survival_apply_augment(self, aid):
         p = self.player
         self._aug_id = aid
+        self._survival_augs.append(aid)
+        # ── 고유 변신형 ──────────────────────────────────────────────
         if aid == 'titan':                       # 거신: 거대·강력하지만 굼뜸
             self._aug_size_scale = 1.6
             p.max_hp = int(p.max_hp * 2.2); p.hp = p.max_hp
@@ -10382,13 +10426,32 @@ class Game:
             p.defense = 0
         elif aid == 'bullet_storm':               # 탄막: 스킬마다 8방향 탄막·쿨↓
             self._aug_skill_burst = True
-            self._aug_cd_mul = 0.7
+            self._aug_cd_mul = min(self._aug_cd_mul, 0.7)
         elif aid == 'detonator':                  # 연쇄폭발: 처치 시 광역 폭발
             self._aug_on_kill_explode = True
             p.attack = int(p.attack * 1.15)
         elif aid == 'frost_aura':                 # 서리 오라: 주변 적 상시 둔화
             self._aug_frost_aura = True
             p.defense += 4
+        # ── 반복 강화형 (스택) ───────────────────────────────────────
+        elif aid == 'overpower':                  # 과부하: 공격력 대폭
+            p.attack = int(p.attack * 1.25) + 1
+        elif aid == 'frenzy':                     # 광분: 공격속도
+            p.attack_speed = round(p.attack_speed + 0.7, 2)
+        elif aid == 'vitality':                   # 활력: 최대 HP + 완전 회복
+            p.max_hp = int(p.max_hp * 1.25) + 5; p.hp = p.max_hp
+        elif aid == 'fleet':                      # 경보: 이동속도
+            p.move_speed = round(p.move_speed + 0.35, 2)
+        elif aid == 'evasive':                    # 회피: 회피율
+            p.evasion = min(80, p.evasion + 8)
+        elif aid == 'bulwark':                    # 방벽: 방어력
+            p.defense += 5
+        elif aid == 'lifedrain':                  # 생명 흡수: 상시 흡혈 누적
+            self._aug_lifesteal = min(0.6, self._aug_lifesteal + 0.12)
+        elif aid == 'overclock':                  # 과열 회로: 쿨타임 추가 단축
+            self._aug_cd_mul = max(0.2, self._aug_cd_mul * 0.82)
+        elif aid == 'regen':                      # 재생: 초당 HP 회복 누적
+            self._aug_regen += max(2, int(p.max_hp * 0.015))
         # 쿨타임 배율 반영 (증강 후 재적용)
         self._apply_skill_level_cds()
         self.messages.append((t('survival_pick', t('aug_' + aid)), 'good'))
@@ -10594,10 +10657,11 @@ class Game:
         info = f"{secs}s   ⚔{kills}   ★{self._survival_score}"
         info_s = self._font_burning_small.render(info, True, (200, 230, 205))
         s.blit(info_s, (GAME_X + GAME_W // 2 - info_s.get_width() // 2, GAME_Y + 40))
-        # 선택한 증강 표시 (좌상단 뱃지)
+        # 획득 증강 표시 (좌상단): 최근 증강명 + 총 스택 수
         if self._aug_id:
             col = self._AUG_COLOR.get(self._aug_id, (200, 200, 210))
-            ab = self._font_burning_small.render('◆ ' + t('aug_' + self._aug_id), True, col)
+            label = f"◆ {t('aug_' + self._aug_id)}  ×{len(self._survival_augs)}"
+            ab = self._font_burning_small.render(label, True, col)
             s.blit(ab, (GAME_X + 10, GAME_Y + 10))
 
     # ─────────────── 실시간 적 AI ─────────────────────────────────────

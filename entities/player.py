@@ -336,6 +336,7 @@ class Player(Entity):
         self.xp_next = int(self.xp_next * rate + 10)
         self.max_hp += 8 + self.level // 3
         self.hp = self.max_hp
+        self.stamina = self.stamina_max   # 레벨업 시 HP·SP 완전 회복
         self.attack += 1
         if self.level % 2 == 0:
             self.defense += 1

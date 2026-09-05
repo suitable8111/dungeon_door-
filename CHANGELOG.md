@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.24.0 — Level-up refill + unified, expanded Augments
+
+- **Level-up now fully restores HP *and* SP** — every level-up tops off both bars, so pushing into a level-up mid-fight is a real reset button.
+- **Every Endless Survival draft is now an Augment draft** — the mid-run reward picks used to be plain stat bumps that felt unlike the flashy augment you chose at the start. Now *all* draws — start and mid-run — pull from the same Augment pool, for one consistent "arena augment" feel throughout the run.
+- **Augment roster more than doubled (8 → 17)** — alongside the eight build-defining transforms, there are now nine stackable augments you can pick repeatedly: Overpower, Frenzy, Vitality, Fleet Foot, Evasion, Bulwark, Life Drain, Overclock, and Regeneration. Maxed one-time augments stop appearing so drafts stay fresh. Fully localized in all 5 languages.
+
 ## v2.23.0 — Endless Survival: stamina economy
 
 Tuned to keep skills flowing in the arena chaos:
