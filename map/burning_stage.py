@@ -53,9 +53,59 @@ _EASY_KEYS = [
 ]
 
 
+# 엄폐물(기둥) 클러스터 모양 — (dx,dy) 오프셋 목록. 작게 흩어 배치해
+# 적이 우회할 수 있게(=끼임 방지) + 플레이어에게 카이팅/병목 지형을 준다.
+_OBSTACLE_SHAPES = [
+    [(0, 0)],                                   # 단일 기둥
+    [(0, 0), (1, 0)],                           # 가로 2
+    [(0, 0), (0, 1)],                           # 세로 2
+    [(0, 0), (1, 0), (0, 1), (1, 1)],           # 2x2 블록
+    [(0, 0), (1, 0), (2, 0)],                   # 가로 3 (짧은 벽)
+    [(0, 0), (0, 1), (0, 2)],                   # 세로 3 (짧은 벽)
+    [(0, 0), (1, 0), (0, 1)],                   # L자
+]
+
+
+def _scatter_obstacles(dungeon, rng, center):
+    """아레나 내부에 엄폐물(기둥) 클러스터를 흩뿌린다.
+    - 외곽 스폰 링/플레이어 시작(center) 주변은 비워 둔다.
+    - 클러스터 간 간격을 넉넉히 둬 넓은 통로를 유지(끼임/고립 방지)."""
+    w, h = dungeon.width, dungeon.height
+    pad = BORDER + 3                    # 외곽에서 안쪽으로 여유(스폰 링 보호)
+    cx, cy = center
+    clear_r = 5                         # 플레이어 시작 주변 클리어 반경
+    placed = []                         # 배치된 셀 목록(간격 검사용)
+
+    def _ok(x, y):
+        if not (pad <= x < w - pad and pad <= y < h - pad):
+            return False
+        if max(abs(x - cx), abs(y - cy)) <= clear_r:   # 중앙 비움
+            return False
+        for px, py in placed:                           # 최소 간격 3
+            if max(abs(x - px), abs(y - py)) < 3:
+                return False
+        return True
+
+    # 아레나 넓이에 비례한 클러스터 수 (약간 랜덤)
+    target = rng.randint(10, 14)
+    tries = 0
+    made = 0
+    while made < target and tries < 400:
+        tries += 1
+        shape = rng.choice(_OBSTACLE_SHAPES)
+        ox = rng.randint(pad, w - pad - 1)
+        oy = rng.randint(pad, h - pad - 1)
+        cells = [(ox + dx, oy + dy) for dx, dy in shape]
+        if all(_ok(x, y) for (x, y) in cells):
+            for (x, y) in cells:
+                dungeon.tiles[y][x] = Tile.wall()
+                placed.append((x, y))
+            made += 1
+
+
 def generate_arena() -> tuple:
     """
-    개방형 아레나 생성.  바닥만 있는 단일 직사각형 공간.
+    개방형 아레나 생성 — 바닥 + 흩뿌린 엄폐물(기둥) 지형.
     Returns (Dungeon, (start_x, start_y))
     """
     width, height = ARENA_WIDTH, ARENA_HEIGHT
@@ -66,11 +116,14 @@ def generate_arena() -> tuple:
         for x in range(BORDER, width - BORDER):
             dungeon.tiles[y][x] = Tile.floor()
 
+    center = (width // 2, height // 2)
+    # 엄폐물 지형 배치 (매 런 랜덤 — 반복 플레이 변주)
+    _scatter_obstacles(dungeon, random.Random(), center)
+
     # 전체 시야 공개
     dungeon.reveal_all()
     dungeon.stairs_pos = None
 
-    center = (width // 2, height // 2)
     return dungeon, center
 
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.26.0 — Arena terrain: cover & pillars
+
+The arena used to be a flat, empty rectangle, so a swarm could pin you with nowhere to go. It now has **scattered pillars and cover**:
+- Randomized obstacle clusters (single pillars, 2×2 blocks, short walls) are strewn across the arena each run — giving you real terrain to kite around, funnel enemies through, and break up big swarms.
+- Placement keeps the center (your spawn) and the outer spawn ring clear, with wide lanes between clusters, so enemies always path to you and no area is ever walled off.
+- Applies to both Endless Survival and the 60-second Burning bonus stage. Every run's layout is different.
+
 ## v2.25.0 — Endless Survival: persistent survivor level
 
 Endless Survival now has a **dedicated survivor character** with meta-progression:
