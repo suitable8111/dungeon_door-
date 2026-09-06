@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.27.0 — Endless Survival leaderboard
+
+Compete for the top survival score:
+- **Global "Endless Survival" leaderboard** — your best score is submitted automatically when a run ends, and appears as a new tab in the rankings board (keeps your best; higher is better).
+- **View it right from the results screen** — press **[L]** on the survival results screen to jump straight to the Endless Survival leaderboard, then **[ESC]** to return.
+- Fully localized in all 5 languages. (Works offline with a local best; global rankings show through Steam.)
+
 ## v2.26.0 — Arena terrain: cover & pillars
 
 The arena used to be a flat, empty rectangle, so a swarm could pin you with nowhere to go. It now has **scattered pillars and cover**:

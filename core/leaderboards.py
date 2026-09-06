@@ -23,6 +23,7 @@ LB_PATH = os.path.join(_BASE, '..', 'leaderboards.json')
 # 순서 = UI 탭 순서.
 LEADERBOARDS = {
     'best_floor':         {'label': 'lb_best_floor',         'cls': None},
+    'survival_score':     {'label': 'lb_survival_score',     'cls': None},
     'best_floor_warrior': {'label': 'lb_best_floor_warrior', 'cls': 'warrior'},
     'best_floor_archer':  {'label': 'lb_best_floor_archer',  'cls': 'archer'},
     'best_floor_mage':    {'label': 'lb_best_floor_mage',    'cls': 'mage'},
@@ -75,6 +76,10 @@ class LeaderboardManager:
         if cls_lb in LEADERBOARDS:
             self.submit(cls_lb, floor)
         self.submit('best_level', level)
+
+    def submit_survival(self, score: int) -> bool:
+        """무한 생존 최고 점수 반영(최고기록만 유지)."""
+        return self.submit('survival_score', score)
 
     def submit(self, name: str, score) -> bool:
         """점수 제출 — 로컬 최고기록 갱신 + Steam 업로드(KeepBest). 갱신 시 True."""

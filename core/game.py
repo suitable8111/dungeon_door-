@@ -3152,6 +3152,10 @@ class Game:
                     self._launch_survival()
                 elif self.state == 'survival_over' and event.key == pygame.K_r:
                     self._survival_restart()
+                elif self.state == 'survival_over' and event.key == pygame.K_l:
+                    # 결과 화면에서 무한 생존 리더보드 열람 (ESC로 복귀)
+                    self._open_ranking(return_state='survival_over',
+                                       start_name='survival_score')
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
                         and ((event.unicode and (event.unicode.isalnum()
                                                  or event.unicode == '.'))
@@ -3240,9 +3244,11 @@ class Game:
                         self._guide_level = 0           # 소분류 → 대분류로 복귀
                     else:
                         self.state = 'playing'
+                elif self.state == 'ranking':
+                    self.state = getattr(self, '_rank_return', 'playing')
                 elif self.state in ('storage', 'inn', 'questlog', 'farm_menu',
                                     'altar', 'angler', 'fishing', 'ranch_menu',
-                                    'ranking', 'advance'):
+                                    'advance'):
                     self.state = 'playing'
                 elif self.state == 'journal':
                     self._close_journal()
@@ -7328,12 +7334,15 @@ class Game:
         from core.leaderboards import LEADERBOARDS
         return list(LEADERBOARDS.keys())
 
-    def _open_ranking(self):
-        self._rank_lb_idx = 0
+    def _open_ranking(self, return_state='playing', start_name=None):
+        names = self._lb_names()
+        self._rank_lb_idx = names.index(start_name) if start_name in names else 0
         self._rank_mode = 'global'
+        self._rank_return = return_state
         self.state = 'ranking'
-        self._lb_submit()   # 내 최신 기록 반영 후 조회
-        self.leaderboards.refresh(self._lb_names()[0], self._rank_mode)
+        if return_state == 'playing':
+            self._lb_submit()   # 던전 진행 중이면 내 최신 기록 반영 후 조회
+        self.leaderboards.refresh(names[self._rank_lb_idx], self._rank_mode)
         self.audio.play('shop_open')
 
     def _handle_ranking_action(self, action):
@@ -10594,6 +10603,10 @@ class Game:
         if dirty and not self._is_test_mode:
             from core.save_load import save_records
             save_records(self._records)
+        # 리더보드: 무한 생존 최고 점수 제출(테스트 제외; Steam KeepBest)
+        if not self._is_test_mode:
+            self.leaderboards.player_name = self._char_name or 'Hero'
+            self.leaderboards.submit_survival(int(self._survival_score))
         self.audio.play('death')
         self._start_shake(6, 500)
         self.state = 'survival_over'
