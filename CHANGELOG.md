@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.29.0 — Endless Survival: dopamine scoreboard
+
+Turned the survival scoreboard and feedback up to eleven:
+- **Combo score multiplier** — chaining kills without pausing ramps a live multiplier (×1.5 at 5, ×2 at 10, ×2.5 at 15, ×3 at 20+). Every kill floats a "+N" popup and pumps your score.
+- **Juiced scoreboard** — a big score that punches/scales up each time it ticks, a live COMBO meter that grows and glows through the RAMPAGE → GODLIKE tiers with a draining timer bar, plus a countdown to your next supply drop.
+- **Milestone fireworks** — every 1,000 points triggers a gold screen flash, a "★ N,NNN" banner, and a screen shake; combo tier-ups now punch the screen too.
+
 ## v2.28.0 — Endless Survival: stage supply rewards
 
 Survival now rewards you for holding out, on a second axis from the augment drafts:

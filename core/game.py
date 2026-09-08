@@ -444,7 +444,9 @@ class Game:
         self._survival_start_level = SURVIVAL_START_LEVEL  # 이번 런 시작 레벨
         self._survival_level_up = False   # 이번 런에서 최고 레벨 갱신 여부
         self._survival_stage    = 0       # 시간/단계 보상 스테이지(30초당 +1)
-        self._survival_bonus    = 0       # 스테이지 보상 누적 점수
+        self._survival_bonus    = 0       # 누적 점수(킬 배율 + 스테이지 보너스)
+        self._surv_score_pulse  = 0.0     # 점수판 펄스(증가 시 1.0→0)
+        self._surv_next_milestone = 1000  # 다음 점수 마일스톤 연출 임계값
         # ── 증강(Augment): 시작 + 강화마다 반복 선택, 빌드를 규정 ──
         self._aug_id            = None    # 최근 선택 증강 id (HUD 강조용)
         self._survival_augs     = []      # 획득한 증강 id 목록(중복=스택)
@@ -5047,6 +5049,9 @@ class Game:
                 self.messages.append((t('volatile_boom_safe', enemy.name), 'warn'))
         # 처치 연쇄 + 티어 승급 (프롭 파괴와 공유)
         self._bump_kill_combo()
+        # 무한 생존: 콤보 배율 킬 점수 적립 (콤보 갱신 직후 호출)
+        if self._survival_active:
+            self._survival_add_kill_score(enemy.x, enemy.y)
         # 오버킬: 초과 피해가 최대 HP의 1.5배 이상 (4초 쿨다운, 보스 제외)
         now = pygame.time.get_ticks()
         if (not enemy.is_boss
@@ -5151,6 +5156,9 @@ class Game:
                 self.player.x, self.player.y, tier_color)
             self.audio.play('tier_up')
             self.juice.tier_up()
+            if self._survival_active:   # 아수라장: 티어 승급 임팩트 극대화
+                self._gold_flash_ms = 220
+                self._start_shake(6, 300)
 
     # ── 프롭 파괴 (항아리/나무상자): 소소하지만 즉각적인 보상 ─────────
     def _on_prop_broken(self, prop):
@@ -10277,6 +10285,8 @@ class Game:
         self._survival_final    = None
         self._survival_stage    = 0
         self._survival_bonus    = 0
+        self._surv_score_pulse  = 0.0
+        self._surv_next_milestone = 1000
 
         dungeon, start = generate_arena()
         self.dungeon = dungeon
@@ -10344,13 +10354,51 @@ class Game:
             self._survival_stage += 1
             self._survival_stage_reward(self._survival_stage)
 
-        # 점수 = 킬*10 + 파도*5 + 생존 초 + 스테이지 보너스
-        self._survival_score = (kills * 10 + self._survival_wave * 5
+        # 점수 = 파도*5 + 생존 초 + 누적(킬 배율점수 + 스테이지 보너스)
+        # (킬 점수는 콤보 배율로 _survival_bonus에 적립 → 도파민 극대화)
+        self._survival_score = (self._survival_wave * 5
                                 + int(self._survival_elapsed / 1000)
                                 + self._survival_bonus)
 
+        # 점수판 펄스 감쇠
+        if self._surv_score_pulse > 0:
+            self._surv_score_pulse = max(0.0, self._surv_score_pulse - dt_ms / 260.0)
+
+        # 점수 마일스톤 연출 (1000점마다 플래시 + 배너 + 셰이크)
+        while self._survival_score >= self._surv_next_milestone:
+            self._survival_milestone_flash(self._surv_next_milestone)
+            self._surv_next_milestone += 1000
+
         if len(self.dungeon.enemies) > MAX_LIVE_ENEMIES * 2:
             self.dungeon.enemies = [e for e in self.dungeon.enemies if e.is_alive()]
+
+    def _survival_combo_mult(self) -> float:
+        """콤보 연쇄 배율 — 킬 점수를 곱한다(연쇄가 뜨거울수록 폭발)."""
+        c = self._combo_count
+        if c >= 20: return 3.0
+        if c >= 15: return 2.5
+        if c >= 10: return 2.0
+        if c >= 5:  return 1.5
+        return 1.0
+
+    def _survival_add_kill_score(self, x, y):
+        """무한 생존 킬 점수 적립(콤보 배율) + '+N' 팝업 + 점수판 펄스."""
+        mult = self._survival_combo_mult()
+        pts = int(10 * mult)
+        self._survival_bonus += pts
+        self._surv_score_pulse = 1.0
+        if mult >= 1.5:
+            tier = self._combo_tier(self._combo_count)
+            col = tier[2] if tier else (255, 230, 140)
+            self.animator.add(CalloutAnim(x, y, f'+{pts}', col))
+
+    def _survival_milestone_flash(self, milestone):
+        """점수 마일스톤 도달 연출."""
+        self.animator.add(BannerAnim(f'★ {milestone:,}',
+                                     (255, 225, 110), y=98, size=30, duration_ms=1200))
+        self._gold_flash_ms = 240
+        self.audio.play('tier_up')
+        self._start_shake(5, 240)
 
     def _survival_grant_item(self, key, n=1, cap=None):
         """소비 아이템을 인벤에 지급(스택). cap이 있으면 그 개수까지만. 지급 수 반환."""
@@ -10799,20 +10847,64 @@ class Game:
         s.blit(hint, (GAME_X + (GAME_W - hint.get_width()) // 2, GAME_Y + GAME_H - 34))
 
     def _draw_survival_hud(self):
-        """상단 생존 정보 — 파도 / 시간 / 킬 / 점수."""
+        """상단 생존 정보 — 도파민 점수판: 펄스 점수 + 콤보 미터 + 스테이지."""
         s = self.screen
+        cx = GAME_X + GAME_W // 2
         kills = self._run_kills - self._survival_kills0
         secs  = int(self._survival_elapsed / 1000)
-        big = self._font_burning_big.render(f"{t('survival_wave')} {self._survival_wave}",
-                                            True, (150, 240, 160))
-        s.blit(big, (GAME_X + GAME_W // 2 - big.get_width() // 2, GAME_Y + 8))
-        # 다음 스테이지(보급)까지 남은 초
+
+        # WAVE (작게 최상단)
+        wave = self._font_burning_small.render(
+            f"{t('survival_wave')} {self._survival_wave}", True, (150, 240, 160))
+        s.blit(wave, (cx - wave.get_width() // 2, GAME_Y + 3))
+
+        # SCORE (크게·펄스·글로우) — 증가 시 튀어오른다
+        stxt = f"★ {self._survival_score:,}"
+        base = self._font_burning_big.render(stxt, True, (255, 226, 120))
+        scale = 1.0 + self._surv_score_pulse * 0.45
+        surf = (pygame.transform.rotozoom(base, 0, scale)
+                if abs(scale - 1.0) > 0.01 else base)
+        sh = self._font_burning_big.render(stxt, True, (90, 45, 0))
+        sh = (pygame.transform.rotozoom(sh, 0, scale)
+              if abs(scale - 1.0) > 0.01 else sh)
+        sx = cx - surf.get_width() // 2
+        sy = GAME_Y + 18
+        s.blit(sh, (sx + 2, sy + 2))
+        s.blit(surf, (sx, sy))
+
+        # 정보 줄: 시간 · 킬 · 스테이지(다음 보급 카운트다운)
         nxt = max(0, int((self._SURV_STAGE_MS - (self._survival_elapsed
                           % self._SURV_STAGE_MS)) / 1000))
-        info = (f"{secs}s   ⚔{kills}   ★{self._survival_score}   "
+        info = (f"{secs}s   ⚔{kills}   "
                 f"▣{t('survival_stage_hud', self._survival_stage, nxt)}")
         info_s = self._font_burning_small.render(info, True, (200, 230, 205))
-        s.blit(info_s, (GAME_X + GAME_W // 2 - info_s.get_width() // 2, GAME_Y + 40))
+        iy = sy + surf.get_height() + 2
+        s.blit(info_s, (cx - info_s.get_width() // 2, iy))
+
+        # COMBO 미터 (연쇄 중일 때) — 티어 색·성장 크기·잔여 타이머 바
+        if self._combo_count >= 2 and self._combo_ms > 0:
+            tier = self._combo_tier(self._combo_count)
+            col = tier[2] if tier else (255, 190, 90)
+            mult = self._survival_combo_mult()
+            ctxt = f"{self._combo_count} COMBO  ×{mult:.1f}"
+            cbase = self._font_burning_big.render(ctxt, True, col)
+            cscale = 0.7 + min(self._combo_count, 30) * 0.02   # 0.7→1.3
+            csurf = pygame.transform.rotozoom(cbase, 0, cscale)
+            ccx = cx - csurf.get_width() // 2
+            ccy = iy + 18
+            csh = pygame.transform.rotozoom(
+                self._font_burning_big.render(ctxt, True, (20, 10, 0)), 0, cscale)
+            s.blit(csh, (ccx + 2, ccy + 2))
+            s.blit(csurf, (ccx, ccy))
+            # 잔여 타이머 바 (4초 창)
+            frac = max(0.0, min(1.0, self._combo_ms / 4000.0))
+            bw = int(csurf.get_width() * frac)
+            by = ccy + csurf.get_height() + 2
+            pygame.draw.rect(s, (40, 30, 20),
+                             (ccx, by, csurf.get_width(), 4), border_radius=2)
+            if bw > 0:
+                pygame.draw.rect(s, col, (ccx, by, bw, 4), border_radius=2)
+
         # 획득 증강 표시 (좌상단): 최근 증강명 + 총 스택 수
         if self._aug_id:
             col = self._AUG_COLOR.get(self._aug_id, (200, 200, 210))
