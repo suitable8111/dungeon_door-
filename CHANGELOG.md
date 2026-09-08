@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.28.0 — Endless Survival: stage supply rewards
+
+Survival now rewards you for holding out, on a second axis from the augment drafts:
+- **Every 30 seconds you clear a Stage** — reaching a new stage triggers a **supply drop**: full HP + SP restore, a score bonus, and an escalating item package (Infinite Stamina Potions, large health potions, and — on higher stages — Whirlwind Potions and Bombs).
+- **Two reward axes** — kills fuel your build via **Augment** drafts; time survived fuels your survival via **Stage** supplies. They stack into ever-crazier runs.
+- **Stage tracked & saved** — the HUD shows your current stage and a countdown to the next drop, the results screen reports the stage you reached, and your survivor's best stage is saved to the profile.
+- Fully localized in all 5 languages.
+
 ## v2.27.0 — Endless Survival leaderboard
 
 Compete for the top survival score:

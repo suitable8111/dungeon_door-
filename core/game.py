@@ -443,6 +443,8 @@ class Game:
         self._survival_persist  = False   # 종료 시 생존 캐릭터 레벨 저장 여부
         self._survival_start_level = SURVIVAL_START_LEVEL  # 이번 런 시작 레벨
         self._survival_level_up = False   # 이번 런에서 최고 레벨 갱신 여부
+        self._survival_stage    = 0       # 시간/단계 보상 스테이지(30초당 +1)
+        self._survival_bonus    = 0       # 스테이지 보상 누적 점수
         # ── 증강(Augment): 시작 + 강화마다 반복 선택, 빌드를 규정 ──
         self._aug_id            = None    # 최근 선택 증강 id (HUD 강조용)
         self._survival_augs     = []      # 획득한 증강 id 목록(중복=스택)
@@ -10273,6 +10275,8 @@ class Game:
         self._survival_upgrades = []
         self._survival_next_up  = 12       # 첫 드래프트까지 12킬
         self._survival_final    = None
+        self._survival_stage    = 0
+        self._survival_bonus    = 0
 
         dungeon, start = generate_arena()
         self.dungeon = dungeon
@@ -10334,12 +10338,62 @@ class Game:
             self._survival_next_up = kills + 12 + len(self._survival_augs) * 4
             self._open_survival_augment()
 
-        # 점수 = 킬*10 + 파도*5 + 생존 초
+        # 시간/단계 기반 아이템 보상 (30초마다 스테이지 상승 → 보급 패키지)
+        target_stage = int(self._survival_elapsed // self._SURV_STAGE_MS)
+        while self._survival_stage < target_stage:
+            self._survival_stage += 1
+            self._survival_stage_reward(self._survival_stage)
+
+        # 점수 = 킬*10 + 파도*5 + 생존 초 + 스테이지 보너스
         self._survival_score = (kills * 10 + self._survival_wave * 5
-                                + int(self._survival_elapsed / 1000))
+                                + int(self._survival_elapsed / 1000)
+                                + self._survival_bonus)
 
         if len(self.dungeon.enemies) > MAX_LIVE_ENEMIES * 2:
             self.dungeon.enemies = [e for e in self.dungeon.enemies if e.is_alive()]
+
+    def _survival_grant_item(self, key, n=1, cap=None):
+        """소비 아이템을 인벤에 지급(스택). cap이 있으면 그 개수까지만. 지급 수 반환."""
+        data = self._item_data.get(key)
+        if not data:
+            return 0
+        from entities.item import Item
+        have = sum(it.count for it in self.player.inventory
+                   if it.item_type == 'consumable' and it.key == key)
+        given = 0
+        for _ in range(n):
+            if cap is not None and have >= cap:
+                break
+            d = dict(data); d['key'] = key; d['count'] = 1
+            if not self.player.add_item(Item(self.player.x, self.player.y, d)):
+                break
+            have += 1; given += 1
+        return given
+
+    def _survival_stage_reward(self, stage):
+        """시간/단계 보상 — 스테이지 상승 시 체력·SP 완전 회복 + 보급 아이템 패키지.
+        (킬 기반=증강/빌드, 시간 기반=아이템 보급 — 두 축 분리)."""
+        p = self.player
+        p.hp = p.max_hp
+        p.stamina = p.stamina_max
+        bonus = 50 * stage
+        self._survival_bonus += bonus
+        # 보급 패키지 (스테이지에 따라 점증)
+        self._survival_grant_item('sp_surge_potion', 1, cap=self._SP_POTION_MAX)
+        self._survival_grant_item('large_health_potion', 2)
+        if stage % 3 == 0:
+            self._survival_grant_item('whirlwind_potion', 1)
+            self._survival_grant_item('bomb', 1)
+        if stage % 5 == 0:
+            self._survival_grant_item('sp_surge_potion', 2, cap=self._SP_POTION_MAX)
+        # 연출
+        self.animator.add(BannerAnim(t('survival_stage_banner', stage),
+                                     (255, 210, 90), y=120, size=28, duration_ms=1500))
+        self.messages.append((t('survival_stage_reward', stage), 'good'))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self.audio.play('levelup_big')
+        self.audio.play('tier_up')
+        self._start_shake(4, 260)
 
     def _open_survival_upgrade(self):
         """웨이브 보상 — 업그레이드 3장 중 택1 (로그라이트 드래프트)."""
@@ -10384,6 +10438,7 @@ class Game:
     _SP_POTION_KEY   = 'sp_surge_potion'
     _SP_POTION_MAX   = 5       # 기본 소지 상한
     _SP_POTION_DROP  = 0.05    # 킬당 드랍 확률(5%)
+    _SURV_STAGE_MS   = 30000   # 시간/단계 보상 간격(30초마다 스테이지 ↑)
 
     # ─────────────── 증강(Augment) — 아수라장 스타일 강화 ────────────
     # 단순 스탯이 아닌 빌드를 규정하는 기믹 강화. 시작 + 강화마다 3장 중 1택.
@@ -10581,6 +10636,7 @@ class Game:
             'time':  int(self._survival_elapsed / 1000),
             'score': self._survival_score,
             'level': reached_level,
+            'stage': self._survival_stage,
         }
         dirty = False
         best = self._records.get('survival_best', 0)
@@ -10598,6 +10654,8 @@ class Game:
             if reached_level > int(prof.get('level', SURVIVAL_START_LEVEL)):
                 prof['level'] = reached_level
                 self._survival_level_up = True
+            if self._survival_stage > int(prof.get('best_stage', 0)):
+                prof['best_stage'] = self._survival_stage
             self._records['survival_char'] = prof
             dirty = True
         if dirty and not self._is_test_mode:
@@ -10675,6 +10733,7 @@ class Game:
         s.blit(title, (cx - title.get_width() // 2, y)); y += 54
         rows = [
             (t('survival_stat_level'), f"Lv {f.get('level', 0)}"),
+            (t('survival_stat_stage'), str(f.get('stage', 0))),
             (t('survival_stat_wave'),  str(f.get('wave', 0))),
             (t('survival_stat_time'),  f"{f.get('time', 0)}s"),
             (t('survival_stat_kills'), str(f.get('kills', 0))),
@@ -10747,7 +10806,11 @@ class Game:
         big = self._font_burning_big.render(f"{t('survival_wave')} {self._survival_wave}",
                                             True, (150, 240, 160))
         s.blit(big, (GAME_X + GAME_W // 2 - big.get_width() // 2, GAME_Y + 8))
-        info = f"{secs}s   ⚔{kills}   ★{self._survival_score}"
+        # 다음 스테이지(보급)까지 남은 초
+        nxt = max(0, int((self._SURV_STAGE_MS - (self._survival_elapsed
+                          % self._SURV_STAGE_MS)) / 1000))
+        info = (f"{secs}s   ⚔{kills}   ★{self._survival_score}   "
+                f"▣{t('survival_stage_hud', self._survival_stage, nxt)}")
         info_s = self._font_burning_small.render(info, True, (200, 230, 205))
         s.blit(info_s, (GAME_X + GAME_W // 2 - info_s.get_width() // 2, GAME_Y + 40))
         # 획득 증강 표시 (좌상단): 최근 증강명 + 총 스택 수
