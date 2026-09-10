@@ -10315,6 +10315,11 @@ class Game:
                 if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= 4:
                     e.slowed_ms = max(e.slowed_ms, 350)
                     e.slow_pct = max(e.slow_pct, 0.5)
+        if self._aug_global_slow > 0:    # 시간 왜곡(전설): 전역 적 둔화
+            for e in self.dungeon.enemies:
+                if e.is_alive():
+                    e.slowed_ms = max(e.slowed_ms, 350)
+                    e.slow_pct = max(e.slow_pct, self._aug_global_slow)
         if self._aug_regen > 0:          # 재생: 초당 HP 회복
             self._aug_regen_acc += dt_ms
             while self._aug_regen_acc >= 1000:
@@ -10399,6 +10404,29 @@ class Game:
         self._gold_flash_ms = 240
         self.audio.play('tier_up')
         self._start_shake(5, 240)
+
+    def _survival_phoenix_revive(self):
+        """불사조(전설) — 사망 순간 1회 부활: HP 50% 복구 + 주변 폭발 + 짧은 무적."""
+        self._aug_phoenix -= 1
+        p = self.player
+        p.hp = max(1, int(p.max_hp * 0.5))
+        p.stamina = p.stamina_max
+        p.invincible_ms = max(getattr(p, 'invincible_ms', 0), 2200)
+        # 부활 노바 — 주변 적 일소(반경 4)
+        px, py = p.x, p.y
+        for e in list(self.dungeon.enemies):
+            if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= 4:
+                e.take_damage(999999); e.on_hurt(px, py)
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+        self.animator.add(BannerAnim(t('aug_phoenix_proc'), (255, 150, 60),
+                                     y=120, size=32, duration_ms=1600))
+        self.animator.particles.emit_fireball_hit(px, py)
+        self.animator.particles.emit_levelup(px, py)
+        self._gold_flash_ms = 260
+        self._start_shake(7, 500)
+        self.audio.play('levelup_big')
+        self.messages.append((t('aug_phoenix_proc'), 'good'))
 
     def _survival_grant_item(self, key, n=1, cap=None):
         """소비 아이템을 인벤에 지급(스택). cap이 있으면 그 개수까지만. 지급 수 반환."""
@@ -10492,21 +10520,36 @@ class Game:
     # 단순 스탯이 아닌 빌드를 규정하는 기믹 강화. 시작 + 강화마다 3장 중 1택.
     # 고유 변신(max 1) + 반복 강화(스택) 혼합 → 매 선택이 같은 "증강" 결.
     _SURV_AUGMENTS = [
-        # 고유 변신형 (한 번만)
-        'titan', 'glass_cannon', 'speedster', 'vampire',
-        'berserker_pact', 'bullet_storm', 'detonator', 'frost_aura',
-        # 반복 강화형 (스택)
-        'overpower', 'frenzy', 'vitality', 'fleet', 'evasive', 'bulwark',
-        'lifedrain', 'overclock', 'regen',
+        # 전설(legendary) — 판을 뒤집는 초강력 (희귀 등장)
+        'titan', 'glass_cannon', 'speedster', 'berserker_pact', 'detonator',
+        'phoenix', 'time_warp',
+        # 희귀(rare) — 강력한 고유 기믹
+        'vampire', 'bullet_storm', 'frost_aura', 'lifedrain', 'overclock',
+        # 일반(common) — 반복 강화(스택)
+        'overpower', 'frenzy', 'vitality', 'fleet', 'evasive', 'bulwark', 'regen',
     ]
     _AUG_MAX = {
-        'titan': 1, 'glass_cannon': 1, 'speedster': 1, 'vampire': 1,
-        'berserker_pact': 1, 'bullet_storm': 1, 'detonator': 1, 'frost_aura': 1,
-        # 반복형: overpower/frenzy/vitality는 사실상 무제한(드래프트 고갈 방지)
+        'titan': 1, 'glass_cannon': 1, 'speedster': 1, 'berserker_pact': 1,
+        'detonator': 1, 'phoenix': 1, 'time_warp': 1,
+        'vampire': 1, 'bullet_storm': 1, 'frost_aura': 1,
+        'lifedrain': 3, 'overclock': 3,
+        # 일반: overpower/frenzy/vitality는 사실상 무제한(드래프트 고갈 방지)
         'overpower': 99, 'frenzy': 99, 'vitality': 99,
-        'fleet': 3, 'evasive': 3, 'bulwark': 3,
-        'lifedrain': 3, 'overclock': 3, 'regen': 3,
+        'fleet': 3, 'evasive': 3, 'bulwark': 3, 'regen': 3,
     }
+    # 등급: legendary / rare / common — 드래프트 가중치·카드 비주얼에 사용
+    _AUG_RARITY = {
+        'titan': 'legendary', 'glass_cannon': 'legendary', 'speedster': 'legendary',
+        'berserker_pact': 'legendary', 'detonator': 'legendary',
+        'phoenix': 'legendary', 'time_warp': 'legendary',
+        'vampire': 'rare', 'bullet_storm': 'rare', 'frost_aura': 'rare',
+        'lifedrain': 'rare', 'overclock': 'rare',
+        'overpower': 'common', 'frenzy': 'common', 'vitality': 'common',
+        'fleet': 'common', 'evasive': 'common', 'bulwark': 'common', 'regen': 'common',
+    }
+    _RARITY_WEIGHT = {'legendary': 12, 'rare': 40, 'common': 100}
+    _RARITY_COLOR  = {'legendary': (255, 180, 70), 'rare': (95, 160, 240),
+                      'common': (170, 180, 195)}
     _AUG_COLOR = {
         'titan':          (220, 170,  90),
         'glass_cannon':   (240, 110, 110),
@@ -10516,6 +10559,8 @@ class Game:
         'bullet_storm':   (180, 150, 245),
         'detonator':      (255, 160,  70),
         'frost_aura':     (140, 205, 255),
+        'phoenix':        (255, 140,  60),
+        'time_warp':      (150, 130, 245),
         'overpower':      (240, 150,  90),
         'frenzy':         (240, 200,  90),
         'vitality':       (120, 225, 130),
@@ -10541,17 +10586,34 @@ class Game:
         self._aug_regen = 0.0
         self._aug_regen_acc = 0.0
         self._aug_exploding = False
+        self._aug_phoenix = 0        # 불사조 부활 충전(전설)
+        self._aug_global_slow = 0.0  # 시간왜곡 전역 둔화율(전설)
 
     def _open_survival_augment(self):
         """증강 드래프트 — 3장 중 1택(아레나 일시정지). 시작·강화 공용.
-        이미 최대치까지 획득한 고유 증강은 제외 → 매 선택이 신선하게 유지."""
+        등급 가중치로 뽑되(전설 희귀) 최대치 획득분은 제외 → 신선함 유지."""
         owned = self._survival_augs
         avail = [a for a in self._SURV_AUGMENTS
                  if owned.count(a) < self._AUG_MAX.get(a, 1)]
         if len(avail) < 3:      # 안전망(사실상 발생 안 함 — 무제한 반복형 존재)
             avail = self._SURV_AUGMENTS[:]
-        self._aug_choices = random.sample(avail, 3)
+        # 등급 가중 비복원 추출 3장
+        pool = list(avail)
+        picks = []
+        for _ in range(3):
+            if not pool:
+                break
+            weights = [self._RARITY_WEIGHT.get(self._AUG_RARITY.get(a, 'common'), 100)
+                       for a in pool]
+            choice = random.choices(pool, weights=weights, k=1)[0]
+            picks.append(choice)
+            pool.remove(choice)
+        self._aug_choices = picks
         self._aug_cursor = 0
+        # 전설이 뜨면 특별 연출(골드 플래시 + 셰이크)
+        if any(self._AUG_RARITY.get(a) == 'legendary' for a in picks):
+            self._gold_flash_ms = 200
+            self._start_shake(4, 220)
         self.state = 'survival_augment'
         self.audio.play('levelup')
 
@@ -10599,6 +10661,12 @@ class Game:
         elif aid == 'frost_aura':                 # 서리 오라: 주변 적 상시 둔화
             self._aug_frost_aura = True
             p.defense += 4
+        elif aid == 'phoenix':                    # 불사조(전설): 사망 시 1회 부활
+            self._aug_phoenix += 1
+            p.max_hp = int(p.max_hp * 1.15); p.hp = p.max_hp
+        elif aid == 'time_warp':                  # 시간 왜곡(전설): 전역 둔화 + 쿨↓
+            self._aug_global_slow = max(self._aug_global_slow, 0.4)
+            self._aug_cd_mul = min(self._aug_cd_mul, 0.6)
         # ── 반복 강화형 (스택) ───────────────────────────────────────
         elif aid == 'overpower':                  # 과부하: 공격력 대폭
             p.attack = int(p.attack * 1.25) + 1
@@ -10824,20 +10892,35 @@ class Game:
         total = cw * 3 + gap * 2
         ox = GAME_X + (GAME_W - total) // 2
         oy = GAME_Y + 118
+        tk = pygame.time.get_ticks()
         for i, aid in enumerate(self._aug_choices):
             cx = ox + i * (cw + gap)
             sel = i == self._aug_cursor
             col = self._AUG_COLOR.get(aid, (200, 200, 210))
+            rarity = self._AUG_RARITY.get(aid, 'common')
+            rcol = self._RARITY_COLOR.get(rarity, (170, 180, 195))
             bg = (26, 30, 40) if sel else (16, 18, 26)
+            # 전설: 카드 뒤 맥동 글로우
+            if rarity == 'legendary':
+                pulse = 0.5 + 0.5 * math.sin(tk * 0.006 + i)
+                glow = pygame.Surface((cw + 16, ch + 16), pygame.SRCALPHA)
+                pygame.draw.rect(glow, (*rcol, int(40 + 70 * pulse)),
+                                 (0, 0, cw + 16, ch + 16), border_radius=14)
+                s.blit(glow, (cx - 8, oy - 8))
             pygame.draw.rect(s, bg, (cx, oy, cw, ch), border_radius=10)
-            pygame.draw.rect(s, col, (cx, oy, cw, ch), 3 if sel else 1, border_radius=10)
+            # 등급 색 테두리(전설/희귀 강조), 선택 시 두껍게
+            bw_ = (4 if sel else 2) if rarity != 'common' else (3 if sel else 1)
+            pygame.draw.rect(s, rcol, (cx, oy, cw, ch), bw_, border_radius=10)
+            # 등급 라벨 (상단 바)
+            rl = self.hud.font_sm.render(t('rarity_' + rarity), True, rcol)
+            s.blit(rl, (cx + (cw - rl.get_width()) // 2, oy + 6))
             # 증강 아이콘: 색 마름모
-            icx, icy = cx + cw // 2, oy + 42
-            pygame.draw.polygon(s, col, [(icx, icy-20), (icx+18, icy), (icx, icy+20), (icx-18, icy)])
-            pygame.draw.polygon(s, bg, [(icx, icy-10), (icx+9, icy), (icx, icy+10), (icx-9, icy)])
+            icx, icy = cx + cw // 2, oy + 52
+            pygame.draw.polygon(s, col, [(icx, icy-18), (icx+16, icy), (icx, icy+18), (icx-16, icy)])
+            pygame.draw.polygon(s, bg, [(icx, icy-9), (icx+8, icy), (icx, icy+9), (icx-8, icy)])
             nm = self.hud.font_md.render(t('aug_' + aid), True, col)
-            s.blit(nm, (cx + (cw - nm.get_width()) // 2, oy + 76))
-            dy = oy + 112
+            s.blit(nm, (cx + (cw - nm.get_width()) // 2, oy + 82))
+            dy = oy + 116
             for line in self._wrap_text(t('aug_' + aid + '_d'), self.hud.font_sm, cw - 28):
                 ls = self.hud.font_sm.render(line, True, (210, 218, 228))
                 s.blit(ls, (cx + 14, dy)); dy += 18
@@ -11013,6 +11096,8 @@ class Game:
               and not self._downed and not self._spectating):
             if self._burning_active:
                 self._exit_burning_stage(survived=False)
+            elif self._survival_active and getattr(self, '_aug_phoenix', 0) > 0:
+                self._survival_phoenix_revive()      # 불사조(전설): 사망 1회 무효
             elif self._survival_active:
                 self._end_survival()
             else:

@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.30.0 — Augment rarity tiers
+
+Augment drafts now have Common / Rare / Legendary rarities:
+- **Weighted draws** — most picks are Common stackables; Rare gimmicks show up regularly; Legendaries are the rare, run-defining jackpots (a Legendary in your draft triggers a gold flash + screen shake).
+- **Rarity on the cards** — each augment card shows a colored border and rarity label (gray / blue / gold), and Legendaries get a pulsing glow so a jackpot draw feels special.
+- **Two new Legendary augments:**
+  - **Phoenix** — revive once on death at 50% HP with a clearing blast and brief invulnerability (plus +15% Max HP). Your get-out-of-death card.
+  - **Time Warp** — every enemy on the field is permanently slowed and your skill cooldowns are slashed 40%.
+- Fully localized in all 5 languages.
+
 ## v2.29.0 — Endless Survival: dopamine scoreboard
 
 Turned the survival scoreboard and feedback up to eleven:
