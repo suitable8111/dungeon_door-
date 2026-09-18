@@ -242,7 +242,8 @@ class HUD:
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
                     page='main', settings=None, settings_sel=0,
                     mp_ip=None, mp_status=None, mp_banner=None, mp_code=None,
-                    mp_upnp=None, mp_recent=None, survival_char=None):
+                    mp_upnp=None, mp_recent=None, survival_char=None,
+                    daily_info=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
         W, H = WINDOW_WIDTH, WINDOW_HEIGHT
@@ -289,7 +290,7 @@ class HUD:
         # ── 패널 크기 ────────────────────────────────────────────────
         if page == 'main':
             p_w = 470
-            p_h = 82 + len(cards) * 62 + 16 + 54 + 58 + 50 + 52
+            p_h = 82 + len(cards) * 62 + 16 + 54 + 58 + 56 + 50 + 52  # +일일 챌린지
             if mp_banner == 'host' and mp_code:
                 p_h += 52    # 초대 코드 2줄 + UPnP 상태 표시 공간
         elif page == 'coop_select':
@@ -441,11 +442,46 @@ class HUD:
                                    sv_rect.centery - lv_s.get_height() // 2))
             buttons.append((sv_rect, 'survival'))
 
+            # ── 일일 챌린지 버튼 (전체 폭, 청보라 아케이드 강조) ────
+            dl_idx  = len(cards) + 2
+            dl_h    = 46
+            dl_rect = pygame.Rect(p_x + 20, sv_rect.bottom + 10, p_w - 40, dl_h)
+            dl_act  = (dl_idx == sel)
+            dl_hov  = dl_rect.collidepoint(mouse_pos)
+            dl_on   = dl_act or dl_hov
+            di      = daily_info or {}
+            dl_bg = (28, 24, 54) if dl_on else (20, 18, 40)
+            dl_bd = (150, 130, 245) if dl_on else (96, 84, 160)
+            dl_tc = (214, 200, 255) if dl_on else (168, 156, 214)
+            pygame.draw.rect(screen, dl_bg, dl_rect, border_radius=5)
+            pygame.draw.rect(screen, dl_bd, dl_rect, 2 if dl_act else 1, border_radius=5)
+            # 좌측 아이콘: 달력 느낌의 작은 사각 + 체크
+            _dx, _dy = dl_rect.left + 24, dl_rect.centery
+            pygame.draw.rect(screen, dl_bd, (_dx - 8, _dy - 8, 16, 16), border_radius=3)
+            pygame.draw.rect(screen, dl_bg, (_dx - 5, _dy - 3, 10, 8))
+            dlbl = self.font_md.render(t('menu_daily'), True, dl_tc)
+            screen.blit(dlbl, (dl_rect.left + 44, dl_rect.top + 6))
+            # 서브: 오늘의 변수명 (+ streak가 있으면 불꽃 표기)
+            mut_id = di.get('mutator')
+            sub_daily = t('mut_' + mut_id) if mut_id else t('menu_daily_sub')
+            streak = int(di.get('streak', 0))
+            if streak > 0:
+                sub_daily = f"{sub_daily}   🔥{streak}"
+            dsub = self.font_sm.render(sub_daily, True,
+                                       (188, 170, 240) if dl_on else (140, 128, 190))
+            screen.blit(dsub, (dl_rect.left + 44, dl_rect.bottom - 18))
+            # 우측: 오늘 이미 도전했으면 최고점 뱃지
+            if di.get('done') and di.get('best'):
+                bdg = self.font_sm.render(f"★{di['best']:,}", True, dl_tc)
+                screen.blit(bdg, (dl_rect.right - bdg.get_width() - 14,
+                                  dl_rect.centery - bdg.get_height() // 2))
+            buttons.append((dl_rect, 'daily'))
+
             # ── 설정 / 종료 버튼 (나란히, 작은 크기) ───────────────
             sm_h = 44
             sm_w = (p_w - 60) // 2
-            sm_y = sv_rect.bottom + 12
-            s_idx = len(cards) + 2;     q_idx = len(cards) + 3
+            sm_y = dl_rect.bottom + 12
+            s_idx = len(cards) + 3;     q_idx = len(cards) + 4
 
             for idx, action, lbl_key, danger, sm_x in [
                 (s_idx, 'settings', 'menu_settings', False, p_x + 20),

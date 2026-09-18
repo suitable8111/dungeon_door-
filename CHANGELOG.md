@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.31.0 — Daily Challenge
+
+A brand-new **Daily Challenge** mode — one shared seed a day, the same run for everyone on the planet:
+- **Deterministic daily seed** — the arena layout and your starting Augment offer are identical for every player that day (derived from the date), so the leaderboard is a fair head-to-head. Everyone starts at Lv10.
+- **Today's Mutator** — each day rotates a run-defining rule that reshapes strategy: *The Swarm* (huge cheap hordes), *Juggernauts* (fewer, beefy hitters), *Frenzy* (blazing-fast enemies + free frost aura), *Boss Rush* (bosses early), *Glass Hell* (glass-cannon enemies), *Vampiric Night* (tanky foes + free lifesteal), and *Titanfall* (you start as a giant vs. heavy ranks).
+- **Streaks** — play the challenge on consecutive days to build a 🔥 streak, shown on the menu button and the results screen.
+- **Dedicated Daily leaderboard** — its own board (game + Steam), and instant one-click retry of the same day's seed from the results screen.
+- Fully localized in all 5 languages.
+
 ## v2.30.0 — Augment rarity tiers
 
 Augment drafts now have Common / Rare / Legendary rarities:

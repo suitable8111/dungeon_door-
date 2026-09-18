@@ -103,9 +103,10 @@ def _scatter_obstacles(dungeon, rng, center):
             made += 1
 
 
-def generate_arena() -> tuple:
+def generate_arena(seed=None) -> tuple:
     """
     개방형 아레나 생성 — 바닥 + 흩뿌린 엄폐물(기둥) 지형.
+    seed 지정 시 지형이 결정론적(일일 챌린지: 전원 동일 아레나).
     Returns (Dungeon, (start_x, start_y))
     """
     width, height = ARENA_WIDTH, ARENA_HEIGHT
@@ -117,8 +118,8 @@ def generate_arena() -> tuple:
             dungeon.tiles[y][x] = Tile.floor()
 
     center = (width // 2, height // 2)
-    # 엄폐물 지형 배치 (매 런 랜덤 — 반복 플레이 변주)
-    _scatter_obstacles(dungeon, random.Random(), center)
+    # 엄폐물 지형 배치 (seed 없으면 매 런 랜덤 — 반복 플레이 변주)
+    _scatter_obstacles(dungeon, random.Random(seed), center)
 
     # 전체 시야 공개
     dungeon.reveal_all()

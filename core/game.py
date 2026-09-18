@@ -447,6 +447,11 @@ class Game:
         self._survival_bonus    = 0       # 누적 점수(킬 배율 + 스테이지 보너스)
         self._surv_score_pulse  = 0.0     # 점수판 펄스(증가 시 1.0→0)
         self._surv_next_milestone = 1000  # 다음 점수 마일스톤 연출 임계값
+        # ── 일일 챌린지(Daily Challenge) ──
+        self._daily_active      = False   # 이번 런이 일일 챌린지인가
+        self._daily_seed        = None    # 오늘의 결정론적 시드
+        self._daily_mutator     = None    # 오늘의 변수(mutator) dict
+        self._daily_id          = None    # 'YYYYMMDD'
         # ── 증강(Augment): 시작 + 강화마다 반복 선택, 빌드를 규정 ──
         self._aug_id            = None    # 최근 선택 증강 id (HUD 강조용)
         self._survival_augs     = []      # 획득한 증강 id 목록(중복=스택)
@@ -3157,9 +3162,11 @@ class Game:
                 elif self.state == 'survival_over' and event.key == pygame.K_r:
                     self._survival_restart()
                 elif self.state == 'survival_over' and event.key == pygame.K_l:
-                    # 결과 화면에서 무한 생존 리더보드 열람 (ESC로 복귀)
-                    self._open_ranking(return_state='survival_over',
-                                       start_name='survival_score')
+                    # 결과 화면에서 리더보드 열람 (ESC로 복귀) — 일일이면 일일 보드
+                    self._open_ranking(
+                        return_state='survival_over',
+                        start_name=('survival_daily' if self._daily_active
+                                    else 'survival_score'))
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
                         and ((event.unicode and (event.unicode.isalnum()
                                                  or event.unicode == '.'))
@@ -3375,7 +3382,7 @@ class Game:
             return
         typ = action['type']
         n = len(self._cards)
-        total = n + 4  # + multiplayer + survival + settings + quit
+        total = n + 5  # + multiplayer + survival + daily + settings + quit
         if typ == 'move':
             dy = action.get('dy', 0)
             if dy != 0:
@@ -3390,10 +3397,12 @@ class Game:
                 self.audio.play('menu_select')
                 self._launch_survival()
             elif self._menu_sel == n + 2:
+                self._launch_daily()
+            elif self._menu_sel == n + 3:
                 self.audio.play('menu_select')
                 self._menu_page = 'settings'
                 self._menu_settings_sel = 0
-            elif self._menu_sel == n + 3:
+            elif self._menu_sel == n + 4:
                 self._quit_game()
 
     def _open_multiplayer(self):
@@ -3839,6 +3848,8 @@ class Game:
                 elif action == 'survival':
                     self.audio.play('menu_select')
                     self._launch_survival()
+                elif action == 'daily':
+                    self._launch_daily()
                 elif action == 'settings':
                     self._menu_page = 'settings'
                     self._menu_settings_sel = 0
@@ -10201,6 +10212,40 @@ class Game:
             self._pending_survival = True
             self._open_char_create(None)
 
+    def _daily_menu_info(self):
+        """메뉴 표시용 오늘의 챌린지 정보 — 변수 id / streak / 오늘 최고점."""
+        from core import daily as _daily
+        mut = _daily.daily_mutator()
+        rec = self._records.get('daily') or {}
+        today = _daily.daily_id()
+        return {
+            'mutator': mut['id'],
+            'streak':  self._daily_streak(),
+            'best':    int(rec.get('best', 0)) if rec.get('date') == today else 0,
+            'done':    rec.get('date') == today,
+        }
+
+    def _launch_daily(self):
+        """일일 챌린지 진입 — 오늘의 시드/변수로 결정론적 런 시작(전원 동일).
+        레벨은 SURVIVAL_START_LEVEL 고정(공정성). 저장된 생존 캐릭터가 있으면
+        직업/외형만 재사용, 없으면 워리어 기본 외형으로 즉시 시작(원클릭)."""
+        from core import daily as _daily
+        seed = _daily.daily_seed()
+        mut  = _daily.daily_mutator()
+        did  = _daily.daily_id()
+        prof = self._records.get('survival_char') or {}
+        cls  = prof.get('char_class') if prof.get('char_class') in CLASSES else 'warrior'
+        app  = prof.get('appearance') or {'skin': 0, 'hair': 0, 'haircol': 0}
+        name = prof.get('name', 'Hero')
+        self.audio.play('menu_select')
+        self._begin_survival_run(cls, name, app,
+                                 start_level=SURVIVAL_START_LEVEL, persist=False,
+                                 daily_seed=seed, mutator=mut, daily_id=did)
+        # 오늘의 변수 배너
+        self.messages.append(
+            (t('daily_mutator_banner', t('mut_' + mut['id'])), 'warn'))
+        self.clock.tick()
+
     def _save_survival_char(self, char_class, name, appearance, level):
         """전용 생존 캐릭터 프로필 저장(레벨/정체성만 — 아이템·층 저장 안 함)."""
         self._records['survival_char'] = {
@@ -10212,14 +10257,20 @@ class Game:
             save_records(self._records)
 
     def _begin_survival_run(self, char_class, char_name='Hero', appearance=None,
-                            start_level=None, persist=False):
+                            start_level=None, persist=False,
+                            daily_seed=None, mutator=None, daily_id=None):
         """무한 생존 런 셋업 — 인벤/장비/층은 저장하지 않는 일회성 런.
         start_level(기본 Lv10 또는 저장된 생존 레벨)에서 시작 + 스킬 전부 최대·
-        조합 전체 해금 + 공속 극대화(아케이드 손맛). persist=True면 종료 시 레벨 저장."""
+        조합 전체 해금 + 공속 극대화(아케이드 손맛). persist=True면 종료 시 레벨 저장.
+        daily_seed 지정 시 일일 챌린지 — 아레나/시작 증강/변수가 결정론적."""
         if start_level is None:
             start_level = SURVIVAL_START_LEVEL
         self._survival_persist = persist
         self._survival_start_level = start_level
+        self._daily_active  = daily_seed is not None
+        self._daily_seed    = daily_seed
+        self._daily_mutator = mutator
+        self._daily_id      = daily_id
         self._char_class = char_class if char_class in CLASSES else 'warrior'
         self._char_name  = char_name or 'Hero'
         self._char_appearance = dict(appearance) if appearance else \
@@ -10269,9 +10320,45 @@ class Game:
         p.attack_speed = max(p.attack_speed, 8.0)
         # 증강 상태 초기화 (매 런 새로 선택)
         self._reset_augments()
+        # 일일 챌린지: 오늘의 변수(mutator)를 플레이어 시작 보정으로 반영
+        if self._daily_active and mutator:
+            self._apply_daily_player_effect(mutator.get('player'))
         self.state = 'playing'
         self._enter_survival()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
+        # 일일: 시작 증강 3택을 결정론적으로(전원 동일) — 전역 RNG를 시드 고정
+        if self._daily_active and daily_seed is not None:
+            random.seed(daily_seed ^ 0x5EED)
         self._open_survival_augment()   # 런 시작 증강 드래프트 (아레나는 일시정지)
+        if self._daily_active and daily_seed is not None:
+            random.seed()   # 이후 게임플레이는 다시 비결정론적으로 복귀
+
+    def _apply_daily_player_effect(self, kind):
+        """오늘의 변수에 딸린 플레이어 시작 보정(증강 필드 재사용)."""
+        p = self.player
+        if kind == 'lifesteal':
+            self._aug_lifesteal = max(self._aug_lifesteal, 0.08)
+        elif kind == 'frost':
+            self._aug_frost_aura = True
+        elif kind == 'regen':
+            self._aug_regen = max(self._aug_regen, 3.0)
+        elif kind == 'giant':
+            self._aug_size_scale = 1.4
+            p.max_hp = int(p.max_hp * 1.6); p.hp = p.max_hp
+            p.attack = int(p.attack * 1.2)
+
+    def _apply_daily_to_enemies(self, enemies, mut):
+        """오늘의 변수를 스폰된 적에 곱연산으로 반영(체력·공격·속도)."""
+        hp_m  = mut.get('enemy_hp', 1.0)
+        dmg_m = mut.get('enemy_dmg', 1.0)
+        spd_m = mut.get('spd', 1.0)
+        for e in enemies:
+            if hp_m != 1.0:
+                e.max_hp = max(1, int(e.max_hp * hp_m)); e.hp = e.max_hp
+            if dmg_m != 1.0:
+                e.attack = max(1, int(e.attack * dmg_m))
+            if spd_m != 1.0:                 # 속도↑ = 간격(ms)↓
+                e.move_ms   = max(120, int(e.move_ms   / spd_m))
+                e.attack_ms = max(300, int(e.attack_ms / spd_m))
 
     def _enter_survival(self):
         self._survival_active   = True
@@ -10288,7 +10375,8 @@ class Game:
         self._surv_score_pulse  = 0.0
         self._surv_next_milestone = 1000
 
-        dungeon, start = generate_arena()
+        # 일일 챌린지면 시드 고정 아레나(전원 동일 지형), 아니면 랜덤
+        dungeon, start = generate_arena(self._daily_seed if self._daily_active else None)
         self.dungeon = dungeon
         self._theme  = BURNING_THEME
         self.player.x, self.player.y = start
@@ -10337,15 +10425,26 @@ class Game:
         interval = max(700, 2000 - power * 55 - int(self._survival_elapsed / 1000) * 4)
         live_cap = min(MAX_LIVE_ENEMIES, 14 + power * 4)   # 동시 활성 상한(몰살 방지)
         per_cap  = max(4, 4 + power * 2)                   # 1회 스폰 상한
+        # 일일 챌린지 변수: 밀도(count) 반영
+        mut = self._daily_mutator if self._daily_active else None
+        if mut:
+            cmul = mut.get('count', 1.0)
+            live_cap = min(MAX_LIVE_ENEMIES, int(live_cap * cmul))
+            per_cap  = max(3, int(per_cap * cmul))
         live = sum(1 for e in self.dungeon.enemies if e.is_alive())
         if self._survival_spawn_ms <= 0 and live < live_cap:
             self._survival_spawn_ms = interval
             self._survival_wave += 1
             # 초반 웨이브(1~5)엔 보스급 제외 — 시작부터 보스가 쏟아지면 너무 빡세다.
             allow_boss = self._survival_wave >= 6
+            if mut and mut.get('boss_early'):    # boss_rush: 이른 웨이브부터 보스
+                allow_boss = self._survival_wave >= 2
             new_enemies = spawn_wave(self.dungeon, self._enemy_data, vfloor, diff,
                                      allow_boss=allow_boss)
-            self.dungeon.enemies.extend(new_enemies[:per_cap])
+            new_enemies = new_enemies[:per_cap]
+            if mut:                              # 적 능력치/속도 변수 반영
+                self._apply_daily_to_enemies(new_enemies, mut)
+            self.dungeon.enemies.extend(new_enemies)
 
         # 킬 기반 증강 드래프트 (시작 증강과 동일한 아수라장 결로 반복)
         kills = self._run_kills - self._survival_kills0
@@ -10753,13 +10852,20 @@ class Game:
             'score': self._survival_score,
             'level': reached_level,
             'stage': self._survival_stage,
+            'daily': self._daily_active,
+            'mutator': (self._daily_mutator or {}).get('id') if self._daily_active else None,
         }
         dirty = False
-        best = self._records.get('survival_best', 0)
-        self._survival_new_best = self._survival_score > best
-        if self._survival_new_best:
-            self._records['survival_best'] = self._survival_score
-            dirty = True
+        if self._daily_active:
+            # 일일 챌린지: 오늘 날짜별 최고점 + 연속 도전 streak 기록
+            dirty |= self._record_daily_result(self._survival_score)
+            self._survival_new_best = getattr(self, '_daily_new_best', False)
+        else:
+            best = self._records.get('survival_best', 0)
+            self._survival_new_best = self._survival_score > best
+            if self._survival_new_best:
+                self._records['survival_best'] = self._survival_score
+                dirty = True
         # 전용 생존 캐릭터: 도달 최고 레벨만 영속 저장(아이템/층은 저장 안 함)
         self._survival_level_up = False
         if self._survival_persist:
@@ -10777,13 +10883,55 @@ class Game:
         if dirty and not self._is_test_mode:
             from core.save_load import save_records
             save_records(self._records)
-        # 리더보드: 무한 생존 최고 점수 제출(테스트 제외; Steam KeepBest)
+        # 리더보드: 최고 점수 제출(테스트 제외; Steam KeepBest)
         if not self._is_test_mode:
             self.leaderboards.player_name = self._char_name or 'Hero'
-            self.leaderboards.submit_survival(int(self._survival_score))
+            if self._daily_active:
+                self.leaderboards.submit_daily(int(self._survival_score))
+            else:
+                self.leaderboards.submit_survival(int(self._survival_score))
         self.audio.play('death')
         self._start_shake(6, 500)
         self.state = 'survival_over'
+
+    def _record_daily_result(self, score):
+        """일일 챌린지 결과 기록 — 오늘의 최고점 + 연속 도전 streak.
+        records['daily'] = {date, best, streak, best_streak, plays}. dirty 반환."""
+        from core import daily as _daily
+        today = self._daily_id or _daily.daily_id()
+        rec = dict(self._records.get('daily') or {})
+        self._daily_new_best = False
+        if rec.get('date') == today:
+            # 같은 날 재도전 — 최고점만 갱신, streak 유지
+            if score > int(rec.get('best', 0)):
+                rec['best'] = int(score)
+                self._daily_new_best = True
+            rec['plays'] = int(rec.get('plays', 0)) + 1
+        else:
+            # 새 날 — streak 판정(전날 도전했으면 연속, 아니면 1로 리셋)
+            prev = rec.get('date')
+            streak = (int(rec.get('streak', 0)) + 1
+                      if prev and prev == _daily.prev_day(today) else 1)
+            rec = {'date': today, 'best': int(score), 'streak': streak,
+                   'best_streak': max(int(rec.get('best_streak', 0)), streak),
+                   'plays': 1}
+            self._daily_new_best = True
+        rec['best_streak'] = max(int(rec.get('best_streak', 0)),
+                                 int(rec.get('streak', 1)))
+        self._records['daily'] = rec
+        return True
+
+    def _daily_streak(self):
+        """오늘 기준 유효한 연속 도전 수(끊겼으면 0)."""
+        from core import daily as _daily
+        rec = self._records.get('daily') or {}
+        today = _daily.daily_id()
+        d = rec.get('date')
+        if d == today:
+            return int(rec.get('streak', 0))
+        if d == _daily.prev_day(today):    # 어제까지 유지 — 오늘 도전하면 이어짐
+            return int(rec.get('streak', 0))
+        return 0
 
     def _survival_return_menu(self):
         self._survival_active = False
@@ -10794,7 +10942,9 @@ class Game:
     def _survival_restart(self):
         """새 생존 런 즉시 재시작. 영속 캐릭터면 저장된(갱신된) 레벨서 다시 시작."""
         self.audio.play('menu_select')
-        if self._survival_persist:
+        if self._daily_active:
+            self._launch_daily()      # 같은 오늘의 시드로 재도전
+        elif self._survival_persist:
             self._launch_survival()   # records의 최신 생존 레벨로 재시작
         else:
             self._begin_survival_run(self._char_class, self._char_name,
@@ -10845,8 +10995,15 @@ class Game:
         s.blit(overlay, (GAME_X, GAME_Y))
         cx = GAME_X + GAME_W // 2
         y = GAME_Y + 60
-        title = self.hud.font_lg.render(t('survival_over_title'), True, (240, 120, 110))
-        s.blit(title, (cx - title.get_width() // 2, y)); y += 54
+        is_daily = f.get('daily')
+        title_txt = t('daily_over_title') if is_daily else t('survival_over_title')
+        title = self.hud.font_lg.render(title_txt, True, (240, 120, 110))
+        s.blit(title, (cx - title.get_width() // 2, y)); y += 44
+        # 일일: 오늘의 변수 라벨
+        if is_daily and f.get('mutator'):
+            mt = self.hud.font_sm.render(
+                t('daily_mutator_label', t('mut_' + f['mutator'])), True, (188, 170, 240))
+            s.blit(mt, (cx - mt.get_width() // 2, y)); y += 26
         rows = [
             (t('survival_stat_level'), f"Lv {f.get('level', 0)}"),
             (t('survival_stat_stage'), str(f.get('stage', 0))),
@@ -10871,10 +11028,18 @@ class Game:
             nb = self.hud.font_md.render(t('survival_new_best'), True, (120, 240, 140))
             s.blit(nb, (cx - nb.get_width() // 2, y)); y += 34
         else:
+            best_val = ((self._records.get('daily') or {}).get('best', 0) if is_daily
+                        else self._records.get('survival_best', 0))
             best = self.hud.font_sm.render(
-                t('survival_best', self._records.get('survival_best', 0)),
-                True, (170, 190, 175))
+                t('survival_best', best_val), True, (170, 190, 175))
             s.blit(best, (cx - best.get_width() // 2, y)); y += 30
+        # 일일: 연속 도전 streak 표기(도파민 — 매일 이어가기)
+        if is_daily:
+            stk = self._daily_streak()
+            if stk > 0:
+                ss = self.hud.font_sm.render(
+                    t('daily_streak', stk), True, (255, 190, 90))
+                s.blit(ss, (cx - ss.get_width() // 2, y)); y += 28
         hint = self.hud.font_sm.render(t('survival_return_hint'), True, (160, 175, 165))
         s.blit(hint, (cx - hint.get_width() // 2, GAME_Y + GAME_H - 40))
 
@@ -11141,6 +11306,7 @@ class Game:
                 mp_upnp=self._mp_upnp,
                 mp_recent=self._settings.get('mp_recent'),
                 survival_char=self._records.get('survival_char'),
+                daily_info=self._daily_menu_info(),
             )
             pygame.display.flip()
             return
