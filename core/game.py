@@ -10860,6 +10860,7 @@ class Game:
             # 일일 챌린지: 오늘 날짜별 최고점 + 연속 도전 streak 기록
             dirty |= self._record_daily_result(self._survival_score)
             self._survival_new_best = getattr(self, '_daily_new_best', False)
+            dirty |= self._ach_check_daily()
         else:
             best = self._records.get('survival_best', 0)
             self._survival_new_best = self._survival_score > best
@@ -10920,6 +10921,30 @@ class Game:
                                  int(rec.get('streak', 1)))
         self._records['daily'] = rec
         return True
+
+    def _ach_check_daily(self):
+        """일일 챌린지 업적 판정 — 첫 완료 / streak 3·7 / 모든 변수 경험.
+        경험한 변수 집합을 records['daily_mutators_seen']에 누적. dirty 반환."""
+        from core import daily as _daily
+        # 첫 완료
+        self._ach_unlock('ACH_DAILY_FIRST')
+        # streak
+        streak = int((self._records.get('daily') or {}).get('streak', 0))
+        if streak >= 3:
+            self._ach_unlock('ACH_DAILY_STREAK_3')
+        if streak >= 7:
+            self._ach_unlock('ACH_DAILY_STREAK_7')
+        # 경험한 변수 누적 → 전부 경험 시 달성
+        seen = set(self._records.get('daily_mutators_seen') or [])
+        mid = (self._daily_mutator or {}).get('id')
+        dirty = False
+        if mid and mid not in seen:
+            seen.add(mid)
+            self._records['daily_mutators_seen'] = sorted(seen)
+            dirty = True
+        if len(seen) >= len(_daily.MUTATORS):
+            self._ach_unlock('ACH_DAILY_ALL_MUTATORS')
+        return dirty
 
     def _daily_streak(self):
         """오늘 기준 유효한 연속 도전 수(끊겼으면 0)."""

@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.32.0 — Daily Challenge achievements
+
+Four new achievements reward you for keeping the Daily Challenge habit:
+- **Today's Challenger** — complete your first Daily Challenge.
+- **Three in a Row** — reach a 3-day streak.
+- **Perfect Week** — reach a 7-day streak.
+- **Mutator Master** — experience all seven daily Mutators.
+
+Unlocks fire in-game immediately with a toast, and sync to Steam automatically once live. Fully localized in all 5 languages.
+
 ## v2.31.0 — Daily Challenge
 
 A brand-new **Daily Challenge** mode — one shared seed a day, the same run for everyone on the planet:

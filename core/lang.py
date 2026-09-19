@@ -2364,6 +2364,11 @@ _T: dict[str, dict[str, str]] = {
     'ach_ACH_FISH_50':     {'ko': '낚시의 달인', 'en': 'Master Angler', 'ja': '釣りの達人', 'zh': '钓鱼大师', 'ru': 'Мастер рыбалки'},
     'ach_ACH_RANCH_FIRST': {'ko': '목장 일꾼', 'en': 'Ranch Hand', 'ja': '牧場の働き手', 'zh': '牧场帮手', 'ru': 'Работник ранчо'},
     'ach_ACH_LIFE_MASTER': {'ko': '마을 생활의 달인', 'en': 'Homesteader', 'ja': '村暮らしの達人', 'zh': '田园生活大师', 'ru': 'Хозяин усадьбы'},
+    # ── 일일 챌린지 도전과제 ──────────────────────────────────────────
+    'ach_ACH_DAILY_FIRST':        {'ko': '오늘의 도전자', 'en': "Today's Challenger", 'ja': '本日の挑戦者', 'zh': '今日挑战者', 'ru': 'Претендент дня'},
+    'ach_ACH_DAILY_STREAK_3':     {'ko': '사흘 연속', 'en': 'Three in a Row', 'ja': '三日連続', 'zh': '连续三天', 'ru': 'Три подряд'},
+    'ach_ACH_DAILY_STREAK_7':     {'ko': '일주일 개근', 'en': 'Perfect Week', 'ja': '一週間皆勤', 'zh': '一周全勤', 'ru': 'Идеальная неделя'},
+    'ach_ACH_DAILY_ALL_MUTATORS': {'ko': '변수 정복자', 'en': 'Mutator Master', 'ja': '変異の征服者', 'zh': '变数征服者', 'ru': 'Мастер мутаторов'},
     # ── 리더보드 ──────────────────────────────────────────────────────
     'menu_ranking':   {'ko': '랭킹', 'en': 'Ranking', 'ja': 'ランキング', 'zh': '排行榜', 'ru': 'Рейтинг'},
     'ranking_board':  {'ko': '명예의 전당', 'en': 'Hall of Fame', 'ja': '栄誉の殿堂', 'zh': '荣誉殿堂', 'ru': 'Зал славы'},

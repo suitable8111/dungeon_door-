@@ -55,6 +55,11 @@ ACHIEVEMENTS = {
     'ACH_FISH_50':     {'stat': 'fish',    'need': 50},         # 물고기 50마리
     'ACH_RANCH_FIRST': {},                                      # 첫 목장 수확
     'ACH_LIFE_MASTER': {},                                      # 농사·낚시·목장 전부 경험
+    # ── 일일 챌린지(Daily Challenge) ──────────────────────────────────
+    'ACH_DAILY_FIRST':        {},                               # 첫 일일 챌린지 완료
+    'ACH_DAILY_STREAK_3':     {},                               # 연속 도전 3일
+    'ACH_DAILY_STREAK_7':     {},                               # 연속 도전 7일
+    'ACH_DAILY_ALL_MUTATORS': {},                               # 모든 오늘의 변수 경험
 }
 
 # 층수 도달형: floor → api_name
