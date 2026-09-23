@@ -10822,6 +10822,27 @@ class Game:
             if all(owned.count(a) >= n for a, n in recipe['req'].items()):
                 self._apply_evolution(eid)
 
+    def _evolution_hint_for(self, aid):
+        """드래프트 카드용 진화 힌트 — 이 증강을 고르면 발동/근접하는 진화.
+        반환 (evo_id, name, ready). ready=True면 지금 고르면 즉시 진화.
+        아직 발동 안 한 레시피 중, 다른 재료를 이미 보유해 의미 있는 것만."""
+        owned = self._survival_augs
+        best = None
+        for r in self._AUG_EVOLUTIONS:
+            if r['id'] in self._survival_evos or aid not in r['req']:
+                continue
+            req = r['req']
+            ready = all(owned.count(a) + (1 if a == aid else 0) >= n
+                        for a, n in req.items())
+            have_other = any(owned.count(a) >= n
+                             for a, n in req.items() if a != aid)
+            if not ready and not have_other:
+                continue          # 다른 재료가 하나도 없으면 힌트 생략(스팸 방지)
+            cand = (r['id'], t('evo_' + r['id']), ready)
+            if best is None or (ready and not best[2]):
+                best = cand       # ready 힌트를 우선
+        return best
+
     def _apply_evolution(self, eid):
         """진화 증강 발동 — 강력한 보너스 + 황금 연출."""
         p = self.player
@@ -11184,6 +11205,20 @@ class Game:
             for line in self._wrap_text(t('aug_' + aid + '_d'), self.hud.font_sm, cw - 28):
                 ls = self.hud.font_sm.render(line, True, (210, 218, 228))
                 s.blit(ls, (cx + 14, dy)); dy += 18
+            # 진화 힌트(황금) — 이 카드를 고르면 발동/근접하는 진화
+            hintv = self._evolution_hint_for(aid)
+            if hintv:
+                _eid, ename, ready = hintv
+                htxt = (t('evo_hint_ready', ename) if ready
+                        else t('evo_hint_near', ename))
+                hcol = self._EVO_COLOR if ready else (185, 165, 110)
+                if ready:   # 준비된 카드는 은은한 황금 맥동 배경
+                    pulse = 0.5 + 0.5 * math.sin(tk * 0.008 + i)
+                    hb = pygame.Surface((cw - 8, 20), pygame.SRCALPHA)
+                    hb.fill((*self._EVO_COLOR, int(30 + 45 * pulse)))
+                    s.blit(hb, (cx + 4, oy + ch - 54))
+                hs = self.hud.font_sm.render(htxt, True, hcol)
+                s.blit(hs, (cx + (cw - hs.get_width()) // 2, oy + ch - 52))
             num = self.hud.font_md.render(str(i + 1), True, col)
             s.blit(num, (cx + cw // 2 - num.get_width() // 2, oy + ch - 30))
         hint = self.hud.font_sm.render(t('survival_upgrade_hint'), True, (160, 175, 195))

@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.34.0 — Evolution hints in the draft
+
+Augment Evolutions are no longer a hidden surprise — the draft now teaches them:
+- When picking a card would **complete an Evolution**, it lights up with a pulsing golden **✦ EVOLVES → [name]** badge, so you know it's a game-changing pick.
+- When you already hold one piece of a combo, matching cards show a subtler **✦ [name] nearby** teaser — a breadcrumb toward the fusion.
+- Hints stay quiet until they're meaningful (no spam when you own none of a recipe), and disappear once an Evolution has fired.
+
+Fully localized in all 5 languages.
+
 ## v2.33.0 — Augment Evolutions
 
 Augments now **fuse**. Collect the right combination in a survival run and they evolve into a golden, run-defining super-augment — with a screen-shaking banner when it triggers:
