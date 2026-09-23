@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.33.0 — Augment Evolutions
+
+Augments now **fuse**. Collect the right combination in a survival run and they evolve into a golden, run-defining super-augment — with a screen-shaking banner when it triggers:
+- **Bloodstorm** (Vampire + Bullet Storm) — your bullet storm becomes a long-range lifesteal barrage.
+- **Permafrost** (Frost Aura + Time Warp) — a bigger, harder-biting freeze aura plus a stronger global slow.
+- **Cataclysm** (Detonator + Overpower ×3) — on-kill explosions get a wider radius and far heavier damage.
+- **Immortal** (Phoenix + Regen ×2) — an extra revive charge and a big regen boost.
+- **Warp Titan** (Titan + Berserker Pact) — keep the giant's size and health, but move and swing fast with slashed cooldowns.
+
+Active evolutions show as golden badges on the survival HUD and on the results screen. Fully localized in all 5 languages.
+
 ## v2.32.0 — Daily Challenge achievements
 
 Four new achievements reward you for keeping the Daily Challenge habit:

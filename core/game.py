@@ -10397,12 +10397,14 @@ class Game:
         if self._aug_lifesteal > 0:      # 흡혈귀: 흡혈 버프를 매 프레임 갱신(상시 유지)
             self.player.lifesteal_ms = 500
             self.player.lifesteal_pct = max(self.player.lifesteal_pct, self._aug_lifesteal)
-        if self._aug_frost_aura:         # 서리 오라: 반경 4칸 내 적 둔화
+        if self._aug_frost_aura:         # 서리 오라: 반경 내 적 둔화(진화 시 강화)
             px, py = self.player.x, self.player.y
+            frad = 6 if self._evo_permafrost else 4
+            fslow = 0.7 if self._evo_permafrost else 0.5
             for e in self.dungeon.enemies:
-                if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= 4:
+                if e.is_alive() and max(abs(e.x - px), abs(e.y - py)) <= frad:
                     e.slowed_ms = max(e.slowed_ms, 350)
-                    e.slow_pct = max(e.slow_pct, 0.5)
+                    e.slow_pct = max(e.slow_pct, fslow)
         if self._aug_global_slow > 0:    # 시간 왜곡(전설): 전역 적 둔화
             for e in self.dungeon.enemies:
                 if e.is_alive():
@@ -10687,6 +10689,22 @@ class Game:
         self._aug_exploding = False
         self._aug_phoenix = 0        # 불사조 부활 충전(전설)
         self._aug_global_slow = 0.0  # 시간왜곡 전역 둔화율(전설)
+        # ── 증강 진화(Evolution) — 특정 조합 보유 시 상위 합체 ──
+        self._survival_evos = []     # 발동한 진화 id 목록
+        self._evo_bloodstorm = False # 흡혈탄막: 탄막 사거리↑ + 흡혈탄
+        self._evo_permafrost = False # 절대영도: 서리 오라 반경/둔화 강화
+        self._evo_cataclysm  = False # 대재앙: 처치 폭발 반경/피해 대폭
+        self._evo_warptitan  = False # 광폭 거신: 거신 크기 유지 + 민첩
+
+    # 진화 레시피 — 필요한 증강(id: 최소 보유수). 전부 충족 시 1회 발동.
+    _AUG_EVOLUTIONS = [
+        {'id': 'evo_bloodstorm', 'req': {'vampire': 1, 'bullet_storm': 1}},
+        {'id': 'evo_permafrost', 'req': {'frost_aura': 1, 'time_warp': 1}},
+        {'id': 'evo_cataclysm',  'req': {'detonator': 1, 'overpower': 3}},
+        {'id': 'evo_immortal',   'req': {'phoenix': 1, 'regen': 2}},
+        {'id': 'evo_warptitan',  'req': {'titan': 1, 'berserker_pact': 1}},
+    ]
+    _EVO_COLOR = (255, 225, 120)   # 진화 = 황금
 
     def _open_survival_augment(self):
         """증강 드래프트 — 3장 중 1택(아레나 일시정지). 시작·강화 공용.
@@ -10791,11 +10809,56 @@ class Game:
         self.animator.particles.emit_levelup(p.x, p.y)
         self.audio.play('tier_up')
         self._start_shake(4, 220)
+        # 조합 충족 시 진화 발동
+        self._check_augment_evolutions()
+
+    def _check_augment_evolutions(self):
+        """보유 증강이 진화 레시피를 충족하면 상위 진화로 합체(1회)."""
+        owned = self._survival_augs
+        for recipe in self._AUG_EVOLUTIONS:
+            eid = recipe['id']
+            if eid in self._survival_evos:
+                continue
+            if all(owned.count(a) >= n for a, n in recipe['req'].items()):
+                self._apply_evolution(eid)
+
+    def _apply_evolution(self, eid):
+        """진화 증강 발동 — 강력한 보너스 + 황금 연출."""
+        p = self.player
+        self._survival_evos.append(eid)
+        if eid == 'evo_bloodstorm':      # 흡혈탄막: 탄막 사거리↑ + 흡혈 대폭
+            self._evo_bloodstorm = True
+            self._aug_lifesteal = min(0.75, self._aug_lifesteal + 0.2)
+        elif eid == 'evo_permafrost':    # 절대영도: 서리/전역 둔화 강화 + 방어
+            self._evo_permafrost = True
+            self._aug_global_slow = max(self._aug_global_slow, 0.65)
+            p.defense += 6
+        elif eid == 'evo_cataclysm':     # 대재앙: 처치 폭발 강화 + 공격력
+            self._evo_cataclysm = True
+            p.attack = int(p.attack * 1.25)
+        elif eid == 'evo_immortal':      # 불멸: 부활 +1회 + 재생 대폭
+            self._aug_phoenix += 1
+            self._aug_regen += max(4, int(p.max_hp * 0.02))
+        elif eid == 'evo_warptitan':     # 광폭 거신: 거신 유지 + 민첩·쿨↓
+            self._evo_warptitan = True
+            p.move_speed = round(p.move_speed * 1.6, 2)   # 거신의 굼뜸 상쇄+
+            p.attack_speed = round(p.attack_speed * 1.4, 2)
+            self._aug_cd_mul = min(self._aug_cd_mul, 0.4)
+            p.max_hp = int(p.max_hp * 1.2); p.hp = p.max_hp
+        self._apply_skill_level_cds()
+        # 황금 연출 — 배너 + 강한 플래시 + 셰이크 + 큰 효과음
+        self.animator.add(BannerAnim(t('evo_banner', t('evo_' + eid)),
+                                     self._EVO_COLOR, y=100, size=34, duration_ms=1900))
+        self.animator.particles.emit_levelup(p.x, p.y)
+        self._gold_flash_ms = 300
+        self._start_shake(8, 560)
+        self.audio.play('levelup_big')
+        self.messages.append((t('evo_banner', t('evo_' + eid)), 'good'))
 
     def _aug_fire_burst(self):
-        """탄막 증강 — 8방향 직선 탄막 방사(스킬 시전 시)."""
+        """탄막 증강 — 8방향 직선 탄막 방사(스킬 시전 시). 흡혈탄막 진화 시 사거리↑."""
         px, py = self.player.x, self.player.y
-        rng = 6
+        rng = 10 if self._evo_bloodstorm else 6
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1),
                        (1, 1), (1, -1), (-1, 1), (-1, -1)):
             facing = self._DIR_NAME.get((dx, dy), 'right' if dx >= 0 else 'left')
@@ -10822,9 +10885,11 @@ class Game:
             return
         self._aug_exploding = True
         try:
-            radius = 2
+            # 대재앙(진화): 폭발 반경/피해 대폭
+            radius = 3 if self._evo_cataclysm else 2
+            dmg_mul = 1.3 if self._evo_cataclysm else 0.8
             self.animator.particles.emit_fireball_hit(ex, ey)
-            self._start_shake(4, 160)
+            self._start_shake(5 if self._evo_cataclysm else 4, 160)
             for ddx in range(-radius, radius + 1):
                 for ddy in range(-radius, radius + 1):
                     if ddx == 0 and ddy == 0:
@@ -10833,7 +10898,7 @@ class Game:
                     enemy = self.dungeon.get_enemy_at(nx, ny)
                     if not enemy or not enemy.is_alive():
                         continue
-                    dmg = roll_damage(self._skill_atk, enemy.defense, 0.8)
+                    dmg = roll_damage(self._skill_atk, enemy.defense, dmg_mul)
                     enemy.take_damage(dmg); enemy.on_hurt(ex, ey)
                     self.animator.add(HitFlashAnim(nx, ny, dmg, (255, 150, 60)))
                     if not enemy.is_alive():
@@ -11065,6 +11130,11 @@ class Game:
                 ss = self.hud.font_sm.render(
                     t('daily_streak', stk), True, (255, 190, 90))
                 s.blit(ss, (cx - ss.get_width() // 2, y)); y += 28
+        # 발동한 진화 증강(황금) 나열
+        if self._survival_evos:
+            evt = "✦ " + " · ".join(t('evo_' + e) for e in self._survival_evos)
+            es = self.hud.font_sm.render(evt, True, self._EVO_COLOR)
+            s.blit(es, (cx - es.get_width() // 2, y)); y += 28
         hint = self.hud.font_sm.render(t('survival_return_hint'), True, (160, 175, 165))
         s.blit(hint, (cx - hint.get_width() // 2, GAME_Y + GAME_H - 40))
 
@@ -11184,6 +11254,14 @@ class Game:
             label = f"◆ {t('aug_' + self._aug_id)}  ×{len(self._survival_augs)}"
             ab = self._font_burning_small.render(label, True, col)
             s.blit(ab, (GAME_X + 10, GAME_Y + 10))
+        # 진화 증강 뱃지 (황금) — 발동한 진화 나열
+        if self._survival_evos:
+            ey = GAME_Y + 10 + (24 if self._aug_id else 0)
+            for eid in self._survival_evos:
+                et = self._font_burning_small.render(
+                    f"✦ {t('evo_' + eid)}", True, self._EVO_COLOR)
+                s.blit(et, (GAME_X + 10, ey))
+                ey += 22
 
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
     def _spawn_boss_summon(self, key: str, bx: int, by: int):
