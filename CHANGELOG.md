@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.35.0 — Evolution Codex
+
+A collectible reference for Augment Evolutions, so you can chase every fusion:
+- Press **[C]** on the augment draft or the survival results screen to open the **Evolution Codex**.
+- It lists all Evolutions with their **recipes always visible** (so you know what to build toward), a **Discovered X / 5** counter, and marks which ones are **active this run**.
+- Evolutions you've triggered are permanently recorded across runs — undiscovered ones show as **??????** with just their recipe, turning discovery into a collection goal.
+
+Fully localized in all 5 languages.
+
 ## v2.34.0 — Evolution hints in the draft
 
 Augment Evolutions are no longer a hidden surprise — the draft now teaches them:

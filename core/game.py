@@ -3167,6 +3167,9 @@ class Game:
                         return_state='survival_over',
                         start_name=('survival_daily' if self._daily_active
                                     else 'survival_score'))
+                elif (event.key == pygame.K_c
+                        and self.state in ('survival_over', 'survival_augment')):
+                    self._open_evo_codex(self.state)   # 진화 도감 (ESC로 복귀)
                 elif (self.state == 'menu' and self._menu_page == 'multiplayer'
                         and ((event.unicode and (event.unicode.isalnum()
                                                  or event.unicode == '.'))
@@ -3250,6 +3253,8 @@ class Game:
                     self.state = 'playing'
                 elif self.state == 'life_codex':
                     self.state = 'playing'              # 생활 도감은 바로 플레이로 복귀
+                elif self.state == 'evo_codex':
+                    self.state = getattr(self, '_codex_return', 'survival_over')
                 elif self.state == 'guide':
                     if self._guide_level == 1:
                         self._guide_level = 0           # 소분류 → 대분류로 복귀
@@ -10847,6 +10852,14 @@ class Game:
         """진화 증강 발동 — 강력한 보너스 + 황금 연출."""
         p = self.player
         self._survival_evos.append(eid)
+        # 진화 도감: 최초 발견 영구 기록
+        seen = set(self._records.get('evos_seen') or [])
+        if eid not in seen:
+            seen.add(eid)
+            self._records['evos_seen'] = sorted(seen)
+            if not self._is_test_mode:
+                from core.save_load import save_records
+                save_records(self._records)
         if eid == 'evo_bloodstorm':      # 흡혈탄막: 탄막 사거리↑ + 흡혈 대폭
             self._evo_bloodstorm = True
             self._aug_lifesteal = min(0.75, self._aug_lifesteal + 0.2)
@@ -11159,6 +11172,63 @@ class Game:
         hint = self.hud.font_sm.render(t('survival_return_hint'), True, (160, 175, 165))
         s.blit(hint, (cx - hint.get_width() // 2, GAME_Y + GAME_H - 40))
 
+    def _open_evo_codex(self, return_state):
+        """진화 도감 열기 — 복귀 상태 기억."""
+        self._codex_return = return_state
+        self.state = 'evo_codex'
+        self.audio.play('menu_select')
+
+    def _render_evo_codex(self):
+        """진화 도감 — 모든 진화의 레시피·효과·발견 여부(영구 기록)."""
+        s = self.screen
+        overlay = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+        overlay.fill((8, 8, 16, 240))
+        s.blit(overlay, (GAME_X, GAME_Y))
+        seen = set(self._records.get('evos_seen') or [])
+        active = set(getattr(self, '_survival_evos', []) or [])
+        total = len(self._AUG_EVOLUTIONS)
+        # 제목 + 진행도
+        title = self.hud.font_lg.render(t('codex_title'), True, self._EVO_COLOR)
+        s.blit(title, (GAME_X + (GAME_W - title.get_width()) // 2, GAME_Y + 26))
+        prog = self.hud.font_sm.render(
+            t('codex_progress', len(seen), total), True, (200, 200, 160))
+        s.blit(prog, (GAME_X + (GAME_W - prog.get_width()) // 2, GAME_Y + 62))
+        # 목록
+        rx = GAME_X + 40
+        rw = GAME_W - 80
+        ry = GAME_Y + 92
+        rh = 82
+        for r in self._AUG_EVOLUTIONS:
+            eid = r['id']
+            found = eid in seen
+            live = eid in active
+            bd = self._EVO_COLOR if found else (70, 74, 90)
+            bg = (30, 28, 18) if found else (18, 20, 28)
+            pygame.draw.rect(s, bg, (rx, ry, rw, rh - 8), border_radius=8)
+            pygame.draw.rect(s, bd, (rx, ry, rw, rh - 8),
+                             2 if (found or live) else 1, border_radius=8)
+            # 이름 (미발견은 ???)
+            nm_txt = t('evo_' + eid) if found else '??????'
+            nm = self.hud.font_md.render(f"✦ {nm_txt}", True,
+                                         self._EVO_COLOR if found else (120, 124, 140))
+            s.blit(nm, (rx + 14, ry + 8))
+            if live:
+                lv = self.hud.font_sm.render(t('codex_active'), True, (120, 240, 140))
+                s.blit(lv, (rx + rw - lv.get_width() - 14, ry + 10))
+            # 레시피 (항상 노출 — 발견 유도)
+            recipe = "  +  ".join(
+                (f"{t('aug_' + a)}×{n}" if n > 1 else t('aug_' + a))
+                for a, n in r['req'].items())
+            rc = self.hud.font_sm.render(recipe, True, (190, 200, 215))
+            s.blit(rc, (rx + 14, ry + 34))
+            # 효과 (발견 시만)
+            if found:
+                ef = self.hud.font_sm.render(t('evo_' + eid + '_d'), True, (170, 180, 165))
+                s.blit(ef, (rx + 14, ry + 54))
+            ry += rh
+        hint = self.hud.font_sm.render(t('codex_hint'), True, (150, 160, 175))
+        s.blit(hint, (GAME_X + (GAME_W - hint.get_width()) // 2, GAME_Y + GAME_H - 34))
+
     def _render_survival_augment(self):
         """런 시작 증강 드래프트 — 기믹 강화 3장 중 1택(아레나 위 오버레이)."""
         s = self.screen
@@ -11221,7 +11291,9 @@ class Game:
                 s.blit(hs, (cx + (cw - hs.get_width()) // 2, oy + ch - 52))
             num = self.hud.font_md.render(str(i + 1), True, col)
             s.blit(num, (cx + cw // 2 - num.get_width() // 2, oy + ch - 30))
-        hint = self.hud.font_sm.render(t('survival_upgrade_hint'), True, (160, 175, 195))
+        hint = self.hud.font_sm.render(
+            t('survival_upgrade_hint') + '   ·   ' + t('codex_open_hint'),
+            True, (160, 175, 195))
         s.blit(hint, (GAME_X + (GAME_W - hint.get_width()) // 2, GAME_Y + GAME_H - 34))
 
     def _draw_survival_hud(self):
@@ -11529,6 +11601,8 @@ class Game:
             self._render_guide_menu()
         elif self.state == 'life_codex':
             self._render_life_codex()
+        elif self.state == 'evo_codex':
+            self._render_evo_codex()
         elif self.state == 'gate_choice':
             self._render_gate_choice()
         elif self.state == 'survival_upgrade':
