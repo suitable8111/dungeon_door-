@@ -25,6 +25,7 @@ LEADERBOARDS = {
     'best_floor':         {'label': 'lb_best_floor',         'cls': None},
     'survival_score':     {'label': 'lb_survival_score',     'cls': None},
     'survival_daily':     {'label': 'lb_survival_daily',     'cls': None},
+    'survival_coop':      {'label': 'lb_survival_coop',      'cls': None},
     'best_floor_warrior': {'label': 'lb_best_floor_warrior', 'cls': 'warrior'},
     'best_floor_archer':  {'label': 'lb_best_floor_archer',  'cls': 'archer'},
     'best_floor_mage':    {'label': 'lb_best_floor_mage',    'cls': 'mage'},
@@ -85,6 +86,10 @@ class LeaderboardManager:
     def submit_daily(self, score: int) -> bool:
         """일일 챌린지 점수 반영(오늘의 시드 — 최고기록만 유지)."""
         return self.submit('survival_daily', score)
+
+    def submit_coop(self, score: int) -> bool:
+        """co-op 무한 생존 팀 점수 반영(최고기록만 유지)."""
+        return self.submit('survival_coop', score)
 
     def submit(self, name: str, score) -> bool:
         """점수 제출 — 로컬 최고기록 갱신 + Steam 업로드(KeepBest). 갱신 시 True."""

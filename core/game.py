@@ -557,7 +557,13 @@ class Game:
         self._coop_seed    = None     # 현재 co-op 층 생성 시드(결정론적 공유)
         self._coop_diff    = None     # 난이도 배수 {'hp','atk'} — 싱글보다 강함
         self._coop_item_next = 0      # 드랍 아이템 net_id 카운터(호스트)
+        self._coop_enemy_next = 0     # 동적 스폰 적 net_id 카운터(호스트, 무한 생존)
         self._coop_granting  = False  # 호스트 승인 획득 처리 중(_pickup 게이트 우회)
+        # co-op 무한 생존(멀티플레이 증강)
+        self._survival_coop  = False  # 이번 생존 런이 co-op인가
+        self._surv_draft_open = False # 증강 드래프트로 시뮬레이션 일시정지 중(호스트)
+        self._surv_draft_wait = set() # 아직 증강 미확정 pid 집합(호스트)
+        self._surv_wait_partner = False  # 내 선택 끝, 파트너 대기 중(양쪽 표시용)
         # 다운/부활/관전 (co-op 전용)
         self._downed       = False    # 내가 쓰러짐(부활 대기)
         self._downed_ms    = 0.0      # 블리드아웃 남은 시간(0이면 관전行)
@@ -642,6 +648,31 @@ class Game:
         elif kind == 'revive':
             # 파티원이 나를 부활시킴
             self._revive_self()
+        elif kind == 'coop_surv_enter':
+            # 호스트가 co-op 무한 생존 입장을 알림 — 같은 시드/난이도로 아레나 생성
+            self._coop_survival_start(int(data.get('seed', 0)),
+                                      int(data.get('level', SURVIVAL_START_LEVEL)),
+                                      data.get('diff') or None)
+        elif kind == 'surv_draft':
+            # 호스트: 팀 드래프트 개시 → 클라도 각자 증강 3장 열기
+            self._open_survival_augment()
+        elif kind == 'surv_pick_done' and self.net is not None and self.net.is_host:
+            # 호스트: 클라가 증강 선택 완료
+            self._coop_survival_pick_done(from_id)
+        elif kind == 'surv_resume':
+            # 호스트: 전원 선택 완료 → 재개(클라 대기 해제)
+            self._surv_wait_partner = False
+            self._surv_draft_open = False
+        elif kind == 'surv_hud':
+            # 클라: 팀 점수/웨이브/스테이지 HUD 갱신(호스트 권위)
+            self._survival_score = int(data.get('s', self._survival_score))
+            self._survival_wave  = int(data.get('w', self._survival_wave))
+            self._survival_stage = int(data.get('st', self._survival_stage))
+        elif kind == 'surv_over':
+            # 호스트: 팀 전멸 → 결과 화면
+            self._survival_final = data.get('f') or self._survival_final
+            self._survival_active = False
+            self.state = 'survival_over'
 
     _FX_DIR = {'right': (1, 0), 'left': (-1, 0), 'down': (0, 1), 'up': (0, -1)}
 
@@ -801,6 +832,14 @@ class Game:
         # 아무도 살아있지 않음 → 파티 전멸
         self._downed = False
         self._spectating = False
+        if self._survival_coop:
+            # co-op 무한 생존: 던전 사망 처리 대신 생존 결과 화면
+            if self.net.is_host:
+                self._coop_end_survival()
+            else:
+                self._survival_active = False
+                self.state = 'survival_over'   # 호스트 surv_over가 최종본 갱신
+            return
         self._records = update_records(self.floor, self._run_kills, self.player.gold)
         delete_save(self._save_slot)
         self.audio.play('death')
@@ -887,6 +926,123 @@ class Game:
             e.hp     = e.max_hp
             e.attack = max(1, int(round(e.attack * ma)))
 
+    # ── co-op 무한 생존(멀티플레이 증강) ─────────────────────────────
+    def _coop_scale_wave(self, enemies):
+        """호스트: 동적 웨이브 적에 co-op 난이도 + net_id 부여."""
+        d = self._coop_diff or {}
+        hp_m = float(d.get('hp', 1.0)); atk_m = float(d.get('atk', 1.0))
+        for e in enemies:
+            mh, ma = hp_m, atk_m
+            if getattr(e, 'is_boss', False):
+                mh *= self._COOP_BOSS_HP; ma *= self._COOP_BOSS_ATK
+            e.max_hp = max(1, int(round(e.max_hp * mh))); e.hp = e.max_hp
+            e.attack = max(1, int(round(e.attack * ma)))
+            e.net_id = self._coop_enemy_next
+            self._coop_enemy_next += 1
+
+    def _coop_begin_survival(self):
+        """호스트: co-op 무한 생존 개시 — 공유 시드/난이도로 양쪽 아레나 진입."""
+        import random as _r
+        seed = _r.randrange(1, 2 ** 31)
+        n = self._coop_party_size()
+        diff = {'hp': round(1 + self._COOP_HP_PER * (n - 1), 2),
+                'atk': round(1 + self._COOP_ATK_PER * (n - 1), 2)}
+        self.net.send_event('coop_surv_enter',
+                            {'seed': seed, 'level': SURVIVAL_START_LEVEL, 'diff': diff})
+        self._coop_survival_start(seed, SURVIVAL_START_LEVEL, diff)
+
+    def _coop_survival_start(self, seed, level, diff):
+        """양쪽 공통: co-op 무한 생존 런 셋업(결정론적 아레나)."""
+        self._coop_dungeon = True
+        self._coop_diff = diff
+        self._coop_enemy_next = 0
+        if self._downed or self._spectating:
+            self._revive_self()
+        self._revive_of.clear()
+        # co-op 플래그로 _begin_survival_run이 co-op 경로를 타게 한다
+        self._begin_survival_run(self._char_class, self._char_name,
+                                 getattr(self, '_char_appearance', None),
+                                 start_level=level, persist=False, coop=True, seed=seed)
+
+    def _coop_open_draft(self):
+        """호스트: 팀 공유 증강 드래프트 개시 — 시뮬레이션 정지 + 전원 각자 선택."""
+        if self._surv_draft_open:
+            return
+        self._surv_draft_open = True
+        wait = {self.net.tp.local_id()}
+        wait |= set(self.net.remote_players.keys())
+        self._surv_draft_wait = wait
+        self.net.send_event('surv_draft')       # 클라: 각자 드래프트 열기
+        self._open_survival_augment()            # 호스트: 자기 3장
+
+    def _coop_survival_pick_done(self, pid):
+        """호스트: pid가 증강 선택 완료 — 전원 완료 시 재개."""
+        self._surv_draft_wait.discard(pid)
+        if not self._surv_draft_wait:
+            self._coop_close_draft()
+        else:
+            self._surv_wait_partner = True       # 호스트도 파트너 대기 표시
+
+    def _coop_close_draft(self):
+        """호스트: 전원 선택 완료 → 시뮬레이션 재개."""
+        self._surv_draft_open = False
+        self._surv_wait_partner = False
+        self._surv_draft_wait = set()
+        self.net.send_event('surv_resume')
+
+    def _coop_surv_broadcast_hud(self):
+        """호스트: 팀 점수/웨이브/스테이지를 클라 HUD로 주기 전송."""
+        self.net.send_event('surv_hud', {
+            's': int(self._survival_score), 'w': self._survival_wave,
+            'st': self._survival_stage,
+        })
+
+    def _coop_end_survival(self):
+        """호스트: 팀 전멸 → 생존 종료를 양쪽에 알림."""
+        self._end_survival()
+        self.net.send_event('surv_over', {'f': self._survival_final})
+
+    def _handle_coop_mode_choice_action(self, action):
+        """호스트: co-op 입장 모드 선택(협동 던전 / 무한 생존)."""
+        ty = action['type']
+        if ty == 'move' and action.get('dx'):
+            self._coop_choice_sel = (self._coop_choice_sel + action['dx']) % 2
+            self.audio.play('menu_select')
+        elif ty in ('confirm', 'attack', 'interact'):
+            self.state = 'playing'
+            if self._coop_choice_sel == 0:
+                self._coop_begin_dungeon()
+            else:
+                self._coop_begin_survival()
+
+    def _render_coop_mode_choice(self):
+        """co-op 입장 모드 선택 오버레이(호스트)."""
+        s = self.screen
+        overlay = pygame.Surface((GAME_W, GAME_H), pygame.SRCALPHA)
+        overlay.fill((6, 8, 14, 232))
+        s.blit(overlay, (GAME_X, GAME_Y))
+        cx = GAME_X + GAME_W // 2
+        title = self.hud.font_lg.render(t('coop_mode_title'), True, (235, 220, 150))
+        s.blit(title, (cx - title.get_width() // 2, GAME_Y + 90))
+        opts = [('coop_mode_dungeon', (150, 200, 250)),
+                ('coop_mode_survival', (255, 170, 90))]
+        cw, ch, gap = 250, 130, 24
+        ox = cx - (cw * 2 + gap) // 2
+        oy = GAME_Y + 170
+        for i, (key, col) in enumerate(opts):
+            bx = ox + i * (cw + gap)
+            sel = i == self._coop_choice_sel
+            bg = (30, 30, 42) if sel else (16, 18, 26)
+            pygame.draw.rect(s, bg, (bx, oy, cw, ch), border_radius=12)
+            pygame.draw.rect(s, col, (bx, oy, cw, ch), 3 if sel else 1, border_radius=12)
+            nm = self.hud.font_md.render(t(key), True, col)
+            s.blit(nm, (bx + (cw - nm.get_width()) // 2, oy + 30))
+            for j, line in enumerate(self._wrap_text(t(key + '_d'), self.hud.font_sm, cw - 28)):
+                ls = self.hud.font_sm.render(line, True, (205, 212, 224))
+                s.blit(ls, (bx + 14, oy + 66 + j * 18))
+        hint = self.hud.font_sm.render(t('coop_mode_hint'), True, (160, 175, 195))
+        s.blit(hint, (cx - hint.get_width() // 2, oy + ch + 26))
+
     def _nearest_party_target(self, enemy):
         """적에게 가장 가까운 '원격' 파티원 반환. 호스트 자신이 더 가까우면 None."""
         best_rp = None
@@ -917,8 +1073,9 @@ class Game:
         if self._in_town and self._town is not None:
             return {'farm': self._town.farm, 'ranch': self._town.ranch}
         if self._coop_dungeon and self.dungeon is not None:
-            # 적 상태(권위): [net_id, x, y, hp] — 살아있는 적만
-            en = [[e.net_id, e.x, e.y, e.hp]
+            # 적 상태(권위): [net_id, x, y, hp, key, max_hp] — 살아있는 적만.
+            # key/max_hp를 함께 보내 클라가 모르는 적(동적 웨이브)을 생성할 수 있게 한다.
+            en = [[e.net_id, e.x, e.y, e.hp, e.key, e.max_hp]
                   for e in self.dungeon.enemies
                   if getattr(e, 'net_id', None) is not None and e.is_alive()]
             # 바닥 아이템(권위): 킬 시점 랜덤 생성 → 전송 필요. net_id 지연 부여
@@ -1059,15 +1216,23 @@ class Game:
             self._coop_granting = False
 
     def _net_apply_enemies(self, en):
-        """클라: 호스트 권위 적 상태를 로컬 적에 반영. 없는 적은 처치된 것으로 제거."""
+        """클라: 호스트 권위 적 상태를 로컬 적에 반영. 없는 적은 처치된 것으로 제거.
+        모르는 net_id + key가 오면 새 적을 생성(무한 생존의 동적 웨이브 지원)."""
         by_id = {e.net_id: e for e in self.dungeon.enemies
                  if getattr(e, 'net_id', None) is not None}
         seen = set()
-        for nid, x, y, hp in en:
+        for row in en:
+            # 하위호환: [nid,x,y,hp] 또는 [nid,x,y,hp,key,max_hp]
+            nid, x, y, hp = row[0], row[1], row[2], row[3]
+            key = row[4] if len(row) > 4 else None
+            mhp = row[5] if len(row) > 5 else hp
             seen.add(nid)
             e = by_id.get(nid)
             if e is None:
-                continue
+                # 호스트에만 있던 새 적(동적 스폰) → 클라에 생성
+                e = self._net_spawn_enemy(nid, x, y, key, hp, mhp)
+                if e is None:
+                    continue
             e.x, e.y = x, y          # 위치 스냅(그리드) — 부드러움은 추후
             e.anim_ox = e.anim_oy = 0
             e.hp = hp
@@ -1078,6 +1243,27 @@ class Game:
                 self.animator.particles.emit_death(e.x, e.y, e.color)
                 if e in self.dungeon.enemies:
                     self.dungeon.enemies.remove(e)
+
+    def _net_spawn_enemy(self, nid, x, y, key, hp, mhp):
+        """클라: 호스트가 알려온 새 적을 로컬 생성(무한 생존 동적 웨이브)."""
+        if not key or self.dungeon is None:
+            return None
+        data = self._enemy_data.get(key)
+        if not data:
+            return None
+        from entities.enemy import Enemy
+        d = dict(data); d['key'] = key
+        try:
+            e = Enemy(x, y, d)
+        except Exception:
+            return None
+        e.net_id = nid
+        e.max_hp = max(1, int(mhp)); e.hp = max(1, int(hp))
+        e.aware_range = 999; e.chase_range = 999
+        self.dungeon.enemies.append(e)
+        if self.net is not None and not self.net.is_host:
+            self._wrap_client_enemy_damage(e)   # 클라: 피해는 호스트에 인텐트로
+        return e
 
     def _net_apply_world_action(self, peer_id, action):
         """호스트: 클라의 월드 변경 액션 적용(밭/목장 상태, 또는 co-op 던전 피해)."""
@@ -1521,7 +1707,19 @@ class Game:
                 if self._burning_active:
                     self._update_burning(dt)
                 elif self._survival_active:
-                    self._update_survival(dt)
+                    if self._survival_coop:
+                        # co-op: 호스트만 시뮬(웨이브·점수), 드래프트 정지 중엔 멈춤
+                        if (self.net is not None and self.net.is_host
+                                and not self._surv_draft_open):
+                            self._update_survival(dt)
+                            self._surv_hud_tick = getattr(self, '_surv_hud_tick', 0) + 1
+                            if self._surv_hud_tick % 10 == 0:
+                                self._coop_surv_broadcast_hud()
+                        elif not self._surv_draft_open:
+                            # 클라: 내 증강 상시효과만 매 프레임 적용(시뮬은 호스트)
+                            self._apply_survival_aug_effects(dt)
+                    else:
+                        self._update_survival(dt)
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
@@ -1549,7 +1747,13 @@ class Game:
                     self._combo_ms = max(0.0, self._combo_ms - world_dt)
                     if self._combo_ms == 0:
                         self._combo_count = 0
-                self._update_enemies(world_dt)
+                # co-op 생존: 클라는 적을 시뮬 안 함(호스트 스냅샷 권위), 드래프트 중엔 정지
+                _skip_enemies = False
+                if self._survival_coop and self.net is not None:
+                    if not self.net.is_host or self._surv_draft_open:
+                        _skip_enemies = True
+                if not _skip_enemies:
+                    self._update_enemies(world_dt)
                 if self._axe_throw_cd_ms > 0:
                     self._axe_throw_cd_ms = max(0, self._axe_throw_cd_ms - world_dt)
                 if self._ragnarok_ms > 0:
@@ -3165,7 +3369,8 @@ class Game:
                     # 결과 화면에서 리더보드 열람 (ESC로 복귀) — 일일이면 일일 보드
                     self._open_ranking(
                         return_state='survival_over',
-                        start_name=('survival_daily' if self._daily_active
+                        start_name=('survival_coop' if self._survival_coop
+                                    else 'survival_daily' if self._daily_active
                                     else 'survival_score'))
                 elif (event.key == pygame.K_c
                         and self.state in ('survival_over', 'survival_augment')):
@@ -3255,6 +3460,8 @@ class Game:
                     self.state = 'playing'              # 생활 도감은 바로 플레이로 복귀
                 elif self.state == 'evo_codex':
                     self.state = getattr(self, '_codex_return', 'survival_over')
+                elif self.state == 'coop_mode_choice':
+                    self.state = 'playing'              # 모드 선택 취소 → 마을로
                 elif self.state == 'guide':
                     if self._guide_level == 1:
                         self._guide_level = 0           # 소분류 → 대분류로 복귀
@@ -3317,6 +3524,8 @@ class Game:
                 self._handle_life_codex_action(action)
             elif self.state == 'gate_choice':
                 self._handle_gate_choice_action(action)
+            elif self.state == 'coop_mode_choice':
+                self._handle_coop_mode_choice_action(action)
             elif self.state == 'survival_upgrade':
                 self._handle_survival_upgrade_action(action)
             elif self.state == 'survival_augment':
@@ -4433,9 +4642,11 @@ class Game:
         if self._in_town:
             if self._town and (nx, ny) == self._town.portal_pos:
                 if self.net is not None:
-                    # co-op: 호스트만 던전 입장을 개시(파티 최저 층). 클라는 대기.
+                    # co-op: 호스트만 입장 개시 — 던전/무한생존 모드 선택. 클라는 대기.
                     if self.net.is_host:
-                        self._coop_begin_dungeon()
+                        self._coop_choice_sel = 0
+                        self.state = 'coop_mode_choice'
+                        self.audio.play('menu_select')
                     else:
                         self.messages.append((t('coop_host_only'), 'info'))
                     return True
@@ -10263,19 +10474,24 @@ class Game:
 
     def _begin_survival_run(self, char_class, char_name='Hero', appearance=None,
                             start_level=None, persist=False,
-                            daily_seed=None, mutator=None, daily_id=None):
+                            daily_seed=None, mutator=None, daily_id=None,
+                            coop=False, seed=None):
         """무한 생존 런 셋업 — 인벤/장비/층은 저장하지 않는 일회성 런.
         start_level(기본 Lv10 또는 저장된 생존 레벨)에서 시작 + 스킬 전부 최대·
         조합 전체 해금 + 공속 극대화(아케이드 손맛). persist=True면 종료 시 레벨 저장.
-        daily_seed 지정 시 일일 챌린지 — 아레나/시작 증강/변수가 결정론적."""
+        daily_seed 지정 시 일일 챌린지 — 아레나/시작 증강/변수가 결정론적.
+        coop=True면 co-op 무한 생존(seed로 아레나 공유, 드래프트는 팀 동기화)."""
         if start_level is None:
             start_level = SURVIVAL_START_LEVEL
         self._survival_persist = persist
         self._survival_start_level = start_level
+        self._survival_coop = coop
         self._daily_active  = daily_seed is not None
         self._daily_seed    = daily_seed
         self._daily_mutator = mutator
         self._daily_id      = daily_id
+        # 아레나 시드: co-op=공유 seed, 일일=daily_seed, 그 외=랜덤(None)
+        self._survival_arena_seed = seed if coop else (daily_seed if daily_seed else None)
         self._char_class = char_class if char_class in CLASSES else 'warrior'
         self._char_name  = char_name or 'Hero'
         self._char_appearance = dict(appearance) if appearance else \
@@ -10303,9 +10519,10 @@ class Game:
         self._combo_count = 0
         self._combo_ms    = 0.0
         self._in_town         = False
-        self._coop_dungeon    = False
+        self._coop_dungeon    = coop     # co-op이면 월드 동기화 경로 활성 유지
         self._coop_seed       = None
-        self._coop_diff       = None
+        if not coop:
+            self._coop_diff   = None
         self._reset_downed_state()
         self._dungeon_session = None
         from core.quests import fresh_states
@@ -10330,6 +10547,11 @@ class Game:
             self._apply_daily_player_effect(mutator.get('player'))
         self.state = 'playing'
         self._enter_survival()   # 초기화 누적 시간 소비 — 첫 dt 왜곡 방지
+        if coop:
+            # co-op: 호스트만 시작 드래프트를 개시(양쪽 동기화). 클라는 이벤트 대기.
+            if self.net is not None and self.net.is_host:
+                self._coop_open_draft()
+            return
         # 일일: 시작 증강 3택을 결정론적으로(전원 동일) — 전역 RNG를 시드 고정
         if self._daily_active and daily_seed is not None:
             random.seed(daily_seed ^ 0x5EED)
@@ -10380,8 +10602,8 @@ class Game:
         self._surv_score_pulse  = 0.0
         self._surv_next_milestone = 1000
 
-        # 일일 챌린지면 시드 고정 아레나(전원 동일 지형), 아니면 랜덤
-        dungeon, start = generate_arena(self._daily_seed if self._daily_active else None)
+        # 시드 고정 아레나(co-op·일일=전원 동일 지형), 그 외=랜덤
+        dungeon, start = generate_arena(getattr(self, '_survival_arena_seed', None))
         self.dungeon = dungeon
         self._theme  = BURNING_THEME
         self.player.x, self.player.y = start
@@ -10393,12 +10615,9 @@ class Game:
         self.audio.play('boss_appear')
         self._start_shake(5, 400)
 
-    def _update_survival(self, dt_ms: int):
-        dt_ms = min(dt_ms, 200)
-        self._survival_elapsed  += dt_ms
-        self._survival_spawn_ms -= dt_ms
-
-        # ── 증강 상시 효과 ──────────────────────────────────────────
+    def _apply_survival_aug_effects(self, dt_ms):
+        """증강 상시 효과(내 캐릭터 대상) — 흡혈/서리/전역둔화/재생.
+        co-op에선 각 클라가 자기 캐릭터에 대해 매 프레임 직접 적용한다."""
         if self._aug_lifesteal > 0:      # 흡혈귀: 흡혈 버프를 매 프레임 갱신(상시 유지)
             self.player.lifesteal_ms = 500
             self.player.lifesteal_pct = max(self.player.lifesteal_pct, self._aug_lifesteal)
@@ -10421,6 +10640,14 @@ class Game:
                 self._aug_regen_acc -= 1000
                 self.player.hp = min(self.player.max_hp,
                                      int(self.player.hp + self._aug_regen))
+
+    def _update_survival(self, dt_ms: int):
+        dt_ms = min(dt_ms, 200)
+        self._survival_elapsed  += dt_ms
+        self._survival_spawn_ms -= dt_ms
+
+        # ── 증강 상시 효과(내 캐릭터) ────────────────────────────────
+        self._apply_survival_aug_effects(dt_ms)
 
         # 난이도 자동 스케일 = 플레이어 파워(레벨 + 획득 증강) 기반.
         # 저레벨엔 적 강도·밀도·스폰수를 낮춰 순하게, 성장할수록 램프업.
@@ -10451,13 +10678,18 @@ class Game:
             new_enemies = new_enemies[:per_cap]
             if mut:                              # 적 능력치/속도 변수 반영
                 self._apply_daily_to_enemies(new_enemies, mut)
+            if self._survival_coop:              # co-op: 인원수 난이도 + net_id 부여
+                self._coop_scale_wave(new_enemies)
             self.dungeon.enemies.extend(new_enemies)
 
         # 킬 기반 증강 드래프트 (시작 증강과 동일한 아수라장 결로 반복)
         kills = self._run_kills - self._survival_kills0
         if kills >= self._survival_next_up:
             self._survival_next_up = kills + 12 + len(self._survival_augs) * 4
-            self._open_survival_augment()
+            if self._survival_coop:
+                self._coop_open_draft()          # 팀 공유 일시정지 드래프트
+            else:
+                self._open_survival_augment()
 
         # 시간/단계 기반 아이템 보상 (30초마다 스테이지 상승 → 보급 패키지)
         target_stage = int(self._survival_elapsed // self._SURV_STAGE_MS)
@@ -10747,6 +10979,13 @@ class Game:
         elif ty in ('confirm', 'attack', 'interact'):
             self._survival_apply_augment(self._aug_choices[self._aug_cursor])
             self.state = 'playing'
+            if self._survival_coop and self.net is not None:
+                # co-op: 내 선택 완료를 알리고 파트너 대기(전원 완료 시 재개)
+                if self.net.is_host:
+                    self._coop_survival_pick_done(self.net.tp.local_id())
+                else:
+                    self.net.send_event('surv_pick_done')
+                    self._surv_wait_partner = True
 
     def _survival_apply_augment(self, aid):
         p = self.player
@@ -10952,10 +11191,18 @@ class Game:
             'level': reached_level,
             'stage': self._survival_stage,
             'daily': self._daily_active,
+            'coop':  self._survival_coop,
             'mutator': (self._daily_mutator or {}).get('id') if self._daily_active else None,
         }
         dirty = False
-        if self._daily_active:
+        if self._survival_coop:
+            # co-op: 팀 점수 최고기록(전용) — 캐릭터/일일 영속 없음
+            best = self._records.get('survival_coop_best', 0)
+            self._survival_new_best = self._survival_score > best
+            if self._survival_new_best:
+                self._records['survival_coop_best'] = self._survival_score
+                dirty = True
+        elif self._daily_active:
             # 일일 챌린지: 오늘 날짜별 최고점 + 연속 도전 streak 기록
             dirty |= self._record_daily_result(self._survival_score)
             self._survival_new_best = getattr(self, '_daily_new_best', False)
@@ -10986,7 +11233,9 @@ class Game:
         # 리더보드: 최고 점수 제출(테스트 제외; Steam KeepBest)
         if not self._is_test_mode:
             self.leaderboards.player_name = self._char_name or 'Hero'
-            if self._daily_active:
+            if self._survival_coop:
+                self.leaderboards.submit_coop(int(self._survival_score))
+            elif self._daily_active:
                 self.leaderboards.submit_daily(int(self._survival_score))
             else:
                 self.leaderboards.submit_survival(int(self._survival_score))
@@ -11059,13 +11308,31 @@ class Game:
 
     def _survival_return_menu(self):
         self._survival_active = False
+        if self._survival_coop:
+            self._coop_return_town()   # co-op: 메인 메뉴 대신 협동 마을로 복귀
+            return
         self.state = 'menu'
         self._menu_page = 'main'
         self.audio.play('menu_select')
 
+    def _coop_return_town(self):
+        """co-op 생존 종료 후 협동 마을로 복귀(세션 유지)."""
+        self._survival_active = False
+        self._survival_coop = False
+        self._coop_dungeon = False
+        self._surv_draft_open = False
+        self._surv_wait_partner = False
+        self._reset_downed_state()
+        self.audio.play('menu_select')
+        self._enter_town()
+
     def _survival_restart(self):
         """새 생존 런 즉시 재시작. 영속 캐릭터면 저장된(갱신된) 레벨서 다시 시작."""
         self.audio.play('menu_select')
+        if self._survival_coop:
+            # co-op: 마을로 복귀(호스트가 포탈에서 다시 개시). 개별 재시작 불가.
+            self._coop_return_town()
+            return
         if self._daily_active:
             self._launch_daily()      # 같은 오늘의 시드로 재도전
         elif self._survival_persist:
@@ -11120,7 +11387,9 @@ class Game:
         cx = GAME_X + GAME_W // 2
         y = GAME_Y + 60
         is_daily = f.get('daily')
-        title_txt = t('daily_over_title') if is_daily else t('survival_over_title')
+        title_txt = (t('coop_over_title') if f.get('coop')
+                     else t('daily_over_title') if is_daily
+                     else t('survival_over_title'))
         title = self.hud.font_lg.render(title_txt, True, (240, 120, 110))
         s.blit(title, (cx - title.get_width() // 2, y)); y += 44
         # 일일: 오늘의 변수 라벨
@@ -11152,7 +11421,8 @@ class Game:
             nb = self.hud.font_md.render(t('survival_new_best'), True, (120, 240, 140))
             s.blit(nb, (cx - nb.get_width() // 2, y)); y += 34
         else:
-            best_val = ((self._records.get('daily') or {}).get('best', 0) if is_daily
+            best_val = (self._records.get('survival_coop_best', 0) if f.get('coop')
+                        else (self._records.get('daily') or {}).get('best', 0) if is_daily
                         else self._records.get('survival_best', 0))
             best = self.hud.font_sm.render(
                 t('survival_best', best_val), True, (170, 190, 175))
@@ -11369,6 +11639,13 @@ class Game:
                     f"✦ {t('evo_' + eid)}", True, self._EVO_COLOR)
                 s.blit(et, (GAME_X + 10, ey))
                 ey += 22
+        # co-op: 파트너 증강 선택 대기 알림(중앙)
+        if self._survival_coop and self._surv_wait_partner:
+            wt = self.hud.font_md.render(t('coop_surv_wait'), True, (255, 220, 130))
+            wsh = self.hud.font_md.render(t('coop_surv_wait'), True, (0, 0, 0))
+            wx = GAME_X + (GAME_W - wt.get_width()) // 2
+            wy = GAME_Y + GAME_H // 2 - 20
+            s.blit(wsh, (wx + 2, wy + 2)); s.blit(wt, (wx, wy))
 
     # ─────────────── 실시간 적 AI ─────────────────────────────────────
     def _spawn_boss_summon(self, key: str, bx: int, by: int):
@@ -11465,8 +11742,12 @@ class Game:
         if (not self.player.is_alive() and self.state == 'playing'
                 and self._coop_dungeon and self.net is not None
                 and not self._downed and not self._spectating):
-            # co-op: 즉사 대신 '다운' — 파티원이 부활시킬 수 있다.
-            self._enter_downed()
+            # co-op 생존: 불사조(전설) 보유 시 사망 1회 무효 후 계속
+            if self._survival_coop and getattr(self, '_aug_phoenix', 0) > 0:
+                self._survival_phoenix_revive()
+            else:
+                # co-op: 즉사 대신 '다운' — 파티원이 부활시킬 수 있다.
+                self._enter_downed()
         elif (not self.player.is_alive() and self.state == 'playing'
               and not self._downed and not self._spectating):
             if self._burning_active:
@@ -11605,6 +11886,8 @@ class Game:
             self._render_evo_codex()
         elif self.state == 'gate_choice':
             self._render_gate_choice()
+        elif self.state == 'coop_mode_choice':
+            self._render_coop_mode_choice()
         elif self.state == 'survival_upgrade':
             self._render_survival_upgrade()
         elif self.state == 'survival_augment':

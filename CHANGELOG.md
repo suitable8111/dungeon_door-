@@ -1,5 +1,16 @@
 # Changelog
 
+## v3.0.0 — Co-op Endless Survival (Multiplayer Augments)
+
+The biggest patch yet: **Endless Survival is now playable in co-op.** Team up and hold the arena together, each building your own augments.
+- **Co-op mode select** — in the co-op town, the host steps on the portal to choose **Co-op Dungeon** or **Endless Survival**; the whole party drops into the same seeded arena.
+- **Your own build, together** — augment drafts pause the arena for the whole team, and each player picks their **own** 3-card draft. A "waiting for partner" prompt shows while someone is still choosing; the run resumes once everyone has picked. Evolutions work per-player too.
+- **Host-authoritative waves** — the host runs wave spawning and scoring; enemies stream to every client, and damage is reconciled on the host, so the fight stays in sync. Difficulty scales with party size.
+- **Shared team score + revives** — one team score, a dedicated **Co-op Survival** leaderboard (game + Steam), downed-and-revive rescues, and a team-wipe results screen with restart-to-town.
+- Fully localized in all 5 languages.
+
+> Note: co-op requires a live 2-player session to experience; solo and Daily Challenge survival are unchanged.
+
 ## v2.35.0 — Evolution Codex
 
 A collectible reference for Augment Evolutions, so you can chase every fusion:
