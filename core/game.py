@@ -783,9 +783,17 @@ class Game:
             self.net.broadcast_local_state()
 
     def _coop_downed_tick(self, dt):
-        """매 프레임: 내 다운 타이머 감소 + 파티원 부활 진행 + 파티 전멸 판정."""
+        """매 프레임: 내 다운 전환/타이머 + 파티원 부활 진행 + 파티 전멸 판정."""
         if self.net is None or not self._coop_dungeon or self._in_town:
             return
+        # 0) 내 HP 0 → 다운 전환(클라 포함 — 호스트 적 루프에 의존하지 않음).
+        #    불사조(전설) 보유 시 생존 런에서 1회 사망 무효.
+        if (self.player is not None and not self.player.is_alive()
+                and not self._downed and not self._spectating):
+            if self._survival_coop and getattr(self, '_aug_phoenix', 0) > 0:
+                self._survival_phoenix_revive()
+            else:
+                self._enter_downed()
         # 1) 내가 다운이면 블리드아웃 카운트다운
         if self._downed:
             self._downed_ms -= dt
@@ -1043,16 +1051,20 @@ class Game:
         hint = self.hud.font_sm.render(t('coop_mode_hint'), True, (160, 175, 195))
         s.blit(hint, (cx - hint.get_width() // 2, oy + ch + 26))
 
-    def _nearest_party_target(self, enemy):
-        """적에게 가장 가까운 '원격' 파티원 반환. 호스트 자신이 더 가까우면 None."""
-        best_rp = None
-        bestd = abs(enemy.x - self.player.x) + abs(enemy.y - self.player.y)
+    def _coop_pick_target(self, enemy):
+        """적이 노릴 '살아있는' 파티원 선택(가장 가까운 대상).
+        반환: ('local', None) | ('remote', rp) | None(살아있는 대상 없음=전멸 임박)."""
+        cands = []   # (kind, x, y, rp)
+        if (self.player.is_alive() and not self._downed and not self._spectating):
+            cands.append(('local', self.player.x, self.player.y, None))
         for rp in self.net.remote_players.values():
-            d = abs(enemy.x - rp.x) + abs(enemy.y - rp.y)
-            if d < bestd:
-                bestd = d
-                best_rp = rp
-        return best_rp
+            if getattr(rp, 'status', 0) == 0:   # 0=정상(살아있음)
+                cands.append(('remote', rp.x, rp.y, rp))
+        if not cands:
+            return None
+        kind, x, y, rp = min(
+            cands, key=lambda c: abs(enemy.x - c[1]) + abs(enemy.y - c[2]))
+        return ('local', None) if kind == 'local' else ('remote', rp)
 
     def _coop_reveal(self):
         """시야 공유: 원격 파티원 위치 주변도 밝힌다(미니맵 포함)."""
@@ -11667,8 +11679,14 @@ class Game:
         # co-op 클라: 적 AI는 호스트 권위 → 로컬 시뮬 정지(스냅샷으로 갱신)
         if self._coop_is_client():
             return
+        _coop_host = (self._coop_dungeon and self.net is not None
+                      and self.net.is_host)
         for enemy in list(self.dungeon.enemies):
-            if not (enemy.is_alive() and self.player.is_alive()):
+            if not enemy.is_alive():
+                continue
+            # 솔로/클라: 내 캐릭터가 죽으면 적 정지(기존 동작). co-op 호스트는
+            # 살아있는 파티원이 있으면 계속(다운된 나 대신 파트너를 노림).
+            if not _coop_host and not self.player.is_alive():
                 continue
             # 보물 고블린: 수명 만료 시 도주 성공 (연출과 함께 소멸)
             if enemy.lifetime_ms > 0:
@@ -11683,10 +11701,14 @@ class Game:
                 if (dt > 0 and random.random() < dt / 150.0
                         and self.dungeon.tiles[enemy.y][enemy.x].visible):
                     self._emit_goblin_sparkle(enemy)
-            # co-op 호스트: 적은 가장 가까운 파티원을 노린다.
-            target_rp = (self._nearest_party_target(enemy)
-                         if (self._coop_dungeon and self.net is not None
-                             and self.net.is_host) else None)
+            # co-op 호스트: 적은 가장 가까운 '살아있는' 파티원을 노린다.
+            target_rp = None
+            if _coop_host:
+                tgt = self._coop_pick_target(enemy)
+                if tgt is None:
+                    continue                 # 살아있는 대상 없음 → 적 대기
+                if tgt[0] == 'remote':
+                    target_rp = tgt[1]
             if target_rp is not None:
                 # 클라를 노림 — 프록시로 AI 구동 후 피해를 그 클라에 통보
                 proxy = _CoopTarget(target_rp)

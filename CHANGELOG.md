@@ -1,5 +1,12 @@
 # Changelog
 
+## v3.0.1 — Co-op Survival fixes
+
+Fixes from the first live co-op Survival playtest:
+- **Downed teammate no longer freezes the fight** — enemies now chase the nearest *living* party member, so when one player goes down the monsters keep pressuring the survivor instead of stalling or clustering on the downed body.
+- **The run now ends on a team wipe** — a client who hits 0 HP now correctly goes "downed" (previously only the host did), so once both players are down the game properly reaches the results screen.
+- **No more stray invite code on death** — that was a side effect of the run failing to end (pausing showed the host code); with the wipe fixed it no longer appears.
+
 ## v3.0.0 — Co-op Endless Survival (Multiplayer Augments)
 
 The biggest patch yet: **Endless Survival is now playable in co-op.** Team up and hold the arena together, each building your own augments.
