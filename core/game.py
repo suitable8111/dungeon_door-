@@ -949,15 +949,21 @@ class Game:
             self._coop_enemy_next += 1
 
     def _coop_begin_survival(self):
-        """호스트: co-op 무한 생존 개시 — 공유 시드/난이도로 양쪽 아레나 진입."""
+        """호스트: co-op 무한 생존 개시 — 공유 시드/난이도로 양쪽 아레나 진입.
+        테스트용: DD_SURV_LEVEL 환경변수로 시작 레벨 상향(기본 SURVIVAL_START_LEVEL)."""
         import random as _r
         seed = _r.randrange(1, 2 ** 31)
         n = self._coop_party_size()
         diff = {'hp': round(1 + self._COOP_HP_PER * (n - 1), 2),
                 'atk': round(1 + self._COOP_ATK_PER * (n - 1), 2)}
+        try:
+            env_lvl = int(os.environ.get('DD_SURV_LEVEL', SURVIVAL_START_LEVEL))
+        except (TypeError, ValueError):
+            env_lvl = SURVIVAL_START_LEVEL
+        level = max(SURVIVAL_START_LEVEL, min(99, env_lvl))
         self.net.send_event('coop_surv_enter',
-                            {'seed': seed, 'level': SURVIVAL_START_LEVEL, 'diff': diff})
-        self._coop_survival_start(seed, SURVIVAL_START_LEVEL, diff)
+                            {'seed': seed, 'level': level, 'diff': diff})
+        self._coop_survival_start(seed, level, diff)
 
     def _coop_survival_start(self, seed, level, diff):
         """양쪽 공통: co-op 무한 생존 런 셋업(결정론적 아레나)."""
@@ -10394,7 +10400,8 @@ class Game:
     _SURV_UPGRADE_IDS = ['hp', 'atk', 'aspd', 'move', 'eva', 'def', 'heal']
 
     def start_survival_mode(self, char_class='warrior'):
-        """무한 생존 모드 직행 (test_main.py survival). 테스트 기록 격리 + Lv10 시작."""
+        """무한 생존 모드 직행 (test_main.py survival). 테스트 기록 격리 + Lv10 시작.
+        테스트용: DD_SURV_LEVEL 환경변수로 시작 레벨 상향(기본 SURVIVAL_START_LEVEL)."""
         self._is_test_mode = True
         from core.save_load import use_test_data
         use_test_data(True)
@@ -10402,7 +10409,12 @@ class Game:
         self._storage, self._storage_cap = load_storage()
         self._gold_mult = ng_plus_gold_mult(self._records)
         self._title_badge = bool(self._records.get('active_title'))
-        self._begin_survival_run(char_class, char_name='TestHero')
+        try:
+            env_lvl = int(os.environ.get('DD_SURV_LEVEL', SURVIVAL_START_LEVEL))
+        except (TypeError, ValueError):
+            env_lvl = SURVIVAL_START_LEVEL
+        level = max(SURVIVAL_START_LEVEL, min(99, env_lvl))
+        self._begin_survival_run(char_class, char_name='TestHero', start_level=level)
         self.clock.tick()
 
     def _persist_survival_level(self):
