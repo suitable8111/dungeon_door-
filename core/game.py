@@ -564,6 +564,7 @@ class Game:
         self._surv_draft_open = False # 증강 드래프트로 시뮬레이션 일시정지 중(호스트)
         self._surv_draft_wait = set() # 아직 증강 미확정 pid 집합(호스트)
         self._surv_wait_partner = False  # 내 선택 끝, 파트너 대기 중(양쪽 표시용)
+        self._surv_draft_timer_ms = 0.0  # co-op 드래프트 자동선택 카운트다운
         # 다운/부활/관전 (co-op 전용)
         self._downed       = False    # 내가 쓰러짐(부활 대기)
         self._downed_ms    = 0.0      # 블리드아웃 남은 시간(0이면 관전行)
@@ -855,8 +856,10 @@ class Game:
         self.state = 'dead'
 
     def _coop_input_locked(self):
-        """다운/관전 중이면 이동·공격·스킬 입력 차단."""
-        return self._downed or self._spectating
+        """다운/관전 중이거나 co-op 증강 드래프트로 파트너 대기 중이면 입력 차단.
+        (이미 선택을 마친 플레이어가 정지된 아레나에서 홀로 움직이지 않게)"""
+        return (self._downed or self._spectating
+                or (self._survival_coop and self._surv_wait_partner))
 
     def _reset_downed_state(self):
         """새 런/이어하기 시 다운·부활 상태 초기화 (스테일 이월 방지)."""
@@ -1631,6 +1634,12 @@ class Game:
                 self._chain_window_ms = max(0.0, self._chain_window_ms - dt)
                 if self._chain_window_ms == 0:
                     self._chain_step = 0
+            # co-op 증강 드래프트 자동선택 — 방치 시 랜덤 확정(파트너 대기 방지)
+            if (self._survival_coop and self.state == 'survival_augment'
+                    and self._surv_draft_timer_ms > 0):
+                self._surv_draft_timer_ms = max(0.0, self._surv_draft_timer_ms - dt)
+                if self._surv_draft_timer_ms == 0:
+                    self._auto_pick_augment()
             # 드라이브 게이지 회복 (1칸 / 2.5초)
             if self.state == 'playing' and self.player:
                 self.player.drive = min(self.player.drive_max,
@@ -10877,6 +10886,7 @@ class Game:
     _SP_POTION_MAX   = 5       # 기본 소지 상한
     _SP_POTION_DROP  = 0.05    # 킬당 드랍 확률(5%)
     _SURV_STAGE_MS   = 30000   # 시간/단계 보상 간격(30초마다 스테이지 ↑)
+    _SURV_DRAFT_MS   = 12000   # co-op 증강 드래프트 자동선택까지 시간(12초)
 
     # ─────────────── 증강(Augment) — 아수라장 스타일 강화 ────────────
     # 단순 스탯이 아닌 빌드를 규정하는 기믹 강화. 시작 + 강화마다 3장 중 1택.
@@ -10993,7 +11003,17 @@ class Game:
             self._gold_flash_ms = 200
             self._start_shake(4, 220)
         self.state = 'survival_augment'
+        # co-op: 방치 시 자동 랜덤 선택 카운트다운(파트너 무한 대기 방지)
+        self._surv_draft_timer_ms = self._SURV_DRAFT_MS if self._survival_coop else 0.0
         self.audio.play('levelup')
+
+    def _auto_pick_augment(self):
+        """co-op 드래프트 시간 초과 — 현재 커서(또는 랜덤) 증강을 자동 확정."""
+        if not self._aug_choices:
+            return
+        self._aug_cursor = random.randrange(len(self._aug_choices))
+        self.messages.append((t('coop_surv_auto_pick'), 'info'))
+        self._handle_survival_augment_action({'type': 'confirm'})
 
     def _handle_survival_augment_action(self, action):
         ty = action['type']
@@ -11589,6 +11609,19 @@ class Game:
             t('survival_upgrade_hint') + '   ·   ' + t('codex_open_hint'),
             True, (160, 175, 195))
         s.blit(hint, (GAME_X + (GAME_W - hint.get_width()) // 2, GAME_Y + GAME_H - 34))
+        # co-op: 자동선택 카운트다운(방치 방지) + 바
+        if self._survival_coop and self._surv_draft_timer_ms > 0:
+            secs = self._surv_draft_timer_ms / 1000.0
+            frac = max(0.0, min(1.0, self._surv_draft_timer_ms / self._SURV_DRAFT_MS))
+            col = (255, 120, 90) if secs <= 3 else (255, 200, 110)
+            ct = self.hud.font_sm.render(t('coop_surv_draft_timer', f"{secs:0.0f}"),
+                                         True, col)
+            ty = GAME_Y + GAME_H - 58
+            s.blit(ct, (GAME_X + (GAME_W - ct.get_width()) // 2, ty))
+            bw = 240
+            bx = GAME_X + (GAME_W - bw) // 2
+            pygame.draw.rect(s, (40, 40, 54), (bx, ty + 18, bw, 5), border_radius=2)
+            pygame.draw.rect(s, col, (bx, ty + 18, int(bw * frac), 5), border_radius=2)
 
     def _draw_survival_hud(self):
         """상단 생존 정보 — 도파민 점수판: 펄스 점수 + 콤보 미터 + 스테이지."""

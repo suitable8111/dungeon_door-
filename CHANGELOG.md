@@ -1,5 +1,11 @@
 # Changelog
 
+## v3.0.2 — Co-op augment draft polish
+
+Smoother augment drafts in co-op Survival:
+- **Auto-pick countdown** — during a shared draft you now have 12 seconds to choose, shown with a countdown and bar; if the timer runs out, an augment is picked for you so the run never stalls on an AFK teammate.
+- **No more solo play while a partner is choosing** — once you've locked in your pick, your input is held until everyone has chosen (the arena is paused for the whole team), instead of letting you wander a frozen arena.
+
 ## v3.0.1 — Co-op Survival fixes
 
 Fixes from the first live co-op Survival playtest:
