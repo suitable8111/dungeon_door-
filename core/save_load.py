@@ -197,6 +197,17 @@ def load_game(slot: int = 1):
         return None
 
 
+def save_raw(slot: int, data: dict) -> bool:
+    """슬롯 세이브 JSON을 통째로 덮어쓴다(무한 생존 공유 진행도 역저장 등).
+    호출 측이 load_game으로 읽어 일부 필드만 수정한 dict를 넘긴다."""
+    try:
+        with open(slot_path(slot), 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+
 def has_save(slot: int = 1):
     return os.path.exists(slot_path(slot))
 

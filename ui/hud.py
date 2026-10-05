@@ -242,7 +242,7 @@ class HUD:
     def render_menu(self, screen, cards, sel=0, mouse_pos=(0, 0),
                     page='main', settings=None, settings_sel=0,
                     mp_ip=None, mp_status=None, mp_banner=None, mp_code=None,
-                    mp_upnp=None, mp_recent=None, survival_char=None,
+                    mp_upnp=None, mp_recent=None, survival_best=0,
                     daily_info=None):
         """메인 메뉴 — 세이브 카드(캐릭터) 목록. 버튼 (rect, action) 반환."""
         import random
@@ -293,12 +293,12 @@ class HUD:
             p_h = 82 + len(cards) * 62 + 16 + 54 + 58 + 56 + 50 + 52  # +일일 챌린지
             if mp_banner == 'host' and mp_code:
                 p_h += 52    # 초대 코드 2줄 + UPnP 상태 표시 공간
-        elif page == 'coop_select':
+        elif page in ('coop_select', 'survival_select'):
             p_w = 470
             _ne = len([c for c in cards if c.get('exists')])
-            _emp = any(not c.get('exists') for c in cards)
-            _rows = _ne + (1 if _emp else 0) + 1     # +뒤로
-            _codeh = 30 if (mp_banner == 'host' and mp_code) else 0
+            _emp = (page == 'coop_select') and any(not c.get('exists') for c in cards)
+            _rows = _ne + (1 if _emp else 0) + 1     # +뒤로 (생존은 새캐릭터 없음)
+            _codeh = 30 if (page == 'coop_select' and mp_banner == 'host' and mp_code) else 0
             p_h = 64 + 26 + _codeh + _rows * 56 + 18
         elif page == 'multiplayer':
             p_w = 440
@@ -425,21 +425,15 @@ class HUD:
                                 [(_ix, _iy-4), (_ix+3, _iy), (_ix, _iy+4), (_ix-3, _iy)])
             slbl = self.font_md.render(t('menu_survival'), True, sv_tc)
             screen.blit(slbl, (sv_rect.left + 44, sv_rect.top + 6))
-            # 저장된 생존 캐릭터가 있으면 이름·레벨을, 없으면 기본 설명을 표시
-            if survival_char and survival_char.get('char_class'):
-                sub_txt = (f"{survival_char.get('name', 'Hero')[:10]}  ·  "
-                           f"Lv {int(survival_char.get('level', 10))}")
-            else:
-                sub_txt = t('menu_survival_sub')
-            ssub = self.font_sm.render(sub_txt, True,
+            # 정식 모드: 캐릭터 공유 설명
+            ssub = self.font_sm.render(t('menu_survival_sub'), True,
                                        (200, 150, 110) if sv_on else (150, 112, 80))
             screen.blit(ssub, (sv_rect.left + 44, sv_rect.bottom - 18))
-            # 우측: 생존 캐릭터 레벨 뱃지(있을 때)
-            if survival_char and survival_char.get('char_class'):
-                lv_s = self.font_md.render(f"Lv{int(survival_char.get('level', 10))}",
-                                           True, sv_tc)
-                screen.blit(lv_s, (sv_rect.right - lv_s.get_width() - 14,
-                                   sv_rect.centery - lv_s.get_height() // 2))
+            # 우측: 최고 점수 뱃지(있을 때)
+            if survival_best:
+                bs = self.font_sm.render(f"★ {int(survival_best):,}", True, sv_tc)
+                screen.blit(bs, (sv_rect.right - bs.get_width() - 14,
+                                 sv_rect.centery - bs.get_height() // 2))
             buttons.append((sv_rect, 'survival'))
 
             # ── 일일 챌린지 버튼 (전체 폭, 청보라 아케이드 강조) ────
@@ -563,20 +557,29 @@ class HUD:
             pygame.draw.rect(screen, (38, 48, 72), (p_x+3, p_y+3, p_w-6, p_h-6), 1)
 
         # ════════════════════════════════════════════════════════════
-        elif page == 'coop_select':
+        elif page in ('coop_select', 'survival_select'):
         # ════════════════════════════════════════════════════════════
+            _is_surv = (page == 'survival_select')
 
             # ── 타이틀 ─────────────────────────────────────────────
-            pygame.draw.rect(screen, (12, 14, 30), (p_x, p_y, p_w, 54))
-            pygame.draw.line(screen, (70, 110, 160),
-                             (p_x+20, p_y+54), (p_x+p_w-20, p_y+54))
-            _draw_network_icon(screen, p_x + 32, p_y + 27, (150, 190, 245))
-            ts = self.font_lg.render(t('coop_pick_title'), True, (190, 218, 255))
+            _tbg = (30, 16, 14) if _is_surv else (12, 14, 30)
+            _tln = (240, 150, 70) if _is_surv else (70, 110, 160)
+            _ttc = (255, 214, 150) if _is_surv else (190, 218, 255)
+            pygame.draw.rect(screen, _tbg, (p_x, p_y, p_w, 54))
+            pygame.draw.line(screen, _tln, (p_x+20, p_y+54), (p_x+p_w-20, p_y+54))
+            if _is_surv:
+                _ix, _iy = p_x + 32, p_y + 27
+                pygame.draw.polygon(screen, _tln,
+                                    [(_ix, _iy-9), (_ix+8, _iy), (_ix, _iy+9), (_ix-8, _iy)])
+            else:
+                _draw_network_icon(screen, p_x + 32, p_y + 27, (150, 190, 245))
+            ts = self.font_lg.render(
+                t('surv_pick_title') if _is_surv else t('coop_pick_title'), True, _ttc)
             screen.blit(ts, (p_x + 52, p_y + 27 - ts.get_height()//2))
 
             yy = p_y + 62
-            # ── 호스트: 초대 코드(공유용) ──────────────────────────
-            if mp_banner == 'host' and mp_code:
+            # ── 호스트: 초대 코드(공유용) — co-op 전용 ──────────────
+            if not _is_surv and mp_banner == 'host' and mp_code:
                 cl = self.font_sm.render(t('menu_mp_your_code'), True, (150, 200, 250))
                 screen.blit(cl, (p_x + 20, yy))
                 cv = self.font_md.render(mp_code, True, (255, 226, 120))
@@ -614,8 +617,8 @@ class HUD:
                 buttons.append((rect, f"slot:{c['slot']}"))
                 yy += 56; idx += 1
 
-            # 새 캐릭터 만들기
-            if any(not c.get('exists') for c in cards):
+            # 새 캐릭터 만들기 (co-op 전용 — 무한 생존은 기존 캐릭터만 공유)
+            if not _is_surv and any(not c.get('exists') for c in cards):
                 rect = pygame.Rect(bx, yy, bw, bh)
                 act = (idx == settings_sel); hov = rect.collidepoint(mouse_pos)
                 bg_c, bd_c, tc = _btn_colors(act, hov)

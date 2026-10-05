@@ -441,6 +441,7 @@ class Game:
         self._survival_new_best = False
         self._pending_survival  = False   # 캐릭터 생성 후 생존 모드로 진입할지
         self._survival_persist  = False   # 종료 시 생존 캐릭터 레벨 저장 여부
+        self._survival_slot     = None    # 공유 캐릭터 역저장 대상 슬롯(무한 생존)
         self._survival_start_level = SURVIVAL_START_LEVEL  # 이번 런 시작 레벨
         self._survival_level_up = False   # 이번 런에서 최고 레벨 갱신 여부
         self._survival_stage    = 0       # 시간/단계 보상 스테이지(30초당 +1)
@@ -3519,6 +3520,8 @@ class Game:
                     elif self._menu_page == 'coop_select':
                         self._cancel_pending_net()   # co-op 캐릭터 선택 취소
                         self._menu_page = 'main'
+                    elif self._menu_page == 'survival_select':
+                        self._menu_page = 'main'     # 무한 생존 캐릭터 선택 취소
                     elif self._pending_net is not None:
                         self._cancel_pending_net()
                     else:
@@ -3616,6 +3619,9 @@ class Game:
             return
         if self._menu_page == 'coop_select':
             self._handle_coop_select_action(action)
+            return
+        if self._menu_page == 'survival_select':
+            self._handle_survival_select_action(action)
             return
         if self._menu_page == 'mp_help':
             if action['type'] in ('wait', 'confirm', 'load'):
@@ -3923,16 +3929,6 @@ class Game:
             return
         name = (self._create_name or 'Hero').strip() or 'Hero'
         self.audio.play('menu_confirm')
-        if self._pending_survival:
-            # 무한 생존 최초 진입: 전용 생존 캐릭터 생성(레벨만 영속) → 아레나 직행
-            self._pending_survival = False
-            app = self._create_appearance()
-            self._save_survival_char(self._create_class, name, app,
-                                     SURVIVAL_START_LEVEL)
-            self._begin_survival_run(self._create_class, name, app,
-                                     start_level=SURVIVAL_START_LEVEL, persist=True)
-            self.clock.tick()
-            return
         self._new_game(char_class=self._create_class, char_name=name,
                        slot=self._create_slot,
                        appearance=self._create_appearance())
@@ -4071,6 +4067,16 @@ class Game:
                     elif tag == 'mp_back':
                         self._cancel_pending_net()
                         self._menu_page = 'main'
+                    break
+            return
+        if self._menu_page == 'survival_select':
+            for rect, tag in self._menu_buttons:
+                if rect.collidepoint(pos):
+                    if tag.startswith('slot:'):
+                        self._begin_survival_from_slot(int(tag.split(':')[1]))
+                    elif tag == 'mp_back':
+                        self._menu_page = 'main'
+                        self.audio.play('menu_select')
                     break
             return
         for rect, action in self._menu_buttons:
@@ -5344,7 +5350,10 @@ class Game:
             self.messages.append((t('kill_gold', enemy.name, enemy.xp_value, gold), 'good'))
         else:
             self.messages.append((t('kill', enemy.name, enemy.xp_value), 'good'))
-        if self.player.gain_xp(enemy.xp_value):
+        # 무한 생존: 처치가 폭증하므로 XP를 던전 플레이 체감과 비슷하게 완화(5:5 밸런스)
+        _xp_gain = (max(1, int(enemy.xp_value * self._SURV_XP_MULT))
+                    if self._survival_active else enemy.xp_value)
+        if self.player.gain_xp(_xp_gain):
             self._skill_points += 3
             self._ach_check_level()
             self.messages.append((t('levelup', self.player.level), 'good'))
@@ -5367,7 +5376,7 @@ class Game:
         # co-op: 처치 보상(골드·경험치)을 파티원 전원에게 공유(각자 전액)
         if (self._coop_dungeon and self.net is not None and self.net.is_host):
             self.net.send_event('reward', {'g': int(gold or 0),
-                                           'xp': int(enemy.xp_value)})
+                                           'xp': int(_xp_gain)})
         self.dungeon.enemies.remove(enemy)
         # 드라마틱 마무리 슬로모션: 보스 막타 / 층의 마지막 몬스터
         if enemy.is_boss:
@@ -10427,19 +10436,53 @@ class Game:
         self.clock.tick()
 
     def _persist_survival_level(self):
-        """전용 생존 캐릭터의 도달 최고 레벨만 records에 영속(아이템/층 저장 안 함)."""
-        if not self._survival_persist:
+        """공유 캐릭터: 무한 생존에서 올린 레벨/XP를 세이브 슬롯에 역저장.
+        레벨업분만 깔끔히 반영(아이템/장비/층 불변, 증강 왜곡 제외)."""
+        if self._survival_slot is None or self.player is None or self._is_test_mode:
             return
-        prof = self._records.get('survival_char') or {
-            'name': self._char_name, 'char_class': self._char_class,
-            'appearance': dict(getattr(self, '_char_appearance', {}) or {}),
-            'level': SURVIVAL_START_LEVEL}
-        if self.player and self.player.level > int(prof.get('level', SURVIVAL_START_LEVEL)):
-            prof['level'] = self.player.level
-        self._records['survival_char'] = prof
-        if not self._is_test_mode:
-            from core.save_load import save_records
-            save_records(self._records)
+        from core.save_load import load_game, save_raw
+        from entities.player import Player
+        data = load_game(self._survival_slot)
+        if not data or not isinstance(data.get('player'), dict):
+            return
+        pl = data['player']
+        start_lvl = int(self._survival_start_level)
+        final_lvl = int(self.player.level)
+        final_xp  = int(self.player.xp)
+        cur_lvl = int(pl.get('level', 1))
+        cur_xp  = int(pl.get('xp', 0))
+        gained  = final_lvl - start_lvl
+        # 전진(레벨↑ 또는 같은 레벨서 XP↑)일 때만 저장
+        if gained <= 0 and not (final_lvl == cur_lvl and final_xp > cur_xp):
+            return
+        if gained > 0:
+            # 저장된 스탯에 '레벨업 델타'만 적용(기어/강화 보존, 증강 제외)
+            cls = data.get('char_class') or pl.get('char_class', 'warrior')
+            tmp = Player(0, 0, char_class=cls if cls in CLASSES else 'warrior')
+            tmp.level        = cur_lvl
+            tmp.xp_next       = int(pl.get('xp_next', tmp.xp_next))
+            tmp.max_hp        = int(pl.get('max_hp', tmp.max_hp))
+            tmp.attack        = int(pl.get('attack', tmp.attack))
+            tmp.defense       = int(pl.get('defense', tmp.defense))
+            tmp.attack_speed  = float(pl.get('attack_speed', tmp.attack_speed))
+            tmp.move_speed    = float(pl.get('move_speed', tmp.move_speed))
+            tmp.evasion       = int(pl.get('evasion', tmp.evasion))
+            for _ in range(gained):
+                tmp._level_up()
+            pl['level']       = tmp.level
+            pl['max_hp']      = tmp.max_hp
+            pl['attack']      = tmp.attack
+            pl['defense']     = tmp.defense
+            pl['attack_speed'] = tmp.attack_speed
+            pl['move_speed']  = tmp.move_speed
+            pl['evasion']     = tmp.evasion
+            pl['xp_next']     = tmp.xp_next
+            pl['xp']          = final_xp
+            pl['hp']          = min(int(pl.get('hp', tmp.max_hp)), tmp.max_hp)
+            self._survival_level_up = True
+        else:
+            pl['xp'] = final_xp     # 같은 레벨 내 XP 전진만
+        save_raw(self._survival_slot, data)
 
     def _quit_game(self):
         """게임 종료 — 무한 생존 진행 중이면 도달 레벨을 먼저 저장한다."""
@@ -10448,18 +10491,67 @@ class Game:
         pygame.quit(); sys.exit()
 
     def _launch_survival(self):
-        """메뉴에서 무한 생존 진입 — 저장된 생존 캐릭터가 있으면 그 레벨서 바로
-        시작, 없으면(최초) 캐릭터 생성 화면으로."""
-        prof = self._records.get('survival_char')
-        if prof and prof.get('char_class') in CLASSES:
-            lvl = max(SURVIVAL_START_LEVEL, int(prof.get('level', SURVIVAL_START_LEVEL)))
-            self._begin_survival_run(prof['char_class'], prof.get('name', 'Hero'),
-                                     prof.get('appearance'),
-                                     start_level=lvl, persist=True)
-            self.clock.tick()
+        """메뉴에서 무한 생존 진입 — 공유 캐릭터(세이브 슬롯) 선택 화면으로.
+        정식 모드: 던전 캐릭터를 그대로 사용하고 레벨/XP를 공유(아이템은 비영속)."""
+        if any(c.get('exists') for c in self._cards):
+            self._menu_page = 'survival_select'
+            self._menu_settings_sel = 0
+            self.audio.play('menu_select')
         else:
-            self._pending_survival = True
-            self._open_char_create(None)
+            # 공유 캐릭터가 없으면 먼저 새 게임으로 캐릭터를 만들어야 한다
+            self.messages.append((t('surv_need_char'), 'warn'))
+            self.audio.play('player_hit')
+
+    def _survival_select_items(self):
+        """무한 생존 캐릭터 선택 항목: 기존 캐릭터들 + 뒤로 (공유 캐릭터만)."""
+        items = [('slot', c['slot']) for c in self._cards if c.get('exists')]
+        items.append(('back', None))
+        return items
+
+    def _handle_survival_select_action(self, action):
+        items = self._survival_select_items()
+        ty = action['type']
+        if ty == 'move' and action.get('dy'):
+            self._menu_settings_sel = (self._menu_settings_sel + action['dy']) % len(items)
+            self.audio.play('menu_select')
+        elif ty in ('wait', 'confirm', 'load'):
+            self._activate_survival_select(self._menu_settings_sel)
+
+    def _activate_survival_select(self, idx):
+        items = self._survival_select_items()
+        if not (0 <= idx < len(items)):
+            return
+        kind, val = items[idx]
+        if kind == 'slot':
+            self._begin_survival_from_slot(val)
+        elif kind == 'back':
+            self._menu_page = 'main'
+            self.audio.play('menu_select')
+
+    def _begin_survival_from_slot(self, slot):
+        """공유 캐릭터: 세이브 슬롯의 캐릭터로 무한 생존 시작.
+        캐릭터의 현재 레벨/XP/정체성을 그대로 사용하고, 종료 시 레벨/XP를 역저장."""
+        from core.save_load import load_game
+        data = load_game(slot)
+        if not data:
+            self.messages.append((t('surv_need_char'), 'warn'))
+            return
+        pl = data.get('player') or {}
+        cls = data.get('char_class') or pl.get('char_class', 'warrior')
+        if cls not in CLASSES:
+            cls = 'warrior'
+        app = (data.get('appearance') or pl.get('appearance')
+               or {'skin': 0, 'hair': 0, 'haircol': 0})
+        name = data.get('name', 'Hero')
+        lvl = max(1, int(pl.get('level', 1)))
+        self.audio.play('menu_select')
+        self._menu_page = 'main'
+        self._begin_survival_run(cls, name, app, start_level=lvl, persist=True)
+        # 캐릭터의 중간 XP 진행도 반영
+        if self.player is not None:
+            self.player.xp = int(pl.get('xp', self.player.xp))
+        self._survival_slot = slot        # 종료 시 레벨/XP 역저장 대상
+        self.clock.tick()
 
     def _daily_menu_info(self):
         """메뉴 표시용 오늘의 챌린지 정보 — 변수 id / streak / 오늘 최고점."""
@@ -10482,10 +10574,13 @@ class Game:
         seed = _daily.daily_seed()
         mut  = _daily.daily_mutator()
         did  = _daily.daily_id()
-        prof = self._records.get('survival_char') or {}
-        cls  = prof.get('char_class') if prof.get('char_class') in CLASSES else 'warrior'
-        app  = prof.get('appearance') or {'skin': 0, 'hair': 0, 'haircol': 0}
-        name = prof.get('name', 'Hero')
+        # 정체성(직업/외형)은 첫 번째 세이브 캐릭터에서 빌려온다(없으면 기본 워리어).
+        # 레벨은 공정성을 위해 전원 SURVIVAL_START_LEVEL 고정.
+        card = next((c for c in self._cards if c.get('exists')), None)
+        cls  = (card['char_class'] if card and card.get('char_class') in CLASSES
+                else 'warrior')
+        app  = (card.get('appearance') if card else None) or {'skin': 0, 'hair': 0, 'haircol': 0}
+        name = card['name'] if card else 'Hero'
         self.audio.play('menu_select')
         self._begin_survival_run(cls, name, app,
                                  start_level=SURVIVAL_START_LEVEL, persist=False,
@@ -10494,16 +10589,6 @@ class Game:
         self.messages.append(
             (t('daily_mutator_banner', t('mut_' + mut['id'])), 'warn'))
         self.clock.tick()
-
-    def _save_survival_char(self, char_class, name, appearance, level):
-        """전용 생존 캐릭터 프로필 저장(레벨/정체성만 — 아이템·층 저장 안 함)."""
-        self._records['survival_char'] = {
-            'name': name, 'char_class': char_class,
-            'appearance': dict(appearance or {}), 'level': int(level),
-        }
-        if not self._is_test_mode:
-            from core.save_load import save_records
-            save_records(self._records)
 
     def _begin_survival_run(self, char_class, char_name='Hero', appearance=None,
                             start_level=None, persist=False,
@@ -10517,6 +10602,7 @@ class Game:
         if start_level is None:
             start_level = SURVIVAL_START_LEVEL
         self._survival_persist = persist
+        self._survival_slot = None        # 기본: 역저장 없음(슬롯 진입 시 이후 설정)
         self._survival_start_level = start_level
         self._survival_coop = coop
         self._daily_active  = daily_seed is not None
@@ -10887,6 +10973,7 @@ class Game:
     _SP_POTION_DROP  = 0.05    # 킬당 드랍 확률(5%)
     _SURV_STAGE_MS   = 30000   # 시간/단계 보상 간격(30초마다 스테이지 ↑)
     _SURV_DRAFT_MS   = 12000   # co-op 증강 드래프트 자동선택까지 시간(12초)
+    _SURV_XP_MULT    = 0.4     # 무한 생존 XP 배율 — 던전 레벨업과 5:5 밸런스(공유 캐릭터)
 
     # ─────────────── 증강(Augment) — 아수라장 스타일 강화 ────────────
     # 단순 스탯이 아닌 빌드를 규정하는 기믹 강화. 시작 + 강화마다 3장 중 1택.
@@ -11259,18 +11346,9 @@ class Game:
                 dirty = True
         # 전용 생존 캐릭터: 도달 최고 레벨만 영속 저장(아이템/층은 저장 안 함)
         self._survival_level_up = False
-        if self._survival_persist:
-            prof = self._records.get('survival_char') or {
-                'name': self._char_name, 'char_class': self._char_class,
-                'appearance': dict(getattr(self, '_char_appearance', {}) or {}),
-                'level': SURVIVAL_START_LEVEL}
-            if reached_level > int(prof.get('level', SURVIVAL_START_LEVEL)):
-                prof['level'] = reached_level
-                self._survival_level_up = True
-            if self._survival_stage > int(prof.get('best_stage', 0)):
-                prof['best_stage'] = self._survival_stage
-            self._records['survival_char'] = prof
-            dirty = True
+        # 공유 캐릭터: 올린 레벨/XP를 세이브 슬롯에 역저장(아이템/층 불변)
+        if self._survival_slot is not None:
+            self._persist_survival_level()
         if dirty and not self._is_test_mode:
             from core.save_load import save_records
             save_records(self._records)
@@ -11379,8 +11457,8 @@ class Game:
             return
         if self._daily_active:
             self._launch_daily()      # 같은 오늘의 시드로 재도전
-        elif self._survival_persist:
-            self._launch_survival()   # records의 최신 생존 레벨로 재시작
+        elif self._survival_slot is not None:
+            self._begin_survival_from_slot(self._survival_slot)  # 같은 공유 캐릭터(갱신 레벨)
         else:
             self._begin_survival_run(self._char_class, self._char_name,
                                      getattr(self, '_char_appearance', None),
@@ -11863,7 +11941,7 @@ class Game:
                 mp_code=self._mp_code,
                 mp_upnp=self._mp_upnp,
                 mp_recent=self._settings.get('mp_recent'),
-                survival_char=self._records.get('survival_char'),
+                survival_best=int(self._records.get('survival_best', 0)),
                 daily_info=self._daily_menu_info(),
             )
             pygame.display.flip()

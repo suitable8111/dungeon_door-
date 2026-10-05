@@ -1,5 +1,13 @@
 # Changelog
 
+## v3.1.0 — Endless Survival goes official (shared character)
+
+Endless Survival is now a first-class mode built around your real heroes:
+- **Shared character** — pick any of your dungeon characters and drop them into the arena. Your hero's **level and XP are shared** between the dungeon and survival: level up in either mode and the same character grows.
+- **Balanced progression (~50/50)** — survival XP is tuned so an arena session advances you at a pace comparable to dungeon diving, so neither mode is the obvious grind.
+- **Your save stays safe** — a survival run never changes your inventory, gear, or dungeon floor; only level/XP carry over, and only when you've made progress.
+- **New hero-select screen** when you launch Survival, and the menu button now shows your best score.
+
 ## v3.0.2 — Co-op augment draft polish
 
 Smoother augment drafts in co-op Survival:
