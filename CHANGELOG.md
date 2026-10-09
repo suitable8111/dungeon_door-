@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.2.0 — Arena variety & environmental tricks
+
+The Endless Survival arena is no longer one flat field — it fights back and gives you tools:
+- **6 arena layouts** — every run rolls one of Open Plains, Pillars, Crossroads, The Ring, Labyrinth, or Islands, each changing how you kite and funnel the horde. The layout name flashes on entry.
+- **Explosive barrels** — scattered red barrels detonate when hit, blasting everything nearby and **chain-reacting** into other barrels. Lure a pack next to a cluster and set it off for a massive clear.
+- **Lava vents** — vents across the arena telegraph with a pulsing ring, then erupt: enemies caught on them burn, and so do you if you linger. Turn positioning into a weapon.
+
+All deterministic by seed, so Daily Challenge and co-op runs share the same arena, barrels, and vents. Fully localized in all 5 languages.
+
 ## v3.1.0 — Endless Survival goes official (shared character)
 
 Endless Survival is now a first-class mode built around your real heroes:

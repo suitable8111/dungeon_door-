@@ -143,7 +143,7 @@ from core.skill_effect import SkillEffect
 from map.burning_stage import (generate_arena, spawn_wave,
                                 BURNING_DURATION_MS, SPAWN_INTERVAL_MS,
                                 MAX_LIVE_ENEMIES, BURNING_THEME,
-                                ARENA_WIDTH, ARENA_HEIGHT)
+                                ARENA_WIDTH, ARENA_HEIGHT, BORDER)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -566,6 +566,9 @@ class Game:
         self._surv_draft_wait = set() # 아직 증강 미확정 pid 집합(호스트)
         self._surv_wait_partner = False  # 내 선택 끝, 파트너 대기 중(양쪽 표시용)
         self._surv_draft_timer_ms = 0.0  # co-op 드래프트 자동선택 카운트다운
+        # 트릭 지형 (무한 생존)
+        self._survival_layout = 'pillars'  # 이번 런 아레나 레이아웃
+        self._lava_vents = []              # 용암 분출구 [{x,y,phase,t}]
         # 다운/부활/관전 (co-op 전용)
         self._downed       = False    # 내가 쓰러짐(부활 대기)
         self._downed_ms    = 0.0      # 블리드아웃 남은 시간(0이면 관전行)
@@ -1735,19 +1738,21 @@ class Game:
                 if self._burning_active:
                     self._update_burning(dt)
                 elif self._survival_active:
-                    if self._survival_coop:
-                        # co-op: 호스트만 시뮬(웨이브·점수), 드래프트 정지 중엔 멈춤
-                        if (self.net is not None and self.net.is_host
-                                and not self._surv_draft_open):
+                    _surv_paused = self._survival_coop and self._surv_draft_open
+                    if not _surv_paused:
+                        if self._survival_coop:
+                            # co-op: 호스트만 시뮬(웨이브·점수)
+                            if self.net is not None and self.net.is_host:
+                                self._update_survival(dt)
+                                self._surv_hud_tick = getattr(self, '_surv_hud_tick', 0) + 1
+                                if self._surv_hud_tick % 10 == 0:
+                                    self._coop_surv_broadcast_hud()
+                            else:
+                                # 클라: 내 증강 상시효과만(시뮬은 호스트)
+                                self._apply_survival_aug_effects(dt)
+                        else:
                             self._update_survival(dt)
-                            self._surv_hud_tick = getattr(self, '_surv_hud_tick', 0) + 1
-                            if self._surv_hud_tick % 10 == 0:
-                                self._coop_surv_broadcast_hud()
-                        elif not self._surv_draft_open:
-                            # 클라: 내 증강 상시효과만 매 프레임 적용(시뮬은 호스트)
-                            self._apply_survival_aug_effects(dt)
-                    else:
-                        self._update_survival(dt)
+                        self._update_lava(dt)   # 용암 분출구(솔로·양쪽 공통)
             if self.state == 'playing':
                 if self.player:
                     self.player.tick_debuffs(dt)
@@ -5259,6 +5264,15 @@ class Game:
             self._ach_unlock('ACH_LIFE_MASTER')
 
     def _on_enemy_killed(self, enemy):
+        # 폭발 배럴: 파괴 시 범위 폭발 + 연쇄(보상 없음)
+        if getattr(enemy, 'is_barrel', False):
+            if enemy in self.dungeon.enemies:
+                self.dungeon.enemies.remove(enemy)   # 자기 폭발에 안 잡히게 먼저 제거
+            self.animator.particles.emit_death(enemy.x, enemy.y, enemy.color)
+            self.juice.kill()
+            self._bump_kill_combo()
+            self._barrel_explode(enemy.x, enemy.y)
+            return
         # 프롭(항아리/나무상자): 파괴 연출 + 콤보 유지 + 소소한 보상 후 종료
         if enemy.is_prop:
             self.animator.add(DeathAnim(enemy.x, enemy.y,
@@ -10345,7 +10359,7 @@ class Game:
         self._burning_wave        = 0
         self._burning_warned_10s  = False
 
-        dungeon, start = generate_arena()
+        dungeon, start, _layout = generate_arena()
         self.dungeon = dungeon
         self._theme  = BURNING_THEME
 
@@ -10721,9 +10735,11 @@ class Game:
         self._surv_score_pulse  = 0.0
         self._surv_next_milestone = 1000
 
-        # 시드 고정 아레나(co-op·일일=전원 동일 지형), 그 외=랜덤
-        dungeon, start = generate_arena(getattr(self, '_survival_arena_seed', None))
+        # 시드 고정 아레나(co-op·일일=전원 동일 지형), 그 외=랜덤. 레이아웃 6종.
+        _aseed = getattr(self, '_survival_arena_seed', None)
+        dungeon, start, layout = generate_arena(_aseed)
         self.dungeon = dungeon
+        self._survival_layout = layout
         self._theme  = BURNING_THEME
         self.player.x, self.player.y = start
         self.player.hp = self.player.max_hp
@@ -10731,8 +10747,159 @@ class Game:
         self.camera.center_on(self.player.x, self.player.y)
         self.messages.clear()
         self.messages.append((t('survival_enter'), 'warn'))
+        self.messages.append((t('arena_layout', t('arena_' + layout)), 'info'))
         self.audio.play('boss_appear')
         self._start_shake(5, 400)
+        # 트릭 지형: 폭발 배럴 + 용암 분출구 (시드 결정론 → co-op 동일)
+        self._spawn_survival_hazards(_aseed)
+
+    # ── 트릭 지형: 폭발 배럴 + 용암 분출구 ──────────────────────────
+    def _surv_free_tile(self, rng, center, clear_r=6, avoid=None):
+        """아레나 내 빈 바닥 1칸(걷기 가능·적/프롭 없음·중앙 비움). 실패 시 None."""
+        avoid = avoid or set()
+        d = self.dungeon
+        for _ in range(80):
+            x = rng.randint(BORDER + 3, d.width - BORDER - 4)
+            y = rng.randint(BORDER + 3, d.height - BORDER - 4)
+            if not d.is_walkable(x, y):
+                continue
+            if max(abs(x - center[0]), abs(y - center[1])) <= clear_r:
+                continue
+            if (x, y) in avoid or d.get_enemy_at(x, y):
+                continue
+            return x, y
+        return None
+
+    def _spawn_survival_hazards(self, seed):
+        """시드 결정론으로 폭발 배럴 + 용암 분출구 배치(co-op 양쪽 동일)."""
+        import random as _r
+        rng = _r.Random((seed if seed is not None else 0) ^ 0xBA22E1)
+        center = (self.dungeon.width // 2, self.dungeon.height // 2)
+        self._lava_vents = []
+        used = set()
+        # 폭발 배럴(파괴 프롭) — 맞으면 폭발·연쇄
+        from entities.enemy import Enemy
+        nid = 0
+        for _ in range(rng.randint(8, 13)):
+            pos = self._surv_free_tile(rng, center, avoid=used)
+            if not pos:
+                continue
+            used.add(pos)
+            d = {'name': 'Barrel', 'hp': 1, 'attack': 0, 'defense': 0, 'xp': 0,
+                 'color': [210, 120, 50], 'key': 'crate', 'is_prop': True}
+            e = Enemy(pos[0], pos[1], d)
+            e.is_barrel = True
+            e.net_id = nid; nid += 1
+            self.dungeon.enemies.append(e)
+        # co-op: 웨이브 적 net_id가 배럴과 겹치지 않게 카운터를 뒤로
+        self._coop_enemy_next = nid
+        # 용암 분출구 — 주기적으로 분출(텔레그래프 후)
+        for _ in range(rng.randint(3, 5)):
+            pos = self._surv_free_tile(rng, center, clear_r=7, avoid=used)
+            if not pos:
+                continue
+            used.add(pos)
+            self._lava_vents.append({'x': pos[0], 'y': pos[1], 'phase': 'idle',
+                                     't': rng.randint(1500, 4000)})
+
+    def _barrel_explode(self, ex, ey, _depth=0):
+        """폭발 배럴 — 범위 피해 + 인접 배럴 연쇄(재귀 가드)."""
+        if _depth > 8:
+            return
+        radius = 3
+        dmg = 55 + self._survival_wave * 4 + self.player.level * 3
+        self.animator.particles.emit_fireball_hit(ex, ey)
+        self.animator.add(HitFlashAnim(ex, ey, 0, (255, 160, 60)))
+        self._gold_flash_ms = max(self._gold_flash_ms, 90)
+        self._start_shake(6, 220)
+        self.audio.play('tier_up')
+        # co-op 클라는 폭발 피해 적용 안 함(호스트 권위) — 연출만
+        host_auth = not (self._coop_dungeon and self.net is not None
+                         and not self.net.is_host)
+        chain = []
+        for e in list(self.dungeon.enemies):
+            if not e.is_alive() or max(abs(e.x - ex), abs(e.y - ey)) > radius:
+                continue
+            if getattr(e, 'is_barrel', False) and (e.x, e.y) != (ex, ey):
+                chain.append(e); continue
+            if e.is_prop or not host_auth:
+                continue
+            e.take_damage(dmg); e.on_hurt(ex, ey)
+            self.animator.add(HitFlashAnim(e.x, e.y, dmg, (255, 150, 60)))
+            if not e.is_alive():
+                self._on_enemy_killed(e)
+        for b in chain:                       # 연쇄
+            if b in self.dungeon.enemies:
+                self.dungeon.enemies.remove(b)
+                self._barrel_explode(b.x, b.y, _depth + 1)
+
+    def _update_lava(self, dt):
+        """용암 분출구 사이클: idle→warn(텔레그래프)→erupt(피해)→idle."""
+        if not self._lava_vents:
+            return
+        host_auth = not (self._coop_dungeon and self.net is not None
+                         and not self.net.is_host)
+        for v in self._lava_vents:
+            v['t'] -= dt
+            if v['t'] > 0:
+                continue
+            if v['phase'] == 'idle':
+                v['phase'] = 'warn'; v['t'] = 850
+            elif v['phase'] == 'warn':
+                v['phase'] = 'erupt'; v['t'] = 550
+                self._lava_erupt(v, host_auth)
+            else:
+                v['phase'] = 'idle'; v['t'] = 2200 + (hash((v['x'], v['y'])) % 2000)
+
+    def _lava_erupt(self, v, host_auth):
+        """분출 순간 — 반경 1칸 적(호스트 권위) + 내 플레이어 피해."""
+        ex, ey = v['x'], v['y']
+        self.animator.particles.emit_fireball_hit(ex, ey)
+        self._start_shake(4, 160)
+        self.audio.play('fireball')
+        dmg = 50 + self._survival_wave * 3 + self.player.level * 2
+        for e in list(self.dungeon.enemies):
+            if (host_auth and e.is_alive() and not e.is_prop
+                    and max(abs(e.x - ex), abs(e.y - ey)) <= 1):
+                e.take_damage(dmg); e.on_hurt(ex, ey)
+                self.animator.add(HitFlashAnim(e.x, e.y, dmg, (255, 130, 40)))
+                if not e.is_alive():
+                    self._on_enemy_killed(e)
+        p = self.player
+        if (p and p.is_alive() and max(abs(p.x - ex), abs(p.y - ey)) <= 1
+                and getattr(p, 'invincible_ms', 0) <= 0):
+            pdmg = max(6, int(p.max_hp * 0.12))
+            p.take_damage(pdmg)
+            self.animator.add(HitFlashAnim(p.x, p.y, pdmg, (255, 80, 40)))
+            self._hurt_flash_ms = 260
+            self._start_shake(5, 220)
+
+    def _draw_lava_vents(self, cx, cy):
+        """용암 분출구 렌더 — idle(여린 균열)/warn(맥동 링)/erupt(화염 분출)."""
+        surf = self._game_surf
+        tk = pygame.time.get_ticks()
+        for v in self._lava_vents:
+            sx = (v['x'] - cx) * TILE_SIZE
+            sy = (v['y'] - cy) * TILE_SIZE
+            if not (-TILE_SIZE <= sx <= GAME_W and -TILE_SIZE <= sy <= GAME_H):
+                continue
+            pxp, pyp = sx + TILE_SIZE // 2, sy + TILE_SIZE // 2
+            ph = v['phase']
+            if ph == 'idle':
+                pygame.draw.circle(surf, (90, 35, 15), (pxp, pyp), 5)
+                pygame.draw.circle(surf, (150, 60, 22), (pxp, pyp), 5, 1)
+            elif ph == 'warn':
+                pulse = 0.5 + 0.5 * math.sin(tk * 0.02)
+                r = int(TILE_SIZE * 0.5 * (0.7 + 0.3 * pulse))
+                pygame.draw.circle(surf, (255, int(120 + 80 * pulse), 40),
+                                   (pxp, pyp), r, 2)
+                pygame.draw.circle(surf, (255, 80, 20), (pxp, pyp), 4)
+            else:   # erupt
+                r = int(TILE_SIZE * 0.6)
+                glow = pygame.Surface((r * 2, r * 2), pygame.SRCALPHA)
+                pygame.draw.circle(glow, (255, 110, 30, 180), (r, r), r)
+                pygame.draw.circle(glow, (255, 220, 120, 230), (r, r), r // 2)
+                surf.blit(glow, (pxp - r, pyp - r))
 
     def _apply_survival_aug_effects(self, dt_ms):
         """증강 상시 효과(내 캐릭터 대상) — 흡혈/서리/전역둔화/재생.
@@ -10784,7 +10951,8 @@ class Game:
             cmul = mut.get('count', 1.0)
             live_cap = min(MAX_LIVE_ENEMIES, int(live_cap * cmul))
             per_cap  = max(3, int(per_cap * cmul))
-        live = sum(1 for e in self.dungeon.enemies if e.is_alive())
+        live = sum(1 for e in self.dungeon.enemies
+                   if e.is_alive() and not e.is_prop)   # 배럴/프롭 제외
         if self._survival_spawn_ms <= 0 and live < live_cap:
             self._survival_spawn_ms = interval
             self._survival_wave += 1
@@ -12143,6 +12311,9 @@ class Game:
                     self._draw_item(item, (item.x-cx)*TILE_SIZE + int(iox),
                                     (item.y-cy)*TILE_SIZE + int(ioy))
 
+        # 용암 분출구 (바닥 위, 적 아래) — 무한 생존 트릭 지형
+        if self._survival_active and self._lava_vents:
+            self._draw_lava_vents(cx, cy)
         # 마법사 화염 장판 (바닥 위, 적 아래)
         self._draw_dot_zones(cx, cy)
         if self._vortex is not None:

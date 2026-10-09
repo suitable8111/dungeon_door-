@@ -1114,6 +1114,15 @@ _T: dict[str, dict[str, str]] = {
                          'ja': '無限サバイバル — キャラ選択', 'zh': '无尽生存 — 选择角色', 'ru': 'Выживание — выбор героя'},
     'surv_need_char':   {'ko': '먼저 새 게임으로 캐릭터를 만들어 주세요', 'en': 'Create a character in New Game first',
                          'ja': 'まず新規ゲームでキャラを作成してください', 'zh': '请先在新游戏中创建角色', 'ru': 'Сначала создайте героя в «Новой игре»'},
+    # 아레나 레이아웃 6종
+    'arena_layout':     {'ko': '🏟 아레나: {0}', 'en': '🏟 Arena: {0}',
+                         'ja': '🏟 アリーナ: {0}', 'zh': '🏟 竞技场: {0}', 'ru': '🏟 Арена: {0}'},
+    'arena_plains':     {'ko': '개방 평원', 'en': 'Open Plains', 'ja': '開けた平原', 'zh': '开阔平原', 'ru': 'Равнина'},
+    'arena_pillars':    {'ko': '기둥 숲', 'en': 'Pillars', 'ja': '柱の森', 'zh': '石柱林', 'ru': 'Колонны'},
+    'arena_cross':      {'ko': '십자 통로', 'en': 'Crossroads', 'ja': '十字通路', 'zh': '十字通道', 'ru': 'Перекрёсток'},
+    'arena_ring':       {'ko': '투기장 링', 'en': 'The Ring', 'ja': '闘技場リング', 'zh': '竞技环', 'ru': 'Ринг'},
+    'arena_maze':       {'ko': '미궁', 'en': 'Labyrinth', 'ja': '迷宮', 'zh': '迷宫', 'ru': 'Лабиринт'},
+    'arena_islands':    {'ko': '분리 섬', 'en': 'Islands', 'ja': '分離島', 'zh': '隔离岛', 'ru': 'Острова'},
     # ── 일일 챌린지(Daily Challenge) ──
     'menu_daily':       {'ko': '일일 챌린지', 'en': 'Daily Challenge',
                          'ja': 'デイリーチャレンジ', 'zh': '每日挑战', 'ru': 'Ежедневный вызов'},

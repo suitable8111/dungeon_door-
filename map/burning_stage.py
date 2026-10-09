@@ -103,14 +103,116 @@ def _scatter_obstacles(dungeon, rng, center):
             made += 1
 
 
-def generate_arena(seed=None) -> tuple:
+# ── 아레나 레이아웃 6종 ──────────────────────────────────────────────────
+# 각 빌더는 연결성을 보존(중앙·외곽 스폰 링은 비움, 벽은 짧게/간격 두고).
+ARENA_LAYOUTS = ('plains', 'pillars', 'cross', 'ring', 'maze', 'islands')
+
+
+def _in_play(x, y, w, h, pad):
+    return pad <= x < w - pad and pad <= y < h - pad
+
+
+def _wall(dungeon, x, y, center, clear_r=5):
+    """중앙(시작) 주변만 피해 벽 1칸 배치. 성공 시 True."""
+    w, h = dungeon.width, dungeon.height
+    if not _in_play(x, y, w, h, BORDER + 3):
+        return False
+    if max(abs(x - center[0]), abs(y - center[1])) <= clear_r:
+        return False
+    dungeon.tiles[y][x] = Tile.wall()
+    return True
+
+
+def _layout_plains(dungeon, rng, center):
+    pass   # 순수 개방 — 엄폐물 없음(난전)
+
+
+def _layout_cross(dungeon, rng, center):
+    """십자 통로 — 중앙서 벗어난 4개 벽 띠가 사분면 레인/초크를 만든다."""
+    w, h = dungeon.width, dungeon.height
+    cx, cy = center
+    arm = min(w, h) // 3
+    gap = 4                                  # 통로 폭(끼임 방지)
+    for d in range(gap, arm):
+        _wall(dungeon, cx - d, cy, center)   # 가로 양팔
+        _wall(dungeon, cx + d, cy, center)
+        _wall(dungeon, cx, cy - d, center)   # 세로 양팔
+        _wall(dungeon, cx, cy + d, center)
+
+
+def _layout_ring(dungeon, rng, center):
+    """투기장 링 — 중앙 반경 R 외곽에 기둥 링(4곳 게이트는 비움)."""
+    cx, cy = center
+    R = 9
+    import math
+    for ang in range(0, 360, 10):
+        if ang % 90 < 20:                    # 90도마다 게이트(출입구)
+            continue
+        x = cx + int(round(R * math.cos(math.radians(ang))))
+        y = cy + int(round(R * math.sin(math.radians(ang))))
+        _wall(dungeon, x, y, center, clear_r=R - 2)
+
+
+def _layout_maze(dungeon, rng, center):
+    """미로형 — 지그재그 짧은 벽 행(넓은 레인 유지)."""
+    w, h = dungeon.width, dungeon.height
+    pad = BORDER + 4
+    row = pad
+    flip = 0
+    while row < h - pad:
+        seg = w - 2 * pad - 8
+        if seg > 4:
+            start = pad + (6 if flip else 0)
+            for x in range(start, start + seg):
+                if x < w - pad:
+                    _wall(dungeon, x, row, center)
+        row += 5
+        flip ^= 1
+
+
+def _layout_islands(dungeon, rng, center):
+    """분리 섬 — 큰 벽 덩어리 여럿(사이로 넓은 통로)."""
+    w, h = dungeon.width, dungeon.height
+    pad = BORDER + 4
+    blobs = rng.randint(4, 6)
+    placed = []
+    tries = 0
+    while len(placed) < blobs and tries < 200:
+        tries += 1
+        bx = rng.randint(pad, w - pad - 4)
+        by = rng.randint(pad, h - pad - 4)
+        bw, bh = rng.randint(2, 4), rng.randint(2, 4)
+        if any(abs(bx - px) < 7 and abs(by - py) < 7 for px, py in placed):
+            continue
+        ok = False
+        for yy in range(by, by + bh):
+            for xx in range(bx, bx + bw):
+                if _wall(dungeon, xx, yy, center, clear_r=6):
+                    ok = True
+        if ok:
+            placed.append((bx, by))
+
+
+_LAYOUT_FN = {
+    'plains': _layout_plains,
+    'pillars': _scatter_obstacles,
+    'cross': _layout_cross,
+    'ring': _layout_ring,
+    'maze': _layout_maze,
+    'islands': _layout_islands,
+}
+
+
+def generate_arena(seed=None, layout=None) -> tuple:
     """
-    개방형 아레나 생성 — 바닥 + 흩뿌린 엄폐물(기둥) 지형.
-    seed 지정 시 지형이 결정론적(일일 챌린지: 전원 동일 아레나).
-    Returns (Dungeon, (start_x, start_y))
+    개방형 아레나 생성 — 바닥 + 레이아웃별 지형(엄폐물/벽).
+    seed 지정 시 지형이 결정론적(일일·co-op: 전원 동일 아레나).
+    layout 미지정 시 시드/랜덤으로 6종 중 선택.
+    Returns (Dungeon, (start_x, start_y), layout_name)
     """
     width, height = ARENA_WIDTH, ARENA_HEIGHT
     dungeon = Dungeon(width, height)
+    rng = random.Random(seed)
 
     # 내부 전부 바닥으로
     for y in range(BORDER, height - BORDER):
@@ -118,14 +220,15 @@ def generate_arena(seed=None) -> tuple:
             dungeon.tiles[y][x] = Tile.floor()
 
     center = (width // 2, height // 2)
-    # 엄폐물 지형 배치 (seed 없으면 매 런 랜덤 — 반복 플레이 변주)
-    _scatter_obstacles(dungeon, random.Random(seed), center)
+    if layout not in ARENA_LAYOUTS:
+        layout = rng.choice(ARENA_LAYOUTS)
+    _LAYOUT_FN[layout](dungeon, rng, center)
 
     # 전체 시야 공개
     dungeon.reveal_all()
     dungeon.stairs_pos = None
 
-    return dungeon, center
+    return dungeon, center, layout
 
 
 def spawn_wave(dungeon, enemy_data: dict,
