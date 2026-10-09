@@ -1,5 +1,14 @@
 # Changelog
 
+## v3.3.0 — Screen-clearing supply items
+
+Three powerful new consumables drop from Endless Survival supply crates to help you survive the swarm:
+- **☄ Meteor Scroll** — calls down an airstrike, hammering every enemy in a wide radius.
+- **🌀 Singularity Orb** — a gravity collapse that drags nearby enemies inward and crushes them in one massive burst.
+- **❄ Cryo Bomb** — flash-freezes everything on screen for 4 seconds (and chips their health), buying you breathing room.
+
+They scale with your wave and level so they stay useful deep into a run, and they're earned from stage supply drops (Cryo Bomb often, Meteor regularly, Singularity rarely). Fully localized in all 5 languages.
+
 ## v3.2.0 — Arena variety & environmental tricks
 
 The Endless Survival arena is no longer one flat field — it fights back and gives you tools:

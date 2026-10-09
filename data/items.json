@@ -970,5 +970,50 @@
     "name_zh": "真视头盔",
     "name_ru": "Шлем истинного зрения",
     "sp_reduce": 0.04
+  },
+  "meteor_scroll": {
+    "name": "메테오 두루마리",
+    "color": [
+      255,
+      120,
+      40
+    ],
+    "type": "consumable",
+    "effect": "meteor",
+    "value": 0,
+    "name_en": "Meteor Scroll",
+    "name_ja": "メテオの巻物",
+    "name_zh": "陨石卷轴",
+    "name_ru": "Свиток метеора"
+  },
+  "singularity_orb": {
+    "name": "특이점 구슬",
+    "color": [
+      150,
+      90,
+      230
+    ],
+    "type": "consumable",
+    "effect": "singularity",
+    "value": 0,
+    "name_en": "Singularity Orb",
+    "name_ja": "特異点のオーブ",
+    "name_zh": "奇点宝珠",
+    "name_ru": "Сфера сингулярности"
+  },
+  "cryo_bomb": {
+    "name": "빙결 폭탄",
+    "color": [
+      120,
+      210,
+      255
+    ],
+    "type": "consumable",
+    "effect": "cryobomb",
+    "value": 0,
+    "name_en": "Cryo Bomb",
+    "name_ja": "氷結爆弾",
+    "name_zh": "冰冻炸弹",
+    "name_ru": "Крио-бомба"
   }
 }

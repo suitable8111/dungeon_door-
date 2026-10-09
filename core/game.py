@@ -5532,6 +5532,15 @@ class Game:
             self._throw_bomb()
         elif item.effect == 'infinite_sp':
             self._use_infinite_sp_potion(item.value or 10000)
+        elif item.effect in ('meteor', 'singularity', 'cryobomb'):
+            if self._in_town:
+                return False               # 전투 전용 — 마을에선 사용 불가
+            if item.effect == 'meteor':
+                self._use_meteor()
+            elif item.effect == 'singularity':
+                self._use_singularity()
+            else:
+                self._use_cryobomb()
         else:
             self.messages.append((item.use(self.player), 'good'))
             self.audio.play('use_item')
@@ -5540,6 +5549,100 @@ class Game:
         if item.count <= 0 and item in self.player.inventory:
             self.player.inventory.remove(item)
         return True
+
+    # ── 몬스터 제거 아이템 (무한 생존 보급) ──────────────────────────
+    def _clear_item_dmg(self, base):
+        """제거 아이템 피해 — 웨이브/레벨 비례(후반에도 유효)."""
+        return int(base + self._survival_wave * 5 + self.player.level * 4)
+
+    def _hit_enemy_intent(self, e, dmg, col):
+        """적에 피해(co-op: 클라는 take_damage가 인텐트로 전송됨) + 처치 라우팅.
+        솔로/호스트에서만 로컬 사망 처리(클라는 호스트 권위)."""
+        e.take_damage(dmg); e.on_hurt(self.player.x, self.player.y)
+        self.animator.add(HitFlashAnim(e.x, e.y, dmg, col))
+        if not e.is_alive():
+            self._on_enemy_killed(e)
+
+    def _use_meteor(self):
+        """메테오 두루마리 — 광역 공습: 큰 반경 내 모든 적에 강타 + 다중 낙하 연출."""
+        px, py = self.player.x, self.player.y
+        R = 11
+        dmg = self._clear_item_dmg(90)
+        targets = [e for e in list(self.dungeon.enemies)
+                   if e.is_alive() and not e.is_prop
+                   and max(abs(e.x - px), abs(e.y - py)) <= R]
+        # 낙하 연출(적 위 + 주변 랜덤)
+        import random as _r
+        spots = [(e.x, e.y) for e in targets[:14]]
+        for _ in range(8):
+            spots.append((px + _r.randint(-R, R), py + _r.randint(-R, R)))
+        for sx, sy in spots:
+            if self.dungeon.in_bounds(sx, sy):
+                self.animator.particles.emit_fireball_hit(sx, sy)
+        for e in targets:
+            self._hit_enemy_intent(e, dmg, (255, 150, 60))
+        self.animator.add(BannerAnim(t('item_meteor_proc'), (255, 150, 60),
+                                     y=110, size=28, duration_ms=1300))
+        self._gold_flash_ms = max(self._gold_flash_ms, 160)
+        self._white_flash_ms = max(getattr(self, '_white_flash_ms', 0), 50)
+        self._start_shake(9, 520)
+        self.audio.play('levelup_big')
+
+    def _use_singularity(self):
+        """특이점 구슬 — 중력 붕괴: 넓은 반경 적을 끌어당겨 중앙에서 대폭발."""
+        px, py = self.player.x, self.player.y
+        R = 9
+        dmg = self._clear_item_dmg(130)
+        targets = [e for e in list(self.dungeon.enemies)
+                   if e.is_alive() and not e.is_prop
+                   and max(abs(e.x - px), abs(e.y - py)) <= R]
+        # 솔로/호스트: 실제로 중앙으로 끌어당김(클라는 위치가 호스트 권위라 생략)
+        host_auth = not (self._coop_dungeon and self.net is not None
+                         and not self.net.is_host)
+        if host_auth:
+            for e in targets:
+                dx = (px > e.x) - (px < e.x)
+                dy = (py > e.y) - (py < e.y)
+                for _ in range(3):           # 최대 3칸 흡입
+                    nx, ny = e.x + dx, e.y + dy
+                    if (self.dungeon.is_walkable(nx, ny)
+                            and not self.dungeon.get_enemy_at(nx, ny)
+                            and (nx, ny) != (px, py)):
+                        e.x, e.y = nx, ny
+                    else:
+                        break
+        for e in targets:
+            self.animator.add(BoltAnim(e.x, e.y, px, py, (170, 120, 240)))
+        for e in targets:
+            self._hit_enemy_intent(e, dmg, (180, 130, 245))
+        self.animator.particles.emit_fireball_hit(px, py)
+        self.animator.add(BannerAnim(t('item_singularity_proc'), (170, 120, 240),
+                                     y=110, size=28, duration_ms=1300))
+        self._gold_flash_ms = max(self._gold_flash_ms, 140)
+        self._start_shake(8, 480)
+        self.audio.play('levelup_big')
+
+    def _use_cryobomb(self):
+        """빙결 폭탄 — 넓은 반경 적을 빙결(강력 둔화 4초) + 소량 피해."""
+        px, py = self.player.x, self.player.y
+        R = 12
+        dmg = self._clear_item_dmg(30)
+        n = 0
+        for e in list(self.dungeon.enemies):
+            if not (e.is_alive() and not e.is_prop):
+                continue
+            if max(abs(e.x - px), abs(e.y - py)) > R:
+                continue
+            e.slowed_ms = max(e.slowed_ms, 4000)     # 빙결(강력 둔화)
+            e.slow_pct = max(e.slow_pct, 0.85)
+            self.animator.add(HitFlashAnim(e.x, e.y, 0, (150, 220, 255)))
+            self._hit_enemy_intent(e, dmg, (150, 220, 255))
+            n += 1
+        self.animator.add(BannerAnim(t('item_cryobomb_proc', n), (150, 220, 255),
+                                     y=110, size=28, duration_ms=1300))
+        self._white_flash_ms = max(getattr(self, '_white_flash_ms', 0), 40)
+        self._start_shake(5, 300)
+        self.audio.play('tier_up')
 
     def _use_infinite_sp_potion(self, duration_ms):
         """무한 기력 물약 — 지속 동안 SP 무제한(스킬 난사). 중첩 시 시간 연장."""
@@ -11087,6 +11190,13 @@ class Game:
             self._survival_grant_item('bomb', 1)
         if stage % 5 == 0:
             self._survival_grant_item('sp_surge_potion', 2, cap=self._SP_POTION_MAX)
+        # 몬스터 제거 아이템 — 강력하므로 드물게(후반일수록)
+        if stage % 2 == 0:
+            self._survival_grant_item('cryo_bomb', 1, cap=3)
+        if stage % 4 == 0:
+            self._survival_grant_item('meteor_scroll', 1, cap=3)
+        if stage % 6 == 0:
+            self._survival_grant_item('singularity_orb', 1, cap=2)
         # 연출
         self.animator.add(BannerAnim(t('survival_stage_banner', stage),
                                      (255, 210, 90), y=120, size=28, duration_ms=1500))

@@ -1123,6 +1123,13 @@ _T: dict[str, dict[str, str]] = {
     'arena_ring':       {'ko': '투기장 링', 'en': 'The Ring', 'ja': '闘技場リング', 'zh': '竞技环', 'ru': 'Ринг'},
     'arena_maze':       {'ko': '미궁', 'en': 'Labyrinth', 'ja': '迷宮', 'zh': '迷宫', 'ru': 'Лабиринт'},
     'arena_islands':    {'ko': '분리 섬', 'en': 'Islands', 'ja': '分離島', 'zh': '隔离岛', 'ru': 'Острова'},
+    # 몬스터 제거 아이템 발동
+    'item_meteor_proc':     {'ko': '☄ 메테오 강림!', 'en': '☄ METEOR STRIKE!',
+                         'ja': '☄ メテオ降臨!', 'zh': '☄ 陨石降临!', 'ru': '☄ УДАР МЕТЕОРА!'},
+    'item_singularity_proc': {'ko': '🌀 특이점 붕괴!', 'en': '🌀 SINGULARITY!',
+                         'ja': '🌀 特異点崩壊!', 'zh': '🌀 奇点坍缩!', 'ru': '🌀 СИНГУЛЯРНОСТЬ!'},
+    'item_cryobomb_proc':   {'ko': '❄ 빙결! {0}마리 동결', 'en': '❄ FROZEN! {0} iced',
+                         'ja': '❄ 氷結! {0}体凍結', 'zh': '❄ 冰冻! 冻结 {0} 个', 'ru': '❄ ЗАМОРОЗКА! {0}'},
     # ── 일일 챌린지(Daily Challenge) ──
     'menu_daily':       {'ko': '일일 챌린지', 'en': 'Daily Challenge',
                          'ja': 'デイリーチャレンジ', 'zh': '每日挑战', 'ru': 'Ежедневный вызов'},
